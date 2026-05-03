@@ -132,6 +132,14 @@ Expected startup lines include:
 [+] Captured HTTP mirror listening on http://127.0.0.1:8088
 ```
 
+Combat sync defaults to roughly 30 Hz:
+
+```powershell
+CS_DYNAMIC_BATTLE_SYNC_INTERVAL_MS=33
+```
+
+Raising this value batches more managed combat frames per network tick and can make combat actions feel delayed or stacked.
+
 If the C# host cannot start, confirm:
 
 - `.env` points `CS_COUNTERSIDE_MANAGED_DIR` to a folder containing `Assembly-CSharp.dll`.
