@@ -5,7 +5,7 @@ This guide assumes Windows, Steam CounterSide, Node.js 20 or newer, .NET 8 SDK, 
 ## 1. Clone And Configure
 
 ```powershell
-git clone <repo-url> RevivalSide
+git clone https://github.com/MadlyMoe/RevivalSide.git RevivalSide
 cd RevivalSide
 copy .env.example .env
 npm install
