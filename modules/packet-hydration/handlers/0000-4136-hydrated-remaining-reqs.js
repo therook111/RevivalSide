@@ -1,6 +1,7 @@
 const {
   createHydratedAckHandler,
   createHydratedAckHandlers,
+  createMissionTrackingHydratedAckHandler,
   createLoginLikeHydratedHandler,
 } = require("..");
 
@@ -13,16 +14,21 @@ module.exports = [
   createHydratedAckHandler(800, { ackPacketId: 804 }),
   createHydratedAckHandler(802, { ackPacketId: 804 }),
   createHydratedAckHandler(3485, { ackPacketId: 804 }),
+  createMissionTrackingHydratedAckHandler(2212, "RAID_PLAY"),
+  createMissionTrackingHydratedAckHandler(2214, "RAID_PLAY"),
+  createMissionTrackingHydratedAckHandler(2600, "PVP_PLAY_RANK"),
+  createMissionTrackingHydratedAckHandler(2617, "PVP_PLAY_ASYNC"),
+  createMissionTrackingHydratedAckHandler(2674, "PVP_PLAY_RANK"),
   ...createHydratedAckHandlers([
     0, 2, 4, 6, 8, 10, 12,
     17, 206, 209, 219, 226, 232, 235, 238,
     241, 244, 246, 248, 250, 252, 254, 2024,
-    2200, 2202, 2204, 2206, 2208, 2210, 2212, 2214,
-    2217, 2219, 2600, 2602, 2606, 2608, 2610, 2612,
-    2615, 2617, 2619, 2624, 2626, 2630, 2632,
+    2200, 2202, 2204, 2206, 2208, 2210,
+    2217, 2219, 2602, 2606, 2610, 2612,
+    2615, 2619, 2624, 2626, 2630, 2632,
     2635, 2639, 2641, 2643, 2645, 2647, 2649, 2651,
     2653, 2655, 2657, 2659, 2661, 2663, 2665, 2667,
-    2669, 2671, 2674, 2676, 2680, 2682, 2684, 2686,
+    2669, 2671, 2676, 2680, 2682, 2686,
     2688, 2690, 2692, 2694, 2697, 2699, 2701,
     3000, 3002, 3004, 3006, 3008, 3010, 3012, 3015,
     3017, 3019, 3021, 3024, 3026, 3028, 3031, 3033,

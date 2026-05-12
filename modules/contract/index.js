@@ -70,6 +70,7 @@ function createContractHandler(packetId, name) {
       const request = decodeRequest(ctx, packetId, packet.payload);
       const response = buildContractResponse(ctx, user, packetId, request);
       if (!response) return false;
+      trackContractMission(ctx, user, packetId, request);
       console.log(`[contract:${name}] ACK packetId=${response.packetId} ${formatRequest(request)}`);
       ctx.sendResponse(socket, packet.sequence, response.packetId, () =>
         ctx.buildEncryptedPacket(packet.sequence, response.packetId, response.payload)
@@ -78,6 +79,50 @@ function createContractHandler(packetId, name) {
       return true;
     },
   };
+}
+
+function trackContractMission(ctx, user, packetId, request = {}) {
+  if (!ctx || typeof ctx.trackMissionEvent !== "function") return;
+  const nowValue = now(ctx);
+  let changed = false;
+  const changedConditions = new Set();
+  const track = (condition, amount = 1, details = {}) => {
+    const tracked = ctx.trackMissionEvent(user, condition, amount, { now: nowValue, ...details });
+    if (tracked) changedConditions.add(condition);
+    changed = tracked || changed;
+  };
+  switch (packetId) {
+    case PACKETS.CONTRACT_REQ:
+    case PACKETS.CUSTOM_PICKUP_REQ:
+    case PACKETS.MISC_CONTRACT_OPEN_REQ:
+      track("UNIT_CONTRACT", Math.max(1, Number(request.count || 1) || 1));
+      break;
+    case PACKETS.SELECTABLE_CONTRACT_CONFIRM_REQ:
+      track("UNIT_CONTRACT", 1, { contractId: request.contractId });
+      break;
+    default:
+      break;
+  }
+  if (changed && typeof ctx.refreshMissionProgress === "function") {
+    ctx.refreshMissionProgress(user, { now: nowValue, conditions: Array.from(changedConditions) });
+  }
+}
+
+function trackResourceSpend(ctx, user, itemId, amount) {
+  if (!ctx || typeof ctx.trackMissionEvent !== "function") return;
+  const numericItemId = Number(itemId || 0);
+  const numericAmount = Math.max(0, Math.trunc(Number(amount || 0) || 0));
+  if (numericItemId <= 0 || numericAmount <= 0) return;
+  const nowValue = now(ctx);
+  const changed = ctx.trackMissionEvent(user, "USE_RESOURCE", numericAmount, {
+    now: nowValue,
+    itemId: numericItemId,
+    resourceId: numericItemId,
+    value: numericItemId,
+  });
+  if (changed && typeof ctx.refreshMissionProgress === "function") {
+    ctx.refreshMissionProgress(user, { now: nowValue, conditions: ["USE_RESOURCE"] });
+  }
 }
 
 function buildContractResponse(ctx, user, packetId, request) {
@@ -201,6 +246,7 @@ function buildMiscContractOpenAck(ctx, user, request) {
   const count = Math.max(1, Number(request.count || 1));
   const sourceItemId = Number(request.miscItemId || 0);
   const costItem = sourceItemId > 0 ? spendMiscItem(user, sourceItemId, count, { regDate: now(ctx) }) : null;
+  if (costItem) trackResourceSpend(ctx, user, sourceItemId, count);
   const contractId = resolveMiscContractId(sourceItemId);
   const result = openMiscContract(ctx, user, contractId, { count, sourceMiscItemId: sourceItemId }).result;
 
@@ -260,6 +306,7 @@ function buildPieceExchangeAck(ctx, user, request) {
   const alreadyOwned = false;
   const spendCount = getPieceRequirement(itemId, alreadyOwned) * count;
   const costItem = itemId > 0 ? spendMiscItem(user, itemId, spendCount, { regDate: now(ctx) }) : null;
+  if (costItem) trackResourceSpend(ctx, user, itemId, spendCount);
   const units = grantUnitFromPiece(user, itemId, count, { regDate: now(ctx), fromContract: false });
   return Buffer.concat([
     writeSignedVarInt(0),
@@ -621,6 +668,7 @@ function spendCostFromRecord(ctx, user, record, count) {
     if (!Number.isInteger(itemId) || itemId <= 0 || value <= 0n) continue;
     const updated = spendMiscItem(user, itemId, value, { regDate: now(ctx) });
     if (updated) costItems.push(updated);
+    if (updated) trackResourceSpend(ctx, user, itemId, value);
     break;
   }
   return costItems;

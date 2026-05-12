@@ -1,167 +1,516 @@
-# Setup Guide
+# RevivalSide Setup Guide
 
-This guide assumes Windows, Steam CounterSide, Node.js 20 or newer, .NET 8 SDK, Java, Python 3.11 or newer, and Wireshark only if you plan to refresh packet fixtures.
+This guide is written for someone who has access to the RevivalSide repo but does not already know software development. Follow it slowly, paste one command at a time, and keep each PowerShell window open until the step says you can close it.
 
-## 1. Clone And Configure
+RevivalSide has two things most people want to run:
+
+- **RevivalSide Wiki**: a local website for searching game IDs, units, gear, items, skins, contracts, and images.
+- **Server listener**: the local server process the game connects to while you test RevivalSide.
+
+You can set up only the wiki, only the listener, or both. If you want the normal local testing flow, set up both.
+
+## Quick Map
+
+The setup has four big parts:
+
+1. Install the basic tools: Node.js, .NET, Python, and Java.
+2. Download or open the repo.
+3. Build the local game data that cannot be stored in git.
+4. Start the wiki and the listener.
+
+If someone gave you a prepared copy of the repo that already has `server-data`, `gameplay-tables-json`, and `extracted-assets`, you can skip most of part 3.
+
+## Before You Start
+
+You need:
+
+- Windows 10 or Windows 11.
+- CounterSide installed through Steam.
+- Access to this repo.
+- About 10 GB of free disk space if you are extracting images.
+- A little patience during the first asset extraction. It can take a while.
+
+The default CounterSide install path used by this guide is:
+
+```text
+C:\Program Files (x86)\Steam\steamapps\common\CounterSide
+```
+
+If your game is installed somewhere else, that is fine. You will change one line later.
+
+## Words This Guide Uses
+
+- **Repo** means the RevivalSide folder that has `package.json`, `cs-listener.js`, `tools`, and `docs`.
+- **PowerShell** is the blue Windows terminal.
+- **Command** means a line you paste into PowerShell and run with Enter.
+- **Admin PowerShell** means PowerShell opened with "Run as administrator".
+- **Listener** means `npm run listen`.
+- **Wiki** means the local website started by `npm run wiki:serve`.
+
+## Install The Tools
+
+Install these first. After installing them, close and reopen PowerShell so Windows can find the new commands.
+
+### 1. Node.js
+
+Install the current **LTS** version from:
+
+```text
+https://nodejs.org/
+```
+
+Node runs the RevivalSide listener and wiki tools.
+
+### 2. .NET 8 SDK
+
+Install the **.NET 8 SDK** from:
+
+```text
+https://dotnet.microsoft.com/download/dotnet/8.0
+```
+
+The SDK builds the C# combat host used by the listener.
+
+### 3. Python
+
+Install Python 3.11 or newer from:
+
+```text
+https://www.python.org/downloads/
+```
+
+During install, turn on the checkbox named **Add python.exe to PATH** if you see it.
+
+### 4. Java
+
+Install Java 17 or newer. Eclipse Temurin is a good choice:
+
+```text
+https://adoptium.net/
+```
+
+Java runs `unluac`, which turns the dumped Lua bytecode into readable table files.
+
+### Optional: Git
+
+Git is only needed if you want to clone or update the repo with `git pull`.
+
+Install it from:
+
+```text
+https://git-scm.com/download/win
+```
+
+If you do not want to install Git, download the repo as a ZIP from GitHub and extract it instead.
+
+### Check That The Tools Work
+
+Open normal PowerShell and run:
 
 ```powershell
+node -v
+npm -v
+dotnet --version
+py --version
+java -version
+```
+
+You do not need the exact same versions as another person. You just want every command to print a version instead of an error like "not recognized".
+
+If `py --version` fails but `python --version` works, use `python` anywhere this guide says `py`.
+
+If you installed Git, also run:
+
+```powershell
+git --version
+```
+
+If `git --version` works, you can use the Git clone steps below. If it does not, use the ZIP download path.
+
+## Open The Repo Folder
+
+If you already have the repo folder, open it in File Explorer. Click the address bar, type `powershell`, then press Enter. PowerShell should open directly in that folder.
+
+If you need to clone the repo with Git:
+
+```powershell
+cd "$env:USERPROFILE\Desktop"
 git clone https://github.com/MadlyMoe/RevivalSide.git RevivalSide
 cd RevivalSide
-copy .env.example .env
+```
+
+If you downloaded a ZIP instead, extract it, open the extracted `RevivalSide` folder, click the address bar, type `powershell`, and press Enter.
+
+To confirm you are in the right folder:
+
+```powershell
+dir
+```
+
+You should see files like:
+
+```text
+package.json
+cs-listener.js
+tools
+docs
+```
+
+## First-Time Repo Setup
+
+Run these commands from the repo folder:
+
+```powershell
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
 npm install
 npm run build:combat-host
 ```
 
-If your CounterSide install is not in the default Steam path, edit `.env`:
+What these do:
+
+- `.env` is your local settings file.
+- `npm install` downloads the JavaScript packages.
+- `npm run build:combat-host` builds the C# combat host.
+
+If your CounterSide install is not in the default Steam folder, open `.env` in Notepad:
 
 ```powershell
-CS_COUNTERSIDE_MANAGED_DIR=C:\Path\To\CounterSide\Data\Managed
+notepad .env
 ```
 
-## 2. Patch Hosts As Administrator
-
-Open PowerShell as Administrator from the repo root and run:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\patch-hosts.ps1
-```
-
-This adds a marked RevivalSide block to:
+Find this line:
 
 ```text
-C:\Windows\System32\drivers\etc\hosts
+CS_COUNTERSIDE_MANAGED_DIR=C:\Program Files (x86)\Steam\steamapps\common\CounterSide\Data\Managed
 ```
 
-Default entries:
+Change it to your real `Data\Managed` folder. The folder must contain `Assembly-CSharp.dll`.
 
-```text
-127.0.0.1 ctsglobal-login.sbside.com ctskorea-login.sbside.com ctsglobal-cdndown.sbside.com
-```
+## Build Local Game Data
 
-To remove the block later:
+The repo does not store raw game assets, raw DLLs, your account data, or generated table dumps. Everyone builds those locally from their own CounterSide install.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\patch-hosts.ps1 -Remove
-```
-
-The script writes a timestamped hosts backup before making changes.
-
-## 3. Dump Assembly-CSharp Locally
-
-The dump is for reference only and is intentionally ignored by git.
-
-Install ILSpy command line:
-
-```powershell
-dotnet tool install --global ilspycmd
-```
-
-Dump your own client:
-
-```powershell
-$managed = "C:\Program Files (x86)\Steam\steamapps\common\CounterSide\Data\Managed"
-ilspycmd -p -o .\Assembly-CSharp "$managed\Assembly-CSharp.dll"
-```
-
-See [dump-assembly-csharp.md](dump-assembly-csharp.md) for dnSpyEx and ILSpy notes.
-
-## 4. Generate Gameplay Tables
-
-The C# combat host uses the installed client `Managed` DLLs and local gameplay tables. These generated folders are ignored by git.
-
-Install Python dependencies used by the asset extractor:
-
-```powershell
-py -m pip install UnityPy
-```
-
-Decrypt script bundles from your CounterSide install:
+Set a short variable for your CounterSide folder:
 
 ```powershell
 $client = "C:\Program Files (x86)\Steam\steamapps\common\CounterSide"
-py .\tools\cs_asset_decrypt.py dump-lua --root "$client\Data\StreamingAssets" --out-dir .\gameplay-tables\StreamingAssets --manifest .\gameplay-tables\catalog.json --overwrite
 ```
 
-Decompile Lua bytecode:
+If your game is installed somewhere else, change the path inside the quotes.
+
+### Install Python Packages
+
+Run:
+
+```powershell
+py -m pip install UnityPy pillow
+```
+
+If `py` does not work on your machine, run:
+
+```powershell
+python -m pip install UnityPy pillow
+```
+
+### Dump The Gameplay Scripts
+
+Run:
+
+```powershell
+py .\tools\cs_asset_decrypt.py dump-scripts --root "$client\Data\StreamingAssets\Assetbundles" --out-dir .\gameplay-tables\Assetbundles --manifest .\gameplay-tables\catalog.json --overwrite
+```
+
+This reads the local CounterSide script bundles and writes decrypted Lua bytecode into `gameplay-tables`.
+
+### Decompile The Lua
+
+Run:
 
 ```powershell
 py .\tools\cs_lua_table_pipeline.py decompile --luac-root .\gameplay-tables --out-dir .\gameplay-tables-decompiled --jar .\tools\unluac.jar --overwrite
 ```
 
-Parse Lua tables:
+This creates readable Lua files in `gameplay-tables-decompiled`.
+
+### Parse The Lua Tables To JSON
+
+Run:
 
 ```powershell
 py .\tools\cs_lua_table_pipeline.py parse --lua-root .\gameplay-tables-decompiled --out-dir .\gameplay-tables-json --overwrite
 ```
 
-Build compact server indexes:
+This creates JSON files in `gameplay-tables-json`. The wiki and many server systems read these.
+
+### Build The Server Data Indexes
+
+Run:
 
 ```powershell
-py .\tools\cs_build_server_data.py --parsed-root .\gameplay-tables-json\StreamingAssets --out-dir .\server-data
+py .\tools\cs_build_server_data.py --parsed-root .\gameplay-tables-json\Assetbundles --out-dir .\server-data
 ```
 
-## 5. Use Bundled Packet Fixtures
+This creates compact server files like `server-data\units.json`.
 
-The repository includes a sanitized fixture bundle that covers the current tutorial path:
+### Optional: Extract Images For The Wiki
 
-- `server-data/captured-flows/`: HTTP mirror responses needed during boot and tutorial resource loading.
-- `server-data/captured-tcp/`: contents/login TCP fixtures.
-- `server-data/captured-game-flow/`: tutorial game-stream client/server packet fixtures.
+The wiki works without images, but it is much nicer with PNGs.
 
-Collaborators do not need to make local packet captures to run up to the current tutorial progress point. Raw `.pcap`/`.pcapng` captures are still ignored and should stay local.
-
-Only regenerate these fixtures when you are intentionally updating the replay baseline. Use Wireshark/dumpcap, then extract the relevant TCP streams:
+First decrypt asset bundle headers:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\watch-counterside-capture.ps1
+py .\tools\cs_asset_decrypt.py decrypt-header --all-assets --root "$client\Data\StreamingAssets" --out-dir .\extracted-assets\decrypted --overwrite
 ```
 
-After stopping capture, identify the TCP stream in Wireshark or with `tshark`, then extract:
+Then extract readable assets:
 
 ```powershell
-node .\tools\extract-cs-pcap-fixtures.js .\captures\your-capture.pcapng .\server-data\captured-tcp tcp <stream>
-node .\tools\extract-cs-pcap-fixtures.js .\captures\your-capture.pcapng .\server-data\captured-game-flow game <stream> <client-ip>
+py .\tools\cs_extract_decrypted_assets.py --root .\extracted-assets\decrypted --out-dir .\extracted-assets\all --manifest .\extracted-assets\manifest.json --overwrite-manifest
 ```
 
-Before committing refreshed fixtures, remove local source paths and personal capture metadata from manifests.
+This can take a while. If you only care about IDs and text data, you can skip image extraction.
 
-## 6. Run The Listener
+## Start The Wiki
+
+From the repo folder, build the wiki data:
+
+```powershell
+npm run wiki:build
+```
+
+Then start the local wiki website:
+
+```powershell
+npm run wiki:serve
+```
+
+PowerShell should print something like:
+
+```text
+RevivalSide Wiki running at http://127.0.0.1:5174/
+```
+
+Open that address in your browser. If port `5174` is busy, the script will try the next port, like `5175`.
+
+Keep that PowerShell window open while you use the wiki. Close the window when you want to stop the wiki.
+
+## Start The Server Listener
+
+The listener is what the game connects to. It uses:
+
+- TCP `127.0.0.1:22000` for game traffic.
+- HTTP mirror `http://127.0.0.1:8088` for captured boot/config responses.
+
+### Patch Hosts
+
+This step redirects the game's login/CDN hostnames to your own computer.
+
+Open **PowerShell as Administrator** in the repo folder. If you are not sure how:
+
+1. Open the repo folder in File Explorer.
+2. Click the address bar.
+3. Type `powershell`.
+4. Press Ctrl+Shift+Enter instead of just Enter.
+5. Accept the Windows admin prompt.
+
+Now run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\patch-hosts.ps1
+```
+
+You should see a message saying the hosts file was updated and backed up.
+
+To undo this later, run this from Admin PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\patch-hosts.ps1 -Remove
+```
+
+If the normal official game stops loading later, remove the hosts patch or restart after removing it.
+
+### Run The Listener
+
+Open a normal PowerShell window in the repo folder and run:
 
 ```powershell
 npm run listen
 ```
 
-Expected startup lines include:
+Good startup signs:
 
 ```text
 [+] Listening on port 22000
 [+] Captured HTTP mirror listening on http://127.0.0.1:8088
+[+] User manager listening on http://127.0.0.1:8088/user-manager
 ```
 
-Managed combat updates in 33 ms chunks and sends each packet immediately when the host emits it:
+Keep this PowerShell window open. This window is now the local server log.
 
-```powershell
-CS_DYNAMIC_BATTLE_SYNC_INTERVAL_MS=33
-CS_MANAGED_HOST_TICK_INTERVAL_MS=33
-CS_MANAGED_HOST_PRIME_FRAMES=1
+### Edit Local User Profiles
+
+While the listener is running, open:
+
+```text
+http://127.0.0.1:8088/user-manager
 ```
 
-Raising `CS_MANAGED_HOST_TICK_INTERVAL_MS` batches more managed combat frames per host tick, but it also adds visible packet latency. Keep `CS_MANAGED_HOST_PRIME_FRAMES=1` for live play; higher values are only useful for debugging quiet startup frames because they can delay ACK/sync responses. `CS_DYNAMIC_BATTLE_SYNC_INTERVAL_MS` is used by the JS fallback path.
+This page edits the local `server-data\users.json` file used by the listener. It can create, clone, delete, repair, and fully edit profile JSON. Each save keeps a backup in `server-data\users.backups`.
 
-If the C# host cannot start, confirm:
+### Start CounterSide
 
-- `.env` points `CS_COUNTERSIDE_MANAGED_DIR` to a folder containing `Assembly-CSharp.dll`.
-- `.NET 8` is installed.
-- Local gameplay tables were generated.
-- The tracked tutorial fixture directories exist if you are testing the tutorial flow.
+Start CounterSide after the listener is already running.
 
-## 7. Prebuilt Combat Host
+If the game reaches the local flow, you should see activity in the listener window. If the listener window stays completely silent, the game is probably not reaching your local listener.
 
-`prebuilt/combat-host` contains RevivalSide-built host binaries. To force the listener to use that DLL instead of building from source:
+## Stop Everything
+
+To stop the wiki or listener, click the PowerShell window and press:
+
+```text
+Ctrl+C
+```
+
+If you want the normal official game again, remove the hosts patch:
 
 ```powershell
-$env:CS_CSHARP_COMBAT_HOST_DLL = ".\prebuilt\combat-host\CombatHost.dll"
+powershell -ExecutionPolicy Bypass -File .\tools\patch-hosts.ps1 -Remove
+```
+
+Then close and reopen the game.
+
+## Everyday Startup
+
+After the first setup is done, most days are much shorter.
+
+### Wiki
+
+```powershell
+npm run wiki:build
+npm run wiki:serve
+```
+
+### Listener
+
+```powershell
 npm run listen
 ```
 
-The managed game DLL is still loaded from your local CounterSide install and patched into a local cache at runtime. Do not commit that patched managed copy.
+Make sure the hosts patch is enabled before starting the game.
+
+## Updating Later
+
+If you cloned with Git:
+
+```powershell
+git pull
+npm install
+npm run build:combat-host
+npm run wiki:build
+```
+
+If game data changed after a CounterSide update, rebuild the local game data section too.
+
+## Common Problems
+
+### `node` or `npm` is not recognized
+
+Install Node.js LTS, then close and reopen PowerShell.
+
+### `dotnet` is not recognized
+
+Install the .NET 8 SDK, not only the runtime. Then close and reopen PowerShell.
+
+### `py` is not recognized
+
+Try `python --version`. If that works, use `python` instead of `py`. If neither works, reinstall Python and enable "Add python.exe to PATH".
+
+### Java errors during decompile
+
+Run `java -version`. If it fails, install Java 17 or newer and reopen PowerShell.
+
+### `Assembly-CSharp.dll` cannot be found
+
+Open `.env` and fix:
+
+```text
+CS_COUNTERSIDE_MANAGED_DIR=...
+```
+
+It must point to the `Data\Managed` folder inside CounterSide.
+
+### The wiki opens but has no images
+
+The image extraction step was skipped or failed. Run the optional image extraction commands, then run:
+
+```powershell
+npm run wiki:build
+npm run wiki:serve
+```
+
+### The wiki command says no table files exist
+
+Run the "Build Local Game Data" section first. The wiki needs `gameplay-tables-json` and `server-data`.
+
+### The listener starts, but the game does not connect
+
+Check these:
+
+- The listener is still running.
+- Admin PowerShell hosts patch was run.
+- `.env` still has `CS_PORT=22000`.
+- No other program is using port `22000`.
+- CounterSide was restarted after patching hosts.
+
+You can also flush Windows DNS from Admin PowerShell:
+
+```powershell
+ipconfig /flushdns
+```
+
+### The normal official game no longer loads
+
+Remove the hosts patch:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\patch-hosts.ps1 -Remove
+```
+
+Then restart CounterSide. If Windows is still being stubborn, restart the computer.
+
+### Port `8088` or `22000` is already in use
+
+Close old listener windows first. If that does not work, restart your computer or change the ports in `.env`.
+
+### `npm install` fails
+
+Check your internet connection and Node.js install. Then run:
+
+```powershell
+npm install
+```
+
+again from the repo folder.
+
+## What Not To Commit
+
+Do not commit local generated data from your own client unless the project owner specifically asks for a sanitized fixture update.
+
+Keep these local:
+
+- `Assembly-CSharp`
+- `gameplay-tables`
+- `gameplay-tables-decompiled`
+- `gameplay-tables-json`
+- `extracted-assets`
+- raw packet captures
+- account state or personal game data
+
+The repo already has README files in those folders explaining what belongs there.
+
+## Useful Links Inside The Repo
+
+- `docs\dump-assembly-csharp.md`: notes for ILSpy and dnSpyEx.
+- `docs\captures.md`: packet capture and fixture notes.
+- `server-data\README.md`: what generated server data means.
+- `combat-host\README.md`: how the C# combat host fits into the listener.

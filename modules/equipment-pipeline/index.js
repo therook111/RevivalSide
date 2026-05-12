@@ -72,6 +72,7 @@ function createEquipmentPipelineHandlers() {
       if (socket.session) socket.session.user = user;
       const request = decodeRequest(ctx, packetId, packet.payload);
       const response = buildResponse(ctx, user, packetId, request);
+      trackEquipmentMission(ctx, user, packetId, request);
       console.log(`[equipment:${packetId}] ACK packetId=${response.packetId} payloadSize=${response.payload.length}`);
       ctx.sendResponse(socket, packet.sequence, response.packetId, () =>
         ctx.buildEncryptedPacket(packet.sequence, response.packetId, response.payload)
@@ -80,6 +81,62 @@ function createEquipmentPipelineHandlers() {
       return true;
     },
   }));
+}
+
+function trackEquipmentMission(ctx, user, packetId, request = {}) {
+  if (!ctx || typeof ctx.trackMissionEvent !== "function") return;
+  const nowValue = now(ctx);
+  let changed = false;
+  const changedConditions = new Set();
+  const track = (condition, amount = 1, details = {}) => {
+    const tracked = ctx.trackMissionEvent(user, condition, amount, { now: nowValue, ...details });
+    if (tracked) changedConditions.add(condition);
+    changed = tracked || changed;
+  };
+  const trackResourceSpend = (itemId, amount) => {
+    const numericItemId = Number(itemId || 0);
+    const numericAmount = Math.max(0, Math.trunc(Number(amount || 0) || 0));
+    if (numericItemId > 0 && numericAmount > 0) {
+      track("USE_RESOURCE", numericAmount, { itemId: numericItemId, resourceId: numericItemId, value: numericItemId });
+    }
+  };
+
+  switch (packetId) {
+    case 1002:
+    case 1057:
+    case 1063:
+      track("EQUIP_ENCHANT", 1, { equipUid: request.equipItemUID || request.equipUid });
+      break;
+    case 1076:
+      track("EQUIP_ENCHANT", Math.max(1, (request.equipItemUIDList || []).length));
+      break;
+    case 1020:
+    case 1024:
+    case 1028:
+    case 1032:
+    case 1034:
+      track("EQUIP_TUNING", 1, { equipUid: request.equipUID || request.equipUid });
+      break;
+    case 1014:
+    case 1016:
+      track("EQUIP_MAKE", 1);
+      break;
+    case 1066:
+      track("EQUIP_MAKE", Math.max(1, Number(request.moldCount || 1) || 1), { itemId: request.moldId });
+      break;
+    case 1008:
+      trackResourceSpend(request.itemID || request.itemId, request.count || 1);
+      break;
+    case 1026:
+      trackResourceSpend(request.itemId, request.count || 1);
+      break;
+    default:
+      break;
+  }
+
+  if (changed && typeof ctx.refreshMissionProgress === "function") {
+    ctx.refreshMissionProgress(user, { now: nowValue, conditions: Array.from(changedConditions) });
+  }
 }
 
 function buildResponse(ctx, user, packetId, req) {

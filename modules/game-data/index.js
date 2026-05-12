@@ -52,6 +52,20 @@ function loadGameData() {
     }
   }
 
+  const unitSkillsById = new Map();
+  const unitSkillStrIdById = new Map();
+  for (const record of readRecords("ab_script_unit_data", "LUA_UNIT_SKILL_TEMPLET.json")) {
+    const skillId = Number(record && record.m_UnitSkillID);
+    const level = Number(record && record.m_Level);
+    if (!Number.isInteger(skillId) || skillId <= 0 || !Number.isInteger(level) || level <= 0) continue;
+    if (!unitSkillsById.has(skillId)) unitSkillsById.set(skillId, new Map());
+    const byLevel = unitSkillsById.get(skillId);
+    if (!byLevel.has(level)) byLevel.set(level, record);
+    if (record.m_UnitSkillStrID && !unitSkillStrIdById.has(skillId)) {
+      unitSkillStrIdById.set(skillId, String(record.m_UnitSkillStrID));
+    }
+  }
+
   const pieceByItemId = new Map();
   for (const record of readRecords("ab_script_item_templet", "LUA_PIECE_TEMPLET.json")) {
     const itemId = Number(record && record.m_PieceID);
@@ -99,6 +113,15 @@ function loadGameData() {
     const setId = Number(record && record.m_EquipSetID);
     if (Number.isInteger(setId) && setId > 0 && !equipSetOptions.has(setId)) equipSetOptions.set(setId, record);
   }
+
+  const eventDecks = new Map();
+  for (const record of readRecords("ab_script", "LUA_EVENTDECK_TEMPLET.json")) {
+    const eventDeckId = Number(record && record.ID);
+    if (Number.isInteger(eventDeckId) && eventDeckId > 0 && !eventDecks.has(eventDeckId)) {
+      eventDecks.set(eventDeckId, record);
+    }
+  }
+
   const skinById = new Map();
   for (const record of readRecords("ab_script", "LUA_SKIN_TEMPLET.json")) {
     const skinId = Number(record && record.m_SkinID);
@@ -118,6 +141,13 @@ function loadGameData() {
     unitExpTable.set(level, record);
   }
 
+  const playerExpTable = new Map();
+  for (const record of readRecords("ab_script", "LUA_PLAYER_EXP_TABLE.json")) {
+    const level = Number(record && record.m_iLevel);
+    if (!Number.isInteger(level) || level <= 0 || playerExpTable.has(level)) continue;
+    playerExpTable.set(level, record);
+  }
+
   const operatorExpTable = new Map();
   for (const record of readRecords("ab_script_unit_data", "LUA_OPERATOR_EXP_TEMPLET.json")) {
     const level = Number(record && record.m_iLevel);
@@ -128,12 +158,56 @@ function loadGameData() {
     if (!byLevel.has(level)) byLevel.set(level, record);
   }
 
+  const limitBreakInfoByRank = new Map();
+  for (const record of readRecords("ab_script", "LUA_LIMITBREAK_INFO.json")) {
+    const rank = Number(record && record.m_iLBRank);
+    if (Number.isInteger(rank) && rank >= 0 && !limitBreakInfoByRank.has(rank)) limitBreakInfoByRank.set(rank, record);
+  }
+
+  const limitBreakSubstituteByKey = new Map();
+  for (const record of readRecords("ab_script", "LUA_LIMITBREAK_SUBSTITUTE_ITEM.json")) {
+    const targetRank = Number(record && record.m_TargetLimitbreakLevel);
+    if (!Number.isInteger(targetRank) || targetRank <= 0) continue;
+    const key = makeLimitBreakSubstituteKey(record.m_NKM_UNIT_STYLE_TYPE, record.m_NKM_UNIT_GRADE, targetRank);
+    if (!limitBreakSubstituteByKey.has(key)) limitBreakSubstituteByKey.set(key, record);
+  }
+
   const contentUnlocksByDungeonId = groupByNumber(
     readRecords("ab_script", "LUA_CONTENTS_UNLOCK_TEMPLET.json").filter(
       (record) => String(record && record.m_UnlockReqType) === "SURT_CLEAR_DUNGEON"
     ),
     "m_UnlockReqValue"
   );
+
+  const missions = [];
+  const missionById = new Map();
+  const missionsByTabId = new Map();
+  const missionsByCounterGroupId = new Map();
+  const missionTabs = [];
+  const missionTabById = new Map();
+  for (const record of readRecords("ab_script", "LUA_MISSION_TAB_TEMPLET.json")) {
+    const tabId = Number(record && record.m_TabID);
+    if (!Number.isInteger(tabId) || tabId <= 0 || missionTabById.has(tabId)) continue;
+    missionTabs.push(record);
+    missionTabById.set(tabId, record);
+  }
+  for (const record of readRecords("ab_script", "LUA_MISSION_TEMPLET.json")) {
+    const missionId = Number(record && record.m_MissionID);
+    if (!Number.isInteger(missionId) || missionId <= 0) continue;
+    if (record.m_Enabled === false) continue;
+    missions.push(record);
+    if (!missionById.has(missionId)) missionById.set(missionId, record);
+    const tabId = Number(record.m_MissionTabId || 0);
+    if (Number.isInteger(tabId) && tabId > 0) {
+      if (!missionsByTabId.has(tabId)) missionsByTabId.set(tabId, []);
+      missionsByTabId.get(tabId).push(record);
+    }
+    const groupId = Number(record.m_MissionCounterGroupID || missionId);
+    if (Number.isInteger(groupId) && groupId > 0) {
+      if (!missionsByCounterGroupId.has(groupId)) missionsByCounterGroupId.set(groupId, []);
+      missionsByCounterGroupId.get(groupId).push(record);
+    }
+  }
 
   cachedData = {
     miscItems,
@@ -144,6 +218,8 @@ function loadGameData() {
     rewardGroups,
     unitById,
     unitByStrId,
+    unitSkillsById,
+    unitSkillStrIdById,
     pieceByItemId,
     contracts,
     contractTabs,
@@ -155,11 +231,21 @@ function loadGameData() {
     equipById,
     equipRandomStats,
     equipSetOptions,
+    eventDecks,
     skinById,
     emoticonById,
     unitExpTable,
+    playerExpTable,
     operatorExpTable,
+    limitBreakInfoByRank,
+    limitBreakSubstituteByKey,
     contentUnlocksByDungeonId,
+    missions,
+    missionById,
+    missionsByTabId,
+    missionsByCounterGroupId,
+    missionTabs,
+    missionTabById,
   };
   return cachedData;
 }
@@ -178,6 +264,45 @@ function getUnitTemplet(unitIdOrStrId) {
     return data.unitByStrId.get(unitIdOrStrId) || null;
   }
   return data.unitById.get(Number(unitIdOrStrId)) || null;
+}
+
+function getUnitSkillStrId(skillId) {
+  return loadGameData().unitSkillStrIdById.get(Number(skillId)) || "";
+}
+
+function getUnitSkillTemplet(skillId, level) {
+  const byLevel = loadGameData().unitSkillsById.get(Number(skillId));
+  return byLevel ? byLevel.get(Number(level)) || null : null;
+}
+
+function getUnitSkillMaxLevel(skillId) {
+  const byLevel = loadGameData().unitSkillsById.get(Number(skillId));
+  if (!byLevel) return 0;
+  return Array.from(byLevel.keys()).reduce((max, level) => Math.max(max, Number(level) || 0), 0);
+}
+
+function getUnitSkillIndex(unitId, skillId) {
+  const skillStrId = getUnitSkillStrId(skillId);
+  if (!skillStrId) return -1;
+  const templets = [getUnitTemplet(unitId), getBaseUnitTemplet(unitId)].filter(Boolean);
+  for (const templet of templets) {
+    for (let index = 1; index <= 5; index += 1) {
+      if (String(templet[`m_SkillStrID${index}`] || "") === skillStrId) return index - 1;
+    }
+  }
+  return -1;
+}
+
+function getUnitSkillUpgradeCosts(skillId, targetLevel) {
+  const record = getUnitSkillTemplet(skillId, targetLevel);
+  if (!record) return null;
+  const costs = [];
+  for (let index = 1; index <= 4; index += 1) {
+    const itemId = Number(record[`m_UpgradeReqtemID_${index}`] || 0);
+    const count = Math.max(0, Math.trunc(Number(record[`m_UpgradeReqtemValue_${index}`] || 0)));
+    if (itemId > 0 && count > 0) costs.push({ itemId, count });
+  }
+  return mergeItemCosts(costs);
 }
 
 function resolveUnitId(unitIdOrStrId) {
@@ -206,6 +331,16 @@ function getPlayableShipIds() {
     .filter((record) => {
       if (!record || record.m_bMonster === true) return false;
       return String(record.m_NKM_UNIT_TYPE || "") === "NUT_SHIP" && Number(record.m_UnitID) > 0;
+    })
+    .map((record) => Number(record.m_UnitID))
+    .sort((a, b) => a - b);
+}
+
+function getTrophyUnitIds() {
+  return Array.from(loadGameData().unitById.values())
+    .filter((record) => {
+      if (!record || record.m_bMonster === true) return false;
+      return String(record.m_NKM_UNIT_STYLE_TYPE || "") === "NUST_TRAINER" && Number(record.m_UnitID) > 0;
     })
     .map((record) => Number(record.m_UnitID))
     .sort((a, b) => a - b);
@@ -383,6 +518,46 @@ function getAllEquipSetOptionRecords() {
   return Array.from(loadGameData().equipSetOptions.values()).slice();
 }
 
+function getEventDeckTemplet(eventDeckId) {
+  return loadGameData().eventDecks.get(Number(eventDeckId)) || null;
+}
+
+function getEventDeckUnitSlotTypes(eventDeckId) {
+  const eventDeck = getEventDeckTemplet(eventDeckId);
+  if (!eventDeck) return [];
+  return Array.from({ length: 8 }, (_, index) => String(eventDeck[`SLOT_TYPE_UNIT_${index + 1}`] || "").trim());
+}
+
+const EVENT_DECK_OWNED_UNIT_SLOT_TYPES = new Set(["ST_FREE", "ST_FIXED", "ST_FREE_COUNTER", "ST_FREE_SOLDIER", "ST_FREE_MECHANIC"]);
+
+function getEventDeckFreeUnitSlots(eventDeckId) {
+  return getEventDeckUnitSlotTypes(eventDeckId)
+    .map((slotType, index) => (slotType === "ST_FREE" ? index : -1))
+    .filter((index) => index >= 0);
+}
+
+function getEventDeckPlayerUnitSlots(eventDeckId) {
+  const slotTypes = getEventDeckUnitSlotTypes(eventDeckId);
+  const ownedSlots = slotTypes
+    .map((slotType, index) => (EVENT_DECK_OWNED_UNIT_SLOT_TYPES.has(slotType) ? index : -1))
+    .filter((index) => index >= 0);
+  if (!ownedSlots.length) return [];
+
+  const guestReplacementSlots = slotTypes
+    .map((slotType, index) => (slotType === "ST_GUEST" ? index : -1))
+    .filter((index) => index >= 0);
+  return Array.from(new Set([...ownedSlots, ...guestReplacementSlots])).sort((a, b) => a - b);
+}
+
+function eventDeckHasGivenUnitSlots(eventDeckId) {
+  return getEventDeckUnitSlotTypes(eventDeckId).some((slotType) => slotType === "ST_NPC" || slotType === "ST_GUEST" || slotType === "ST_FIXED");
+}
+
+function eventDeckHasFreeShipSlot(eventDeckId) {
+  const eventDeck = getEventDeckTemplet(eventDeckId);
+  return String(eventDeck && eventDeck.SLOT_TYPE_SHIP).trim() === "ST_FREE";
+}
+
 function getSkinTemplet(skinId) {
   return loadGameData().skinById.get(Number(skinId)) || null;
 }
@@ -399,6 +574,54 @@ function getAllEmoticonIds() {
   return Array.from(loadGameData().emoticonById.keys()).sort((a, b) => a - b);
 }
 
+function getLimitBreakInfo(rank) {
+  return loadGameData().limitBreakInfoByRank.get(Number(rank)) || null;
+}
+
+function getLimitBreakMaxLevel(rank, fallback = 100) {
+  const record = getLimitBreakInfo(rank);
+  return Number(record && record.m_iMaxLevel) || Number(fallback) || 100;
+}
+
+function getMaxLimitBreakRank(options = {}) {
+  const data = loadGameData();
+  const maxLevel = Math.max(1, Number(options.maxLevel || 120) || 120);
+  let result = 0;
+  for (const [rank, record] of data.limitBreakInfoByRank.entries()) {
+    const level = Number(record && record.m_iMaxLevel) || 0;
+    if (level > 0 && level <= maxLevel && rank > result) result = rank;
+  }
+  return result || 13;
+}
+
+function getLimitBreakSubstituteRecord(style, grade, targetRank) {
+  const key = makeLimitBreakSubstituteKey(style, grade, targetRank);
+  return loadGameData().limitBreakSubstituteByKey.get(key) || null;
+}
+
+function getUnitLimitBreakSubstituteRecord(unitId, targetRank) {
+  const templet = getBaseUnitTemplet(unitId) || getUnitTemplet(unitId);
+  if (!templet) return null;
+  return getLimitBreakSubstituteRecord(templet.m_NKM_UNIT_STYLE_TYPE, templet.m_NKM_UNIT_GRADE, targetRank);
+}
+
+function getUnitLimitBreakCosts(unitId, targetRank) {
+  const rank = Number(targetRank);
+  const info = getLimitBreakInfo(rank);
+  const substitute = getUnitLimitBreakSubstituteRecord(unitId, rank);
+  if (!info || !substitute) return [];
+  const unitRequirement = Math.max(0, Number(info.m_iUnitRequirement) || 0);
+  const costs = [];
+  const credit = Math.max(0, Number(substitute.m_CreditReq) || 0);
+  if (credit > 0) costs.push({ itemId: 1, count: credit });
+  for (let index = 1; index <= 2; index += 1) {
+    const itemId = Number(substitute[`m_ItemID_${index}`] || 0);
+    const count = Math.max(0, Number(substitute[`m_ItemCount_${index}`] || 0) || 0) * unitRequirement;
+    if (itemId > 0 && count > 0) costs.push({ itemId, count });
+  }
+  return mergeItemCosts(costs);
+}
+
 function getUnitExpRecord(level) {
   return loadGameData().unitExpTable.get(Number(level)) || null;
 }
@@ -408,7 +631,7 @@ function getTotalExpForUnitLevel(level) {
   return Number(record && record.m_iExpCumulated) || 0;
 }
 
-function getUnitLevelByTotalExp(totalExp, maxLevel = 110) {
+function getUnitLevelByTotalExp(totalExp, maxLevel = 120) {
   const data = loadGameData();
   const exp = Math.max(0, Number(totalExp) || 0);
   const cap = Math.max(1, Number(maxLevel) || 1);
@@ -421,6 +644,42 @@ function getUnitLevelByTotalExp(totalExp, maxLevel = 110) {
     else break;
   }
   if (data.unitExpTable.size > 0) return Math.max(1, Math.min(cap, result));
+  return Math.max(1, Math.min(cap, 1 + Math.floor(exp / 100)));
+}
+
+function getPlayerExpRecord(level) {
+  return loadGameData().playerExpTable.get(Number(level)) || null;
+}
+
+function getPlayerTotalExpForLevel(level) {
+  const record = getPlayerExpRecord(level);
+  return Number(record && record.m_lExpCumulated) || 0;
+}
+
+function getPlayerRequiredExpForLevel(level) {
+  const record = getPlayerExpRecord(level);
+  return Number(record && record.m_lExpRequired) || 0;
+}
+
+function getPlayerMaxLevel() {
+  const levels = Array.from(loadGameData().playerExpTable.keys());
+  if (!levels.length) return 120;
+  return Math.max(...levels);
+}
+
+function getPlayerLevelByTotalExp(totalExp, maxLevel = getPlayerMaxLevel()) {
+  const data = loadGameData();
+  const exp = Math.max(0, Number(totalExp) || 0);
+  const cap = Math.max(1, Number(maxLevel) || 1);
+  let result = 1;
+  for (const level of Array.from(data.playerExpTable.keys()).sort((a, b) => a - b)) {
+    if (level > cap) break;
+    const record = data.playerExpTable.get(level);
+    const cumulated = Number(record && record.m_lExpCumulated) || 0;
+    if (cumulated <= exp) result = level;
+    else break;
+  }
+  if (data.playerExpTable.size > 0) return Math.max(1, Math.min(cap, result));
   return Math.max(1, Math.min(cap, 1 + Math.floor(exp / 100)));
 }
 
@@ -466,6 +725,30 @@ function getContentUnlocksForDungeon(dungeonId) {
   return (loadGameData().contentUnlocksByDungeonId.get(Number(dungeonId)) || []).slice();
 }
 
+function getMissionTemplet(missionId) {
+  return loadGameData().missionById.get(Number(missionId)) || null;
+}
+
+function getMissionTemplets() {
+  return loadGameData().missions.slice();
+}
+
+function getMissionTempletsByTabId(tabId) {
+  return (loadGameData().missionsByTabId.get(Number(tabId)) || []).slice();
+}
+
+function getMissionTempletsByCounterGroupId(groupId) {
+  return (loadGameData().missionsByCounterGroupId.get(Number(groupId)) || []).slice();
+}
+
+function getMissionTabTemplet(tabId) {
+  return loadGameData().missionTabById.get(Number(tabId)) || null;
+}
+
+function getMissionTabTemplets() {
+  return loadGameData().missionTabs.slice();
+}
+
 function getContractAdditionalUnitIds(contract) {
   if (!contract || !contract.m_addUnitStrId) return [];
   const unitId = resolveUnitId(contract.m_addUnitStrId);
@@ -490,6 +773,37 @@ function uniquePositiveInts(values) {
 
 function normalizeOperatorGrade(grade) {
   return String(grade || "").trim().toUpperCase();
+}
+
+function getBaseUnitTemplet(unitId) {
+  let current = getUnitTemplet(unitId);
+  const seen = new Set();
+  while (current && current.m_BaseUnitID != null) {
+    const baseId = Number(current.m_BaseUnitID);
+    if (!Number.isInteger(baseId) || baseId <= 0 || baseId === Number(current.m_UnitID) || seen.has(baseId)) break;
+    seen.add(baseId);
+    const base = getUnitTemplet(baseId);
+    if (!base) break;
+    current = base;
+  }
+  return current || null;
+}
+
+function makeLimitBreakSubstituteKey(style, grade, targetRank) {
+  return `${String(style || "").trim()}|${String(grade || "").trim()}|${Number(targetRank) || 0}`;
+}
+
+function mergeItemCosts(costs) {
+  const byItem = new Map();
+  for (const cost of Array.isArray(costs) ? costs : []) {
+    const itemId = Number(cost && cost.itemId);
+    const count = Math.max(0, Math.trunc(Number(cost && cost.count) || 0));
+    if (!Number.isInteger(itemId) || itemId <= 0 || count <= 0) continue;
+    byItem.set(itemId, (byItem.get(itemId) || 0) + count);
+  }
+  return Array.from(byItem.entries())
+    .map(([itemId, count]) => ({ itemId, count }))
+    .sort((a, b) => a.itemId - b.itemId);
 }
 
 function groupByNumber(records, key) {
@@ -522,9 +836,15 @@ module.exports = {
   getMiscItemTemplet,
   getAllMiscItemIds,
   getUnitTemplet,
+  getUnitSkillStrId,
+  getUnitSkillTemplet,
+  getUnitSkillMaxLevel,
+  getUnitSkillIndex,
+  getUnitSkillUpgradeCosts,
   resolveUnitId,
   getPlayableUnitIds,
   getPlayableShipIds,
+  getTrophyUnitIds,
   getPlayableOperatorIds,
   getContractRecord,
   getContractTabRecord,
@@ -547,17 +867,40 @@ module.exports = {
   getEquipSetOptionIds,
   getEquipSetOption,
   getAllEquipSetOptionRecords,
+  getEventDeckTemplet,
+  getEventDeckUnitSlotTypes,
+  getEventDeckFreeUnitSlots,
+  getEventDeckPlayerUnitSlots,
+  eventDeckHasGivenUnitSlots,
+  eventDeckHasFreeShipSlot,
   getSkinTemplet,
   getAllSkinIds,
   getEmoticonTemplet,
   getAllEmoticonIds,
+  getLimitBreakInfo,
+  getLimitBreakMaxLevel,
+  getMaxLimitBreakRank,
+  getLimitBreakSubstituteRecord,
+  getUnitLimitBreakSubstituteRecord,
+  getUnitLimitBreakCosts,
   getUnitExpRecord,
   getTotalExpForUnitLevel,
   getUnitLevelByTotalExp,
+  getPlayerExpRecord,
+  getPlayerTotalExpForLevel,
+  getPlayerRequiredExpForLevel,
+  getPlayerMaxLevel,
+  getPlayerLevelByTotalExp,
   getOperatorExpRecord,
   getOperatorTotalExpForLevel,
   getOperatorRequiredExpForLevel,
   getOperatorMaxLevel,
   getOperatorLevelByTotalExp,
   getContentUnlocksForDungeon,
+  getMissionTemplet,
+  getMissionTemplets,
+  getMissionTempletsByTabId,
+  getMissionTempletsByCounterGroupId,
+  getMissionTabTemplet,
+  getMissionTabTemplets,
 };

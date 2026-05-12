@@ -5,6 +5,7 @@ const {
   getCustomPackageRewards,
   getAcqPackageRewards,
   getUnitTemplet,
+  getMaxLimitBreakRank,
 } = require("../game-data");
 const { grantUnit, grantOperator } = require("../unit");
 const { grantEquipItem } = require("../equipment");
@@ -12,6 +13,8 @@ const { grantEquipItem } = require("../equipment");
 const FALLBACK_RESOURCE_ITEM_ID = Number(process.env.CS_SHOP_FALLBACK_REWARD_ITEM_ID || 1);
 const FALLBACK_RESOURCE_COUNT = BigInt(process.env.CS_SHOP_FALLBACK_REWARD_COUNT || 1000);
 const MAX_REWARD_EXPANSION_DEPTH = 8;
+const UNIT_LEVEL_CAP = 120;
+const SHIP_LEVEL_CAP = 130;
 
 function createEmptyReward() {
   return {
@@ -337,17 +340,26 @@ function buildSelectorUnitGrantOptions(rewardType, rewardId, options = {}) {
     grantOptions.level = level;
     grantOptions.maxLevelOverride = level;
   } else if (isShip) {
-    grantOptions.level = 130;
-    grantOptions.maxLevelOverride = 130;
+    grantOptions.level = SHIP_LEVEL_CAP;
+    grantOptions.maxLevelOverride = SHIP_LEVEL_CAP;
   } else {
-    grantOptions.level = 110;
-    grantOptions.maxLevelOverride = 110;
+    const selectorCap = isAwakenedSelector ? UNIT_LEVEL_CAP : 110;
+    grantOptions.level = selectorCap;
+    grantOptions.maxLevelOverride = selectorCap;
   }
   if (shouldMaxGrowth) {
-    grantOptions.limitBreakLevel = 6;
+    grantOptions.limitBreakLevel = isShip
+      ? 6
+      : getUnitLimitBreakRankForLevel(grantOptions.maxLevelOverride || UNIT_LEVEL_CAP);
     grantOptions.skillLevels = [5, 5, 5, 5, 5];
   }
   return grantOptions;
+}
+
+function getUnitLimitBreakRankForLevel(level) {
+  const maxLevel = Math.max(1, Number(level) || UNIT_LEVEL_CAP);
+  if (maxLevel < 100) return 0;
+  return getMaxLimitBreakRank({ maxLevel });
 }
 
 function inferSelectorLevel(text, isShip) {

@@ -22,6 +22,7 @@ const {
 const { getMiscItem } = require("../inventory");
 const { ensureArmy, ensureDeck } = require("../unit");
 const { getEquipItems } = require("../equipment");
+const { buildSupportUnitData: buildPersistedSupportUnitData, ensureSupportUnit } = require("../combat-roster");
 const {
   ensureAccountProgress,
   getAchievePoint,
@@ -290,6 +291,8 @@ function buildAsyncUnitData(unit) {
 }
 
 function buildSupportUnitData(user) {
+  const supportUnit = ensureSupportUnit(user);
+  if (supportUnit) return buildPersistedSupportUnitData(user, supportUnit);
   return Buffer.concat([
     writeSignedVarLong(toBigInt(user && user.userUid ? user.userUid : 0)),
     writeNullableObject(Buffer.concat([writeNullableObject(buildAsyncUnitData(null)), writeObjectList([])])),

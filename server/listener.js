@@ -5,6 +5,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { URL } = require("url");
 const { loadPacketHandlers } = require("./packetHandlerLoader");
+const { createUserManager } = require("./userManager");
 const ROOT_DIR = path.resolve(__dirname, "..");
 const {
   createCombatHandler,
@@ -18,15 +19,18 @@ const {
   TUTORIAL_STAGE_CHAIN,
 } = require("../stages/tutorialStage");
 const {
-  EPISODE1_STAGE_CHAIN,
-  isEpisode1StageId,
-  isEpisode1DungeonId,
-  mapIdForStageDungeon: episode1MapIdForStageDungeon,
-  stageIdForDungeonId: episode1StageIdForDungeonId,
-  ensureEpisode1State,
-  recordEpisode1DungeonClearForUser,
-  resetEpisode1PostTutorialProgress,
-} = require("../stages/episode1Stage");
+  MAIN_STORY_STAGE_CHAIN,
+  getMainStoryStageByStageId,
+  isMainStoryStageId,
+  isMainStoryDungeonId,
+  isMainStoryCutsceneDungeonId,
+  mapIdForStageDungeon: mainStoryMapIdForStageDungeon,
+  stageIdForDungeonId: mainStoryStageIdForDungeonId,
+  ensureMainStoryState,
+  recordMainStoryDungeonClearForUser,
+  resetMainStoryPostTutorialProgress,
+  getStoryOpenTags,
+} = require("../stages/mainStoryStage");
 const {
   COMMON_RESOURCE_ITEM_IDS,
   DEFAULT_LOCAL_SHOP_BALANCE,
@@ -36,11 +40,13 @@ const {
   getSkinIds,
   removeDebugSeededCommonResources,
   seedShopCurrency,
+  spendMiscItem,
   toBigInt,
 } = require("../modules/inventory");
 const {
   ensureArmy,
   getArmyShips,
+  getArmyTrophies,
   getArmyUnits,
   getArmyOperators,
   getArmyDeckSets,
@@ -65,7 +71,11 @@ const {
   ensureAccountProgress,
   grantStageClearExp,
   completeMission: completeAccountMission,
+  buildMissionDataEntries: buildAccountMissionDataEntries,
   getAchievePoint,
+  recordMissionLogin,
+  refreshMissionProgress,
+  trackMissionEvent,
 } = require("../modules/account-progression");
 const {
   createEmptyReward,
@@ -78,15 +88,29 @@ loadDotEnv(path.join(ROOT_DIR, ".env"));
 const {
   buildAttendanceData: buildSerializedAttendanceData,
 } = require("../modules/attendance");
-const { loadShopCatalog } = require("../modules/shop");
+const { loadShopCatalog, buildSerializedRandomShopData } = require("../modules/shop");
 const { getShopPurchaseHistories } = require("../modules/resource");
-const { getContentUnlocksForDungeon, getRewardGroupRecords } = require("../modules/game-data");
+const {
+  getContentUnlocksForDungeon,
+  getEventDeckTemplet,
+  getMissionTabTemplets,
+  getMissionTempletsByTabId,
+  getRewardGroupRecords,
+} = require("../modules/game-data");
 const {
   getAllContractStates,
   getAllContractBonusStates,
   getAllCustomPickupContracts,
   buildCustomPickupContractData: buildSerializedCustomPickupContractData,
 } = require("../modules/contract");
+const lobbyCustomization = require("../modules/lobby");
+const simulation = require("../modules/simulation");
+const stamina = require("../modules/stamina");
+const collection = require("../modules/collection");
+const {
+  buildSupportUnitData: buildPersistedSupportUnitData,
+  ensureSupportUnit,
+} = require("../modules/combat-roster");
 
 function envFlag(...keys) {
   return keys.some((key) => {
@@ -97,6 +121,43 @@ function envFlag(...keys) {
   });
 }
 
+function envFlagDefault(defaultValue, ...keys) {
+  for (const key of keys) {
+    const value = process.env[key];
+    if (value == null) continue;
+    const normalized = String(value).trim().toLowerCase();
+    if (["1", "true", "yes", "on"].includes(normalized)) return true;
+    if (["0", "false", "no", "off"].includes(normalized)) return false;
+  }
+  return Boolean(defaultValue);
+}
+
+function resolveGuideMissionTabs() {
+  try {
+    const tabs = getMissionTabTemplets()
+      .filter((tab) => {
+        const openTag = String(tab && tab.m_OpenTag || "").toUpperCase();
+        const missionTab = String(tab && tab.m_MissionTab || "").toUpperCase();
+        return openTag.includes("COMBINE_GUIDE_MISSION") || missionTab === "COMBINE_GUIDE_MISSION" || missionTab === "GROWTH_COMPLETE";
+      })
+      .map((tab) => Number(tab && tab.m_TabID || 0))
+      .filter((tabId) => Number.isInteger(tabId) && tabId > 0);
+    return uniqueMissionTabs(tabs);
+  } catch (_) {
+    return [20001, 20002, 20003, 20004, 20005, 20006, 20007, 20008, 20009, 20010, 20011, 20012, 20013];
+  }
+}
+
+function uniqueMissionTabs(tabIds) {
+  return Array.from(
+    new Set(
+      (Array.isArray(tabIds) ? tabIds : [])
+        .map((tabId) => Number(tabId || 0))
+        .filter((tabId) => Number.isInteger(tabId) && tabId > 0)
+    )
+  );
+}
+
 const PORT = Number(process.env.CS_PORT || 22000);
 const HTTP_MIRROR_PORT = Number(process.env.CS_HTTP_MIRROR_PORT || 8088);
 const DEBUG_HEX = process.env.CS_DEBUG_HEX === "1";
@@ -105,6 +166,11 @@ const LOG_CONFIG_EACH_CONNECTION = process.env.CS_LOG_CONFIG_EACH_CONNECTION ===
 
 const HEAD_FENCE = 0xaabbccdd;
 const TAIL_FENCE = 0x11223344;
+const DEFAULT_COMBAT_CONTROLS = Object.freeze({
+  autoRespawnEnabled: false,
+  gameSpeedType: 0,
+  autoSkillType: 1,
+});
 
 const LOGIN_ACK = 203;
 const JOIN_LOBBY_REQ = 204;
@@ -143,6 +209,7 @@ const EMOTICON_DATA_ACK = 456;
 const EQUIP_PRESET_LIST_ACK = 1039;
 const FAVORITES_STAGE_ACK = 1244;
 const POST_LIST_ACK = 1615;
+const MISSION_UPDATE_NOT = 1619;
 const MISSION_COMPLETE_REQ = 1620;
 const MISSION_COMPLETE_ACK = 1621;
 const DEFENCE_INFO_ACK = 3905;
@@ -166,6 +233,9 @@ const DUNGEON_TABLE_PATH = process.env.CS_DUNGEON_TABLE_PATH || path.join(ROOT_D
 const STAGE_TABLE_PATH =
   process.env.CS_STAGE_TABLE_PATH ||
   path.join(ROOT_DIR, "gameplay-tables-json", "Assetbundles", "ab_script", "luac", "LUA_STAGE_TEMPLET.json");
+const MAP_TABLE_PATH =
+  process.env.CS_MAP_TABLE_PATH ||
+  path.join(ROOT_DIR, "gameplay-tables-json", "Assetbundles", "ab_script", "luac", "LUA_MAP_TEMPLET.json");
 const USE_LOCAL_USER_DB = process.env.CS_USE_LOCAL_USER_DB !== "0";
 const REPLAY_CAPTURED_CONTENTS_VERSION = process.env.CS_REPLAY_CAPTURED_CONTENTS_VERSION !== "0";
 const REPLAY_CAPTURED_LOGIN_ACK = process.env.CS_REPLAY_CAPTURED_LOGIN_ACK !== "0";
@@ -197,6 +267,13 @@ const SKIP_TUTORIAL_TO_WIN = process.env.CS_SKIP_TUTORIAL_TO_WIN === "1";
 const RESET_LOCAL_PROGRESS_ON_LOGIN = process.env.CS_RESET_LOCAL_PROGRESS_ON_LOGIN === "1";
 const RESET_TUTORIAL_PROGRESS_ON_LOGIN = process.env.CS_RESET_TUTORIAL_PROGRESS_ON_LOGIN === "1";
 const RESET_CAMPAIGN_PROGRESS_ON_LOGIN = envFlag("resetcampaignprogress", "RESETCAMPAIGNPROGRESS", "CS_RESET_CAMPAIGN_PROGRESS");
+const CLEAR_ALL_MISSIONS_STATUS = envFlag(
+  "clearAllMissionsStatus",
+  "clearallmissionsstatus",
+  "CLEARALLMISSIONSSTATUS",
+  "CS_CLEAR_ALL_MISSIONS_STATUS",
+  "CS_CLEAR_ALL_MISSION_STATUS"
+);
 const CLEAR_UNITS_LEVEL1 = envFlag("clearUnitsLevel1", "CLEARUNITSLEVEL1", "CS_CLEAR_UNITS_LEVEL1", "CS_CLEAR_UNITS_LEVEL_1");
 const CLEAR_GEAR_UNENHANCED = envFlag("clearGearUnenhanced", "CLEARGEARUNENHANCED", "CS_CLEAR_GEAR_UNENHANCED");
 const CLEAR_SHIPS_LEVEL1 = envFlag("clearShipsLevel1", "CLEARSHIPSLEVEL1", "CS_CLEAR_SHIPS_LEVEL1", "CS_CLEAR_SHIPS_LEVEL_1");
@@ -208,6 +285,10 @@ const CLEAR_OPERATORS_LEVEL1 = envFlag(
 );
 const LOCAL_JOIN_LOBBY_ACK_MODE = String(process.env.CS_USE_LOCAL_JOIN_LOBBY_ACK || "auto").trim().toLowerCase();
 const USE_LOCAL_JOIN_LOBBY_ACK = LOCAL_JOIN_LOBBY_ACK_MODE === "1" || LOCAL_JOIN_LOBBY_ACK_MODE === "true";
+const LOBBY_LOCAL_MISSION_DATA = envFlagDefault(true, "lobbyLocalMissionData", "LOBBYLOCALMISSIONDATA", "CS_LOBBY_LOCAL_MISSION_DATA");
+const GUIDE_MISSION_TABS = Object.freeze(resolveGuideMissionTabs());
+const SIMULATION_MISSION_TABS = [6, 7, 8];
+const FAST_LOBBY_MISSION_TABS = uniqueMissionTabs([1, 2, 3, ...SIMULATION_MISSION_TABS, ...GUIDE_MISSION_TABS]);
 const POST_TUTORIAL_MIN_USER_LEVEL = Math.max(2, Number(process.env.CS_POST_TUTORIAL_MIN_USER_LEVEL || 2) || 2);
 const USE_STEAM_TOKEN_AS_ACCESS_TOKEN = process.env.CS_USE_STEAM_TOKEN_AS_ACCESS_TOKEN === "1";
 const REWRITE_CAPTURED_SERVER_INFO = process.env.CS_REWRITE_CAPTURED_SERVER_INFO !== "0";
@@ -215,6 +296,9 @@ const MIRROR_PUBLIC_HOST = process.env.CS_HTTP_MIRROR_HOST || "127.0.0.1";
 const MIRROR_PUBLIC_BASE_URL =
   process.env.CS_HTTP_MIRROR_BASE_URL || `http://${MIRROR_PUBLIC_HOST}:${HTTP_MIRROR_PORT}`;
 const USER_DB_PATH = process.env.CS_USER_DB_PATH || path.join(ROOT_DIR, "server-data", "users.json");
+const USER_MANAGER_ENABLED = process.env.CS_USER_MANAGER !== "0";
+const USER_MANAGER_BASE_PATH = process.env.CS_USER_MANAGER_BASE_PATH || "/user-manager";
+const USER_MANAGER_ALLOW_REMOTE = process.env.CS_USER_MANAGER_ALLOW_REMOTE === "1";
 
 const COMBAT_STATE_ID = Object.freeze({
   IDLE: 12,
@@ -236,15 +320,27 @@ const STATIC_COMBAT_STATS = Object.freeze({
   attackCooldown: Number(process.env.CS_STATIC_UNIT_ATTACK_COOLDOWN || 1.6),
 });
 const TUTORIAL_SKIP_WIN_MISSION_IDS = Object.freeze([999, 100]);
+const POST_TUTORIAL_GUIDE_MISSION_IDS = Object.freeze([340, 341, 345, 610]);
+const POST_TUTORIAL_GUIDE_REQUIREMENT_STAGE_IDS = Object.freeze({
+  340: 11665, // Daily / Simulation guide after NKM_MAIN_BATTLE_EP1_2_4_ACT_BOSS_A
+  341: 11665, // Daily challenge follow-up in the same tutorial mission group
+  345: 11242, // DailyAdd / Anti-air Simulation prompt after NKM_MAIN_BATTLE_EP1_4_2_HARD_BOSS_A
+  610: 11245, // SupplyGuide / NKM_DUNGEON_EP1_ACT4_EPLIOGUE
+});
 
 const GAME_SERVER_IP = process.env.CS_GAME_SERVER_IP || "127.0.0.1";
 const GAME_SERVER_PORT = Number(process.env.CS_GAME_SERVER_PORT || PORT);
 const CONTENTS_VERSION = process.env.CS_CONTENTS_VERSION || "9.2.c";
-const CONTENTS_TAGS = parseTags(
-  process.env.CS_CONTENTS_TAGS ||
-    "GLOBAL,LANGUAGE_KOR,LANGUAGE_ENG,LANGUAGE_DEU,LANGUAGE_FRA,LANGUAGE_JPN,LANGUAGE_TRADITIONAL_CHN,VOICE_KOR,VOICE_JPN,CHECK_MAINTENANCE,MULTITASK_DOWNLOAD"
+const REQUIRED_CONTENTS_TAGS = Object.freeze(["TAG_COMMON_SHOP_TAB_SUPPLY", "SYSTEM_TRANSCENDENCE_LV120"]);
+const REQUIRED_STORY_OPEN_TAGS = Object.freeze(getStoryOpenTags());
+const CONTENTS_TAGS = mergeTags(
+  parseTags(
+    process.env.CS_CONTENTS_TAGS ||
+      "GLOBAL,LANGUAGE_KOR,LANGUAGE_ENG,LANGUAGE_DEU,LANGUAGE_FRA,LANGUAGE_JPN,LANGUAGE_TRADITIONAL_CHN,VOICE_KOR,VOICE_JPN,CHECK_MAINTENANCE,MULTITASK_DOWNLOAD"
+  ),
+  REQUIRED_CONTENTS_TAGS
 );
-const OPEN_TAGS = parseTags(process.env.CS_OPEN_TAGS || "");
+const OPEN_TAGS = mergeTags(parseTags(process.env.CS_OPEN_TAGS || ""), REQUIRED_STORY_OPEN_TAGS);
 
 const CRYPTO_MASKS = [
   14170986657190717782n,
@@ -267,11 +363,24 @@ const capturedCombatReplayEntries = buildCapturedCombatReplayEntries(capturedGam
 const capturedFlowMirror = loadCapturedFlowMirror(CAPTURED_FLOW_DIR);
 const gameplayUnitStats = loadGameplayUnitStats(UNIT_TABLE_PATH);
 const userDb = loadUserDb(USER_DB_PATH);
+const userManager = USER_MANAGER_ENABLED
+  ? createUserManager({
+      basePath: USER_MANAGER_BASE_PATH,
+      allowRemote: USER_MANAGER_ALLOW_REMOTE,
+      userDb,
+      userDbPath: USER_DB_PATH,
+      saveUserDb,
+      ensureUserDefaults,
+      makeAccessToken,
+      makeToken,
+    })
+  : null;
 const packetHandlers = loadPacketHandlers([PACKET_HANDLER_DIR, MODULE_HANDLER_ROOT], { rootDir: ROOT_DIR });
 const joinLobbyAckPayloadCache = new Map();
 const localProgressResetUsers = new Set();
 let cachedDungeonCatalog = null;
 let cachedStageCatalog = null;
+let cachedMapIdByStrId = null;
 
 if (process.env.CS_DUMP_JOIN_LOBBY_ACK_PAYLOAD) {
   const dumpUserUid = String(process.env.CS_DUMP_USER_UID || "");
@@ -397,6 +506,11 @@ function logRuntimeConfig() {
 
   console.log(`[cfg] localUserDb=${USE_LOCAL_USER_DB ? "on" : "off"} db=${USER_DB_PATH}`);
   console.log(
+    `[cfg] userManager=${userManager ? "on" : "off"} path=${
+      userManager ? userManager.basePath : "(disabled)"
+    } remote=${USER_MANAGER_ALLOW_REMOTE ? "on" : "off"}`
+  );
+  console.log(
     `[cfg] tcpReplay contents=${REPLAY_CAPTURED_CONTENTS_VERSION ? "on" : "off"} login=${
       REPLAY_CAPTURED_LOGIN_ACK ? "on" : "off"
     } packets=${[...capturedTcpResponses.keys()].join(",") || "(none)"}`
@@ -429,12 +543,14 @@ function logRuntimeConfig() {
   console.log(`[cfg] resetLocalProgressOnLogin=${RESET_LOCAL_PROGRESS_ON_LOGIN ? "on" : "off"}`);
   console.log(`[cfg] resetTutorialProgressOnLogin=${RESET_TUTORIAL_PROGRESS_ON_LOGIN ? "on" : "off"}`);
   console.log(`[cfg] resetCampaignProgressOnLogin=${RESET_CAMPAIGN_PROGRESS_ON_LOGIN ? "on" : "off"}`);
+  console.log(`[cfg] clearAllMissionsStatus=${CLEAR_ALL_MISSIONS_STATUS ? "on" : "off"}`);
   console.log(
     `[cfg] cleanup clearUnitsLevel1=${CLEAR_UNITS_LEVEL1 ? "on" : "off"} clearGearUnenhanced=${
       CLEAR_GEAR_UNENHANCED ? "on" : "off"
     } clearShipsLevel1=${CLEAR_SHIPS_LEVEL1 ? "on" : "off"} clearOperatorsLevel1=${CLEAR_OPERATORS_LEVEL1 ? "on" : "off"}`
   );
   console.log(`[cfg] localJoinLobbyAck=${USE_LOCAL_JOIN_LOBBY_ACK ? "on" : LOCAL_JOIN_LOBBY_ACK_MODE === "0" || LOCAL_JOIN_LOBBY_ACK_MODE === "false" ? "off" : "auto"}`);
+  console.log(`[cfg] lobbyLocalMissionData=${LOBBY_LOCAL_MISSION_DATA ? "on" : "off"}`);
   console.log(
     `[cfg] officialCombatReplay=${OFFICIAL_COMBAT_REPLAY ? "on" : "off"} packets=${
       capturedCombatReplayEntries.length
@@ -453,16 +569,36 @@ function logRuntimeConfig() {
 }
 
 function startHttpMirror() {
-  if (!capturedFlowMirror) {
+  if (!capturedFlowMirror && !userManager) {
     console.log(`[mirror] disabled; no manifest at ${path.join(CAPTURED_FLOW_DIR, "manifest.json")}`);
     return;
   }
 
   http
-    .createServer((req, res) => serveCapturedFlow(req, res, capturedFlowMirror))
+    .createServer(async (req, res) => {
+      try {
+        if (userManager && (await userManager.handle(req, res))) return;
+        if (capturedFlowMirror) {
+          serveCapturedFlow(req, res, capturedFlowMirror);
+          return;
+        }
+        res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+        res.end("No captured HTTP mirror is configured.\n");
+      } catch (err) {
+        res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+        res.end(`HTTP server error: ${err.message}\n`);
+      }
+    })
     .listen(HTTP_MIRROR_PORT, () => {
-      console.log(`[+] Captured HTTP mirror listening on ${MIRROR_PUBLIC_BASE_URL}`);
-      console.log(`[+] Captured HTTP mirror fixtureDir=${CAPTURED_FLOW_DIR}`);
+      if (capturedFlowMirror) {
+        console.log(`[+] Captured HTTP mirror listening on ${MIRROR_PUBLIC_BASE_URL}`);
+        console.log(`[+] Captured HTTP mirror fixtureDir=${CAPTURED_FLOW_DIR}`);
+      } else {
+        console.log(`[mirror] disabled; no manifest at ${path.join(CAPTURED_FLOW_DIR, "manifest.json")}`);
+      }
+      if (userManager) {
+        console.log(`[+] User manager listening on ${MIRROR_PUBLIC_BASE_URL}${userManager.basePath}`);
+      }
     });
 }
 
@@ -618,6 +754,7 @@ function createPacketContext() {
       RESET_LOCAL_PROGRESS_ON_LOGIN,
       RESET_TUTORIAL_PROGRESS_ON_LOGIN,
       RESET_CAMPAIGN_PROGRESS_ON_LOGIN,
+      CLEAR_ALL_MISSIONS_STATUS,
       CLEAR_UNITS_LEVEL1,
       CLEAR_GEAR_UNENHANCED,
       CLEAR_SHIPS_LEVEL1,
@@ -625,6 +762,7 @@ function createPacketContext() {
       USE_LOCAL_JOIN_LOBBY_ACK,
       LOCAL_JOIN_LOBBY_ACK_MODE,
       CONTENTS_VERSION,
+      REQUIRED_CONTENTS_TAGS,
       CONTENTS_TAGS,
     },
     capturedTcpResponses,
@@ -704,6 +842,11 @@ function createPacketContext() {
     skipStaleTutorialGameLoadReplay,
     decodeMissionCompleteReq,
     buildMissionCompleteAckPayload,
+    recordMissionLogin,
+    refreshMissionProgress,
+    trackMissionEvent,
+    refreshTimedStamina,
+    sendStaminaChargeNotifications,
     buildEmoticonDataAckPayload,
     buildFriendListAckPayload,
     buildGreetingMessageAckPayload,
@@ -715,11 +858,17 @@ function createPacketContext() {
     resolveCutsceneDungeonId,
     resolveCutsceneClearDungeonId,
     recordTutorialCutsceneClear,
-    recordEpisode1DungeonClear,
+    recordMainStoryDungeonClear,
+    recordEpisode1DungeonClear: recordMainStoryDungeonClear,
     recordPersistentCutsceneView,
     recordGameplayUnlockClear,
     decodeSteamLoginReq,
     decodeJoinLobbyReq,
+    getGenericStageForRequest,
+    recordGenericDungeonClear,
+    buildDungeonSkipAckPayload,
+    sendStageClearMissionUpdate,
+    repairPostTutorialGuideMissionsForSocket,
     readCutsceneDungeonReq,
     decryptCopy,
     safeReadString,
@@ -750,6 +899,7 @@ function createGameReplayState() {
     loadCompleteReceived: false,
     pendingGameStartBootstrap: false,
     lastSceneId: 0,
+    postTutorialGuideMissionCompleteAckSent: false,
     firstPostLoadHeartbeatSyncSent: false,
     nextServerIndex: 1,
     nextServerSequence: 1,
@@ -1661,6 +1811,30 @@ function sendServerGamePacket(socket, packetId, payload, label) {
   replay.nextServerSequence = Math.max(replay.nextServerSequence, Number(sequence) + 1);
 }
 
+function refreshTimedStamina(user, options = {}) {
+  return stamina.refreshTimedStamina(user, options);
+}
+
+function sendStaminaChargeNotifications(socket, label = "stamina-charge", options = {}) {
+  const user = socket && socket.session && socket.session.user;
+  if (!user) return false;
+  const now = dateTimeBinaryNow();
+  const result = stamina.refreshTimedStamina(user, {
+    now,
+    initializeMissing: false,
+  });
+  const updates =
+    options.includeUnchanged === true
+      ? stamina.getChargeItemNotifications(user, { now, itemIds: options.itemIds })
+      : result.updates || [];
+  if (updates.length === 0) return false;
+  for (const update of updates) {
+    sendServerGamePacket(socket, stamina.CHARGE_ITEM_NOT, stamina.buildChargeItemNotPayload(update), label);
+  }
+  if (result.changed && USE_LOCAL_USER_DB) saveUserDb();
+  return true;
+}
+
 function sendManagedOrImmediatePackets(socket, packets) {
   const endIndex = (packets || []).findIndex((item) => item && item.packetId === GAME_END_NOT);
   const outbound = endIndex >= 0 ? packets.slice(0, endIndex + 1) : packets;
@@ -1688,7 +1862,7 @@ function sendPendingGameStartSync(socket, label) {
   replay.pendingGameStartBootstrap = false;
   const queuedPackets = Array.isArray(replay.pendingGameStartPackets) ? replay.pendingGameStartPackets : [];
   replay.pendingGameStartPackets = [];
-  const packets = ensureGameStartPackets(queuedPackets.length > 0 ? queuedPackets : buildInitialBattlePackets(replay)).filter(Boolean);
+  const packets = ensureGameStartPackets(queuedPackets.length > 0 ? queuedPackets : buildInitialBattlePackets(replay), replay, socket).filter(Boolean);
   sendManagedOrImmediatePackets(
     socket,
     packets.map((item) => ({
@@ -1876,12 +2050,13 @@ function buildDynamicFinishStateSyncPayload(replay, finishedState = null) {
   return combatHandler.buildGameSync(finishSync);
 }
 
-function applyCombatControls(socket, controls = {}) {
+function applyCombatControls(socket, controls = {}, options = {}) {
   const replay = socket && socket.session && socket.session.gameReplay;
-  if (!replay) return;
+  if (!replay) return null;
   const dynamicGame = replay.dynamicGame && typeof replay.dynamicGame === "object" ? replay.dynamicGame : null;
   const battleState = replay.battleState && typeof replay.battleState === "object" ? replay.battleState : null;
   const battleSim = replay.battleSim && typeof replay.battleSim === "object" ? replay.battleSim : null;
+  const applied = {};
 
   if (Object.prototype.hasOwnProperty.call(controls, "gameSpeedType")) {
     const gameSpeedType = clampCombatControlEnum(controls.gameSpeedType, 0, 5);
@@ -1889,6 +2064,7 @@ function applyCombatControls(socket, controls = {}) {
     if (dynamicGame) dynamicGame.gameSpeedType = gameSpeedType;
     if (battleState) battleState.gameSpeedType = gameSpeedType;
     if (battleSim) battleSim.gameSpeedType = gameSpeedType;
+    applied.gameSpeedType = gameSpeedType;
   }
 
   if (Object.prototype.hasOwnProperty.call(controls, "autoSkillType")) {
@@ -1897,6 +2073,7 @@ function applyCombatControls(socket, controls = {}) {
     if (dynamicGame) dynamicGame.autoSkillType = autoSkillType;
     if (battleState) battleState.autoSkillType = autoSkillType;
     if (battleSim) battleSim.autoSkillType = autoSkillType;
+    applied.autoSkillType = autoSkillType;
   }
 
   if (Object.prototype.hasOwnProperty.call(controls, "autoRespawnEnabled")) {
@@ -1905,13 +2082,82 @@ function applyCombatControls(socket, controls = {}) {
     if (dynamicGame) dynamicGame.autoRespawnEnabled = autoRespawnEnabled;
     if (battleState) battleState.autoRespawnEnabled = autoRespawnEnabled;
     if (battleSim) battleSim.autoRespawnEnabled = autoRespawnEnabled;
+    applied.autoRespawnEnabled = autoRespawnEnabled;
   }
+
+  const user = socket && socket.session && socket.session.user;
+  if (options.persist !== false && user && Object.keys(applied).length > 0 && saveUserCombatControls(user, applied) && USE_LOCAL_USER_DB) {
+    saveUserDb();
+  }
+  return getReplayCombatControls(replay, user);
 }
 
 function clampCombatControlEnum(value, min, max) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return min;
   return Math.max(min, Math.min(max, numeric | 0));
+}
+
+function normalizeCombatControls(source = {}, fallback = DEFAULT_COMBAT_CONTROLS) {
+  const controls = source && typeof source === "object" ? source : {};
+  const base = fallback && typeof fallback === "object" ? fallback : DEFAULT_COMBAT_CONTROLS;
+  return {
+    autoRespawnEnabled: Object.prototype.hasOwnProperty.call(controls, "autoRespawnEnabled")
+      ? Boolean(controls.autoRespawnEnabled)
+      : Boolean(base.autoRespawnEnabled),
+    gameSpeedType: Object.prototype.hasOwnProperty.call(controls, "gameSpeedType")
+      ? clampCombatControlEnum(controls.gameSpeedType, 0, 5)
+      : clampCombatControlEnum(base.gameSpeedType, 0, 5),
+    autoSkillType: Object.prototype.hasOwnProperty.call(controls, "autoSkillType")
+      ? clampCombatControlEnum(controls.autoSkillType, 0, 1)
+      : clampCombatControlEnum(base.autoSkillType, 0, 1),
+  };
+}
+
+function hasSavedCombatControls(user) {
+  const controls = user && user.combatControls && typeof user.combatControls === "object" ? user.combatControls : null;
+  if (!controls) return false;
+  return ["autoRespawnEnabled", "gameSpeedType", "autoSkillType"].some((key) =>
+    Object.prototype.hasOwnProperty.call(controls, key)
+  );
+}
+
+function getSavedCombatControls(user) {
+  const controls = user && user.combatControls && typeof user.combatControls === "object" ? user.combatControls : null;
+  return normalizeCombatControls(controls, DEFAULT_COMBAT_CONTROLS);
+}
+
+function getReplayCombatControls(replay, user) {
+  const source = {};
+  if (replay && replay.autoRespawnEnabled != null) source.autoRespawnEnabled = replay.autoRespawnEnabled;
+  if (replay && replay.gameSpeedType != null) source.gameSpeedType = replay.gameSpeedType;
+  if (replay && replay.autoSkillType != null) source.autoSkillType = replay.autoSkillType;
+  return normalizeCombatControls(source, getSavedCombatControls(user));
+}
+
+function saveUserCombatControls(user, partialControls) {
+  if (!user || typeof user !== "object") return false;
+  const current = getSavedCombatControls(user);
+  const next = normalizeCombatControls(partialControls, current);
+  const previous = user.combatControls && typeof user.combatControls === "object" ? user.combatControls : {};
+  const changed =
+    previous.autoRespawnEnabled !== next.autoRespawnEnabled ||
+    previous.gameSpeedType !== next.gameSpeedType ||
+    previous.autoSkillType !== next.autoSkillType;
+  if (!changed && hasSavedCombatControls(user)) return false;
+  user.combatControls = {
+    ...previous,
+    autoRespawnEnabled: next.autoRespawnEnabled,
+    gameSpeedType: next.gameSpeedType,
+    autoSkillType: next.autoSkillType,
+    updatedAt: new Date().toISOString(),
+  };
+  return true;
+}
+
+function applySavedCombatControls(socket) {
+  const user = socket && socket.session && socket.session.user;
+  return applyCombatControls(socket, getSavedCombatControls(user), { persist: false });
 }
 
 function sendDynamicGameLoadAck(socket, req, stage) {
@@ -1944,6 +2190,7 @@ function sendDynamicGameLoadAck(socket, req, stage) {
     stage: activeStage,
     gameLoadAckPayloadBase64: !nativeTutorialLoad && !usesEventDeck && gameLoadAckTemplate ? gameLoadAckTemplate.toString("base64") : "",
   });
+  applySavedCombatControls(socket);
   const payload =
     replay.managedGameLoadAckPayload ||
     buildGameLoadAck({
@@ -2111,9 +2358,10 @@ function readCutsceneDungeonReq(payload) {
 
 function resolveCutsceneDungeonId(socket, decodedDungeonId) {
   const decoded = Number(decodedDungeonId || 0);
-  if (isEpisode1DungeonId(decoded) && !isTutorialDungeonId(decoded)) return decoded;
+  if (isMainStoryDungeonId(decoded) && !isTutorialDungeonId(decoded)) return decoded;
   const replay = socket && socket.session && socket.session.gameReplay;
   const requestedDungeonId = Number(replay && replay.lastGameLoadReq && replay.lastGameLoadReq.dungeonID);
+  if (!decoded && isMainStoryDungeonId(requestedDungeonId) && !isTutorialDungeonId(requestedDungeonId)) return requestedDungeonId;
   if (!decoded && isTutorialDungeonId(requestedDungeonId)) return requestedDungeonId;
   const activeBattleFinished =
     replay &&
@@ -2128,18 +2376,21 @@ function resolveCutsceneDungeonId(socket, decodedDungeonId) {
     return decoded;
   }
   const activeDungeonId = Number(replay && replay.dynamicGame && replay.dynamicGame.dungeonID);
+  if (isMainStoryDungeonId(activeDungeonId) && !isTutorialDungeonId(activeDungeonId)) return activeDungeonId;
   if (isTutorialDungeonId(activeDungeonId) && !activeBattleFinished) return activeDungeonId;
   return nextTutorialDungeonIdForUser(user);
 }
 
 function resolveCutsceneClearDungeonId(socket, decodedDungeonId) {
   const decoded = Number(decodedDungeonId || 0);
-  if (isEpisode1DungeonId(decoded) && !isTutorialDungeonId(decoded)) return decoded;
+  if (isMainStoryDungeonId(decoded) && !isTutorialDungeonId(decoded)) return decoded;
   if (isTutorialDungeonId(decoded)) return decoded;
   const replay = socket && socket.session && socket.session.gameReplay;
   const requestedDungeonId = Number(replay && replay.lastGameLoadReq && replay.lastGameLoadReq.dungeonID);
+  if (!decoded && isMainStoryDungeonId(requestedDungeonId) && !isTutorialDungeonId(requestedDungeonId)) return requestedDungeonId;
   if (!decoded && isTutorialDungeonId(requestedDungeonId)) return requestedDungeonId;
   const activeDungeonId = Number(replay && replay.dynamicGame && replay.dynamicGame.dungeonID);
+  if (isMainStoryDungeonId(activeDungeonId) && !isTutorialDungeonId(activeDungeonId)) return activeDungeonId;
   if (isTutorialDungeonId(activeDungeonId)) return activeDungeonId;
   return nextTutorialDungeonIdForUser(socket && socket.session && socket.session.user);
 }
@@ -2177,13 +2428,11 @@ function scrubTutorialEpisodeClearProgress(user) {
       delete user.stagePlayData[String(stage.stageId)];
       changed = true;
     }
-    if (
-      user.episode1 &&
-      user.episode1.stages &&
-      typeof user.episode1.stages === "object" &&
-      user.episode1.stages[String(stage.stageId)]
-    ) {
-      const state = user.episode1.stages[String(stage.stageId)];
+    for (const containerName of ["mainStory", "episode1"]) {
+      const container = user[containerName];
+      if (!container || !container.stages || typeof container.stages !== "object") continue;
+      const state = container.stages[String(stage.stageId)];
+      if (!state) continue;
       if (state.completed || state.completedAt || state.bestClearTimeSec) {
         state.completed = false;
         state.completedAt = "";
@@ -2191,6 +2440,9 @@ function scrubTutorialEpisodeClearProgress(user) {
         changed = true;
       }
     }
+  }
+  if (user.mainStory && typeof user.mainStory === "object") {
+    user.mainStory.completed = false;
   }
   if (user.episode1 && typeof user.episode1 === "object") {
     user.episode1.completed = false;
@@ -2211,17 +2463,20 @@ function maybeRecordDynamicBattleClear(socket, overrideState = null) {
   const battleState = overrideState || (lastEndMatches && lastEnd.battleState) || replay.battleState || replay.battleSim || {};
   const authoritativeWin = Boolean(lastEndMatches && lastEnd.win === true && !lastEnd.giveup);
   if (!authoritativeWin && !isBattleWin(battleState)) return false;
-  return recordEpisode1DungeonClear(socket, lastEndMatches ? lastEnd.dungeonId : undefined, battleState);
+  return (
+    recordMainStoryDungeonClear(socket, lastEndMatches ? lastEnd.dungeonId : undefined, battleState) ||
+    recordGenericDungeonClear(socket, lastEndMatches ? lastEnd.dungeonId : undefined, battleState)
+  );
 }
 
-function recordEpisode1DungeonClear(socket, dungeonId, battleState = null) {
+function recordMainStoryDungeonClear(socket, dungeonId, battleState = null) {
   const replay = socket && socket.session && socket.session.gameReplay;
   const dynamicGame = replay && replay.dynamicGame ? replay.dynamicGame : {};
   const resolvedDungeonId = Number(dungeonId || dynamicGame.dungeonID || 0);
-  if (!resolvedDungeonId || !isEpisode1DungeonId(resolvedDungeonId) || isTutorialDungeonId(resolvedDungeonId)) return false;
+  if (!resolvedDungeonId || !isMainStoryDungeonId(resolvedDungeonId) || isTutorialDungeonId(resolvedDungeonId)) return false;
   const resolvedStageId = stageIdForDungeonId(resolvedDungeonId);
   const user = socket && socket.session && socket.session.user;
-  const saved = recordEpisode1DungeonClearForUser(user, resolvedDungeonId, resolvedStageId, battleState || (replay && replay.battleState) || {}, {
+  const saved = recordMainStoryDungeonClearForUser(user, resolvedDungeonId, resolvedStageId, battleState || (replay && replay.battleState) || {}, {
     save: USE_LOCAL_USER_DB ? saveUserDb : null,
     forceMissionSuccess: true,
   });
@@ -2230,12 +2485,179 @@ function recordEpisode1DungeonClear(socket, dungeonId, battleState = null) {
     maybeGrantBattleStageClearLoot(replay, user, resolvedDungeonId, resolvedStageId, battleState);
     grantStageClearExp(user, resolvedStageId, resolvedDungeonId, userExp > 0 ? { exp: userExp } : undefined);
     recordGameplayUnlockClearForUser(user, resolvedDungeonId, resolvedStageId, { save: false });
+    trackStageClearMissionProgress(user, resolvedDungeonId, resolvedStageId, battleState || (replay && replay.battleState) || {});
+    sendStageClearMissionUpdate(socket, user);
     if (USE_LOCAL_USER_DB) saveUserDb();
     console.log(
-      `[episode1-progress] clear uid=${user && user.userUid ? user.userUid : "(none)"} stageID=${resolvedStageId} dungeonID=${resolvedDungeonId}`
+      `[main-story-progress] clear uid=${user && user.userUid ? user.userUid : "(none)"} stageID=${resolvedStageId} dungeonID=${resolvedDungeonId}`
     );
   }
   return saved;
+}
+
+function recordGenericDungeonClear(socket, dungeonId, battleState = null) {
+  const replay = socket && socket.session && socket.session.gameReplay;
+  const dynamicGame = replay && replay.dynamicGame ? replay.dynamicGame : {};
+  const resolvedDungeonId = Number(dungeonId || dynamicGame.dungeonID || 0);
+  if (!resolvedDungeonId || isTutorialDungeonId(resolvedDungeonId) || isMainStoryDungeonId(resolvedDungeonId)) return false;
+  const resolvedStageId = Number(dynamicGame.stageID || stageIdForDungeonId(resolvedDungeonId) || 0);
+  const user = socket && socket.session && socket.session.user;
+  if (!user || typeof user !== "object") return false;
+  const state = battleState || (replay && replay.battleState) || {};
+  const missionResults = resolveDungeonMissionResults(resolvedDungeonId, {
+    win: true,
+    battleState: state,
+    forceMissionSuccess: true,
+  });
+  if (state && typeof state === "object") {
+    state.missionResult1 = missionResults.missionResult1;
+    state.missionResult2 = missionResults.missionResult2;
+    state.missionResults = { ...missionResults };
+  }
+  const userExp = getDungeonUserExpReward(resolvedDungeonId);
+  maybeGrantBattleStageClearLoot(replay, user, resolvedDungeonId, resolvedStageId, state);
+  grantStageClearExp(user, resolvedStageId, resolvedDungeonId, userExp > 0 ? { exp: userExp } : undefined);
+  const saved = recordGenericDungeonClearForUser(user, resolvedDungeonId, resolvedStageId, state, {
+    save: false,
+    forceMissionSuccess: true,
+  });
+  if (saved) {
+    recordGameplayUnlockClearForUser(user, resolvedDungeonId, resolvedStageId, { save: false });
+    trackStageClearMissionProgress(user, resolvedDungeonId, resolvedStageId, state);
+    sendStageClearMissionUpdate(socket, user);
+    if (USE_LOCAL_USER_DB) saveUserDb();
+    console.log(
+      `[stage-progress] clear uid=${user && user.userUid ? user.userUid : "(none)"} stageID=${resolvedStageId} dungeonID=${resolvedDungeonId}`
+    );
+  }
+  return saved;
+}
+
+function recordGenericDungeonClearForUser(user, dungeonId, stageId, battleState = {}, options = {}) {
+  if (!user || typeof user !== "object") return false;
+  const resolvedDungeonId = Number(dungeonId || 0);
+  const resolvedStageId = Number(stageId || stageIdForDungeonId(resolvedDungeonId) || 0);
+  if (!resolvedDungeonId && !resolvedStageId) return false;
+  user.dungeonClear = user.dungeonClear && typeof user.dungeonClear === "object" ? user.dungeonClear : {};
+  user.stagePlayData = user.stagePlayData && typeof user.stagePlayData === "object" ? user.stagePlayData : {};
+
+  const previousClear = user.dungeonClear[String(resolvedDungeonId)] || {};
+  const previousStagePlay = user.stagePlayData[String(resolvedStageId)] || {};
+  const bestClearTimeSec = Math.max(0, Math.round(Number((battleState && (battleState.gameTime || battleState.GameTime)) || 0)));
+  const missionResults =
+    battleState && battleState.missionResults && typeof battleState.missionResults === "object"
+      ? battleState.missionResults
+      : battleState || {};
+  const forceMissionSuccess =
+    options.forceMissionSuccess === true ||
+    (battleState && (battleState.forceMissionSuccess === true || battleState.ForceMissionSuccess === true));
+  const missionResult1 =
+    previousClear.missionResult1 === true ||
+    forceMissionSuccess ||
+    missionResults.missionResult1 === true ||
+    missionResults.MissionResult1 === true ||
+    (missionResults.missionResult1 !== false && missionResults.MissionResult1 !== false);
+  const missionResult2 =
+    previousClear.missionResult2 === true ||
+    forceMissionSuccess ||
+    missionResults.missionResult2 === true ||
+    missionResults.MissionResult2 === true ||
+    (missionResults.missionResult2 !== false && missionResults.MissionResult2 !== false);
+  const clearTimeCandidates = [Number(previousStagePlay.bestClearTimeSec || 0), bestClearTimeSec].filter((value) => value > 0);
+  const bestRecordedClearTimeSec = clearTimeCandidates.length > 0 ? Math.min(...clearTimeCandidates) : bestClearTimeSec;
+
+  user.dungeonClear[String(resolvedDungeonId)] = {
+    dungeonId: resolvedDungeonId,
+    stageId: resolvedStageId,
+    missionResult1,
+    missionResult2,
+    clearedAt: previousClear.clearedAt || new Date().toISOString(),
+  };
+  if (resolvedStageId > 0) {
+    user.stagePlayData[String(resolvedStageId)] = {
+      stageId: resolvedStageId,
+      playCount: Number(previousStagePlay.playCount || 0) + 1,
+      totalPlayCount: Number(previousStagePlay.totalPlayCount || 0) + 1,
+      bestClearTimeSec: bestRecordedClearTimeSec,
+    };
+    user.unlockedStageIds = Array.isArray(user.unlockedStageIds) ? user.unlockedStageIds : [];
+    if (!user.unlockedStageIds.includes(resolvedStageId)) user.unlockedStageIds.push(resolvedStageId);
+  }
+  if (USE_LOCAL_USER_DB && options.save !== false) saveUserDb();
+  return true;
+}
+
+function buildDungeonSkipAckPayload(socket, req = {}) {
+  const user = socket && socket.session && socket.session.user;
+  const dungeonId = Number(req.dungeonId || 0);
+  const stage = getGenericStageForRequest({ dungeonID: dungeonId }) || getGenericStageForRequest({ stageID: stageIdForDungeonId(dungeonId), dungeonID: dungeonId });
+  const stageId = Number((stage && stage.stageId) || stageIdForDungeonId(dungeonId) || 0);
+  const skipCount = clamp(Number(req.skip || 1) || 1, 1, 99);
+  const unitUids = Array.isArray(req.unitUids) ? req.unitUids : [];
+  const rewardSets = [];
+  const costItems = spendStageReqItemCost(user, stageId, { multiplier: skipCount });
+  const battleState = {
+    gameTime: 0,
+    missionResult1: true,
+    missionResult2: true,
+    missionResults: { missionResult1: true, missionResult2: true },
+    forceMissionSuccess: true,
+  };
+
+  for (let index = 0; index < skipCount; index += 1) {
+    const fakeReplay = {
+      dynamicGame: {
+        dungeonID: dungeonId,
+        stageID: stageId,
+        playerDeck: {
+          units: unitUids.map((unitUid, slotIndex) => ({ unitUid, slotIndex })),
+        },
+      },
+      battleState,
+    };
+    const loot = grantStageClearLoot(user, dungeonId, stageId, { replay: fakeReplay });
+    grantStageClearExp(user, stageId, dungeonId, loot.userExp > 0 ? { exp: loot.userExp } : undefined);
+    if (isMainStoryDungeonId(dungeonId) && !isTutorialDungeonId(dungeonId)) {
+      recordMainStoryDungeonClearForUser(user, dungeonId, stageId, battleState, {
+        save: null,
+        forceMissionSuccess: true,
+      });
+    } else {
+      recordGenericDungeonClearForUser(user, dungeonId, stageId, battleState, {
+        save: false,
+        forceMissionSuccess: true,
+      });
+    }
+    recordGameplayUnlockClearForUser(user, dungeonId, stageId, { save: false });
+    trackStageClearMissionProgress(user, dungeonId, stageId, battleState);
+    rewardSets.push(buildDungeonRewardSet(user, dungeonId, stageId, battleState, loot));
+  }
+
+  if (USE_LOCAL_USER_DB) saveUserDb();
+  return Buffer.concat([
+    writeSignedVarInt(0),
+    stageId ? writeNullableObject(buildStagePlayData(stageId, battleState)) : writeNullObject(),
+    writeObjectList(rewardSets.map((rewardSet) => writeNullableObject(rewardSet))),
+    writeObjectList(costItems.map((item) => writeNullableObject(buildItemMiscData(item)))), // costItems
+    writeObjectList([]), // updatedUnits
+  ]);
+}
+
+function buildDungeonRewardSet(user, dungeonId, stageId, battleState = {}, loot = null) {
+  const episodeCompleteData = buildMainStoryEpisodeCompleteDataForStage(user, stageId);
+  return Buffer.concat([
+    episodeCompleteData ? writeNullableObject(episodeCompleteData) : writeNullObject(),
+    writeNullableObject(
+      buildDungeonClearData(dungeonId, {
+        win: true,
+        battleState,
+        missionResult1: true,
+        missionResult2: true,
+        reward: loot && loot.reward,
+        unitExp: loot ? loot.unitExp : undefined,
+      })
+    ),
+  ]);
 }
 
 function buildCutsceneDungeonStartAckPayload(dungeonId) {
@@ -2252,7 +2674,7 @@ function buildTutorialGameEndNotPayload(replay, override = {}) {
   const stageId = Number(override.stageID || dynamicGame.stageID || stageIdForDungeonId(dungeonId));
   if (!isTutorialDungeonId(dungeonId) || !isTutorialStageId(stageId)) return null;
   const battleState = override.battleState || replay.battleState || {};
-  const episodeCompleteData = buildEpisode1CompleteData(override.user, [stageId]);
+  const episodeCompleteData = buildMainStoryEpisodeCompleteDataForStage(override.user, stageId);
   return Buffer.concat([
     writeBool(true), // win
     writeBool(false), // giveup
@@ -2316,7 +2738,8 @@ function buildDynamicGameEndNotPayload(replay, override = {}) {
     }`
   );
   const stageLoot = win ? getOrGrantStageClearLoot(replay, override.user, dungeonId, stageId) : null;
-  const episodeCompleteData = win ? buildEpisode1CompleteData(override.user, [stageId]) : null;
+  const costItems = spendStageReqItemCostForReplay(replay, override.user, stageId);
+  const episodeCompleteData = win ? buildMainStoryEpisodeCompleteDataForStage(override.user, stageId) : null;
   const playTime = getBattlePlayTime(battleState);
   return Buffer.concat([
     writeBool(win), // win
@@ -2342,7 +2765,7 @@ function buildDynamicGameEndNotPayload(replay, override = {}) {
     writeNullableObject(buildRaidBossResultData()), // raidBossResultData
     writeNullObject(), // gameRecord
     writeObjectList([]), // updatedUnits
-    writeObjectList([]), // costItemDataList
+    writeObjectList(costItems.map((item) => writeNullableObject(buildItemMiscData(item)))), // costItemDataList
     stageId ? writeNullableObject(buildStagePlayData(stageId, { ...battleState, gameTime: playTime })) : writeNullObject(),
     writeNullableObject(buildShadowGameResultData()), // shadowGameResult
     writeNullableObject(buildFierceResultData()), // fierceResultData
@@ -2470,23 +2893,33 @@ function buildInitialBattlePackets(replay) {
   return combatHandler.buildInitialBattlePackets(replay);
 }
 
-function ensureGameStartPackets(packets = []) {
+function ensureGameStartPackets(packets = [], replay = null, socket = null) {
+  const user = socket && socket.session && socket.session.user;
+  const loadCompletePayload = buildGameLoadCompleteAckPayload(replay, user);
+  const sourcePackets = (Array.isArray(packets) ? packets : []).map((packet) => {
+    if (!packet || packet.packetId !== GAME_LOAD_COMPLETE_ACK) return packet;
+    return {
+      ...packet,
+      payload: loadCompletePayload,
+      label: packet.label || "dynamic-load-complete",
+    };
+  });
   const output = [];
-  if (!packets.some((packet) => packet && packet.packetId === GAME_LOAD_COMPLETE_ACK)) {
+  if (!sourcePackets.some((packet) => packet && packet.packetId === GAME_LOAD_COMPLETE_ACK)) {
     output.push({
       packetId: GAME_LOAD_COMPLETE_ACK,
-      payload: getCapturedServerPayloadTemplate(GAME_LOAD_COMPLETE_ACK) || buildGameLoadCompleteAckPayload(),
+      payload: loadCompletePayload,
       label: "dynamic-load-complete",
     });
   }
-  if (!packets.some((packet) => packet && packet.packetId === GAME_START_NOT)) {
+  if (!sourcePackets.some((packet) => packet && packet.packetId === GAME_START_NOT)) {
     output.push({
       packetId: GAME_START_NOT,
       payload: Buffer.alloc(0),
       label: "dynamic-game-start",
     });
   }
-  return output.concat(packets);
+  return output.concat(sourcePackets);
 }
 
 function getCapturedServerPayloadTemplate(packetId) {
@@ -2568,9 +3001,12 @@ function nextGameUnitUidIndex(data) {
 }
 
 function mapIdForStageDungeon(stageID, dungeonID) {
-  const episodeMapId = episode1MapIdForStageDungeon(stageID, dungeonID);
-  if (episodeMapId || isEpisode1StageId(stageID) || isEpisode1DungeonId(dungeonID)) return episodeMapId;
-  return tutorialMapIdForStageDungeon(stageID, dungeonID);
+  const mainStoryMapId = mainStoryMapIdForStageDungeon(stageID, dungeonID);
+  if (mainStoryMapId || isMainStoryStageId(stageID) || isMainStoryDungeonId(dungeonID)) return mainStoryMapId;
+  const tutorialMapId = tutorialMapIdForStageDungeon(stageID, dungeonID);
+  if (tutorialMapId || isTutorialStageId(stageID) || isTutorialDungeonId(dungeonID)) return tutorialMapId;
+  const stage = getGenericStageForRequest({ stageID, dungeonID });
+  return Number((stage && stage.mapID) || 0);
 }
 
 function buildGameRespawnAckPayload(unitUID, assistUnit) {
@@ -2598,13 +3034,70 @@ function buildGamePauseAckPayload(isPause, isPauseEvent) {
   return Buffer.concat([writeSignedVarInt(0), writeBool(Boolean(isPause)), writeBool(Boolean(isPauseEvent))]);
 }
 
-function buildGameLoadCompleteAckPayload() {
+function buildGameLoadCompleteAckPayload(replay = null, user = null) {
+  const runtimeData = replay && replay.dynamicGame ? buildGameRuntimeData(replay, getReplayCombatControls(replay, user), user) : null;
   return Buffer.concat([
     writeSignedVarInt(0), // errorCode
     writeBool(false), // isIntrude
-    writeNullObject(), // gameRuntimeData
+    runtimeData ? writeNullableObject(runtimeData) : writeNullObject(), // gameRuntimeData
     writeSignedVarInt(0), // rewardMultiply
   ]);
+}
+
+function buildGameRuntimeData(replay, controls, user) {
+  const dynamicGame = replay && replay.dynamicGame && typeof replay.dynamicGame === "object" ? replay.dynamicGame : {};
+  const battleState = replay && replay.battleState && typeof replay.battleState === "object" ? replay.battleState : {};
+  const gameState = battleState.gameState && typeof battleState.gameState === "object" ? battleState.gameState : {};
+  const gameTime = finiteNumber(battleState.gameTime ?? replay.syntheticGameTime, 4);
+  const remainGameTime = finiteNumber(battleState.remainGameTime ?? dynamicGame.remainGameTime, 180);
+  const waveId = Math.max(0, Math.trunc(finiteNumber(gameState.waveId ?? gameState.waveID ?? battleState.waveId, 1)));
+  const state = clampCombatControlEnum(gameState.state ?? battleState.gameStateType ?? 3, 0, 7);
+  const respawnCostA1 = finiteNumber(battleState.respawnCostA1 ?? dynamicGame.respawnCostA1, 10);
+  const respawnCostB1 = finiteNumber(battleState.respawnCostB1 ?? dynamicGame.respawnCostB1, 10);
+  return Buffer.concat([
+    writeFloatLE(gameTime),
+    writeSignedVarInt(controls.gameSpeedType),
+    writeFloatLE(0), // m_PrevWaveEndTime
+    writeSignedVarInt(state), // NKM_GAME_STATE
+    writeSignedVarInt(waveId),
+    writeFloatLE(remainGameTime),
+    writeFloatLE(0), // m_fShipDamage
+    writeSignedVarInt(0), // NKM_TEAM_TYPE.NTT_INVALID
+    writeBool(false), // m_bGameEnded
+    writeBool(false), // m_bPause
+    writeBool(false), // m_bGiveUp
+    writeBool(false), // m_bRestart
+    writeNullableObject(buildGameRuntimeTeamData(user && user.userUid, {
+      autoRespawnEnabled: controls.autoRespawnEnabled,
+      autoSkillType: controls.autoSkillType,
+      respawnCost: respawnCostA1,
+    })),
+    writeNullableObject(buildGameRuntimeTeamData(0, {
+      autoRespawnEnabled: false,
+      autoSkillType: 0,
+      respawnCost: respawnCostB1,
+    })),
+    writeObjectList([]), // m_lstPermanentDungeonEvent
+  ]);
+}
+
+function buildGameRuntimeTeamData(userUid, options = {}) {
+  return Buffer.concat([
+    writeSignedVarLong(toBigInt(userUid || 0)),
+    writeBool(Boolean(options.autoRespawnEnabled)),
+    writeBool(false), // m_bAIDisable
+    writeBool(false), // m_bGodMode
+    writeFloatLE(finiteNumber(options.respawnCost, 10)),
+    writeFloatLE(finiteNumber(options.respawnCostAssist, 0)),
+    writeFloatLE(finiteNumber(options.usedRespawnCost, 0)),
+    writeSignedVarInt(Math.max(0, Math.trunc(finiteNumber(options.respawnCount, 0)))),
+    writeSignedVarInt(clampCombatControlEnum(options.autoSkillType, 0, 1)),
+  ]);
+}
+
+function finiteNumber(value, fallback = 0) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
 }
 
 function buildStagePlayData(stageId, battleState = {}) {
@@ -2620,19 +3113,30 @@ function buildStagePlayData(stageId, battleState = {}) {
 }
 
 function stageIdForDungeonId(dungeonId) {
-  return episode1StageIdForDungeonId(dungeonId) || tutorialStageIdForDungeonId(dungeonId);
+  return mainStoryStageIdForDungeonId(dungeonId) || tutorialStageIdForDungeonId(dungeonId) || findStageIdForDungeonId(dungeonId);
 }
 
 function loadDungeonCatalog() {
   if (cachedDungeonCatalog) return cachedDungeonCatalog;
-  cachedDungeonCatalog = { byId: {} };
+  cachedDungeonCatalog = { byId: {}, byStrId: {} };
   try {
     const parsed = JSON.parse(fs.readFileSync(DUNGEON_TABLE_PATH, "utf8"));
     cachedDungeonCatalog = parsed && typeof parsed === "object" ? parsed : cachedDungeonCatalog;
+    ensureDungeonCatalogIndexes(cachedDungeonCatalog);
   } catch (err) {
     console.log(`[dungeon-table] failed to load ${DUNGEON_TABLE_PATH}: ${summarizeErrorLine(err)}`);
   }
   return cachedDungeonCatalog;
+}
+
+function ensureDungeonCatalogIndexes(catalog) {
+  if (!catalog || typeof catalog !== "object") return;
+  catalog.byId = catalog.byId && typeof catalog.byId === "object" ? catalog.byId : {};
+  catalog.byStrId = catalog.byStrId && typeof catalog.byStrId === "object" ? catalog.byStrId : {};
+  for (const row of Object.values(catalog.byId)) {
+    const strId = String(row && row.m_DungeonStrID ? row.m_DungeonStrID : "");
+    if (strId && !catalog.byStrId[strId]) catalog.byStrId[strId] = row;
+  }
 }
 
 function getDungeonTableEntry(dungeonId) {
@@ -2643,16 +3147,22 @@ function getDungeonTableEntry(dungeonId) {
 
 function loadStageCatalog() {
   if (cachedStageCatalog) return cachedStageCatalog;
-  cachedStageCatalog = { byId: {} };
+  cachedStageCatalog = { byId: {}, byBattleStrId: {} };
   try {
     const parsed = JSON.parse(fs.readFileSync(STAGE_TABLE_PATH, "utf8"));
     const records = Array.isArray(parsed && parsed.records) ? parsed.records : Array.isArray(parsed) ? parsed : [];
     const byId = {};
+    const byBattleStrId = {};
     for (const record of records) {
       const stageId = Number(record && (record.m_StageID || record.StageID || record.stageId || 0));
       if (Number.isInteger(stageId) && stageId > 0) byId[String(stageId)] = record;
+      const battleStrId = String((record && (record.m_StageBattleStrID || record.StageBattleStrID)) || "");
+      if (battleStrId) {
+        if (!byBattleStrId[battleStrId]) byBattleStrId[battleStrId] = [];
+        byBattleStrId[battleStrId].push(record);
+      }
     }
-    cachedStageCatalog = { byId };
+    cachedStageCatalog = { byId, byBattleStrId };
   } catch (err) {
     console.log(`[stage-table] failed to load ${STAGE_TABLE_PATH}: ${summarizeErrorLine(err)}`);
   }
@@ -2663,6 +3173,126 @@ function getStageTableEntry(stageId) {
   const catalog = loadStageCatalog();
   const byId = catalog && catalog.byId && typeof catalog.byId === "object" ? catalog.byId : {};
   return byId[String(Number(stageId || 0))] || null;
+}
+
+function getStageTableEntriesForBattleStrId(battleStrId) {
+  const catalog = loadStageCatalog();
+  const byBattleStrId =
+    catalog && catalog.byBattleStrId && typeof catalog.byBattleStrId === "object" ? catalog.byBattleStrId : {};
+  return Array.isArray(byBattleStrId[String(battleStrId || "")]) ? byBattleStrId[String(battleStrId || "")] : [];
+}
+
+function getDungeonTableEntryByStrId(dungeonStrId) {
+  const strId = String(dungeonStrId || "");
+  if (!strId) return null;
+  const catalog = loadDungeonCatalog();
+  const byStrId = catalog && catalog.byStrId && typeof catalog.byStrId === "object" ? catalog.byStrId : {};
+  return byStrId[strId] || null;
+}
+
+function findStageRowForDungeonId(dungeonId) {
+  const dungeon = getDungeonTableEntry(dungeonId);
+  const dungeonStrId = String(dungeon && dungeon.m_DungeonStrID ? dungeon.m_DungeonStrID : "");
+  if (!dungeonStrId) return null;
+  return chooseStageRow(getStageTableEntriesForBattleStrId(dungeonStrId));
+}
+
+function findStageIdForDungeonId(dungeonId) {
+  const stage = findStageRowForDungeonId(dungeonId);
+  return Number(stage && (stage.m_StageID || stage.StageID || stage.stageId || 0)) || 0;
+}
+
+function chooseStageRow(rows) {
+  const list = Array.isArray(rows) ? rows.filter(Boolean) : [];
+  if (!list.length) return null;
+  const normalRows = list.filter((row) => String(row.m_Difficulty || row.Difficulty || "NORMAL") === "NORMAL");
+  const candidates = normalRows.length ? normalRows : list;
+  return candidates
+    .slice()
+    .sort(
+      (left, right) =>
+        Number(left.m_ActID || left.ActID || 0) - Number(right.m_ActID || right.ActID || 0) ||
+        Number(left.m_StageIndex || left.StageIndex || 0) - Number(right.m_StageIndex || right.StageIndex || 0) ||
+        Number(left.m_StageID || left.StageID || 0) - Number(right.m_StageID || right.StageID || 0)
+    )[0];
+}
+
+function getGenericStageForRequest(req = {}) {
+  const requestedStageId = Number((req && req.stageID) || 0);
+  const requestedDungeonId = Number((req && req.dungeonID) || 0);
+  let stageRow = requestedStageId > 0 ? getStageTableEntry(requestedStageId) : null;
+  let dungeon = null;
+
+  if (stageRow && stageRow.m_StageBattleStrID) {
+    dungeon = getDungeonTableEntryByStrId(stageRow.m_StageBattleStrID);
+  }
+  if (!dungeon && requestedDungeonId > 0) {
+    dungeon = getDungeonTableEntry(requestedDungeonId);
+  }
+  if (!stageRow && dungeon) {
+    stageRow = findStageRowForDungeonId(Number(dungeon.m_DungeonID || requestedDungeonId || 0));
+  }
+  if (!dungeon || !stageRow) return null;
+
+  const stageId = Number(stageRow.m_StageID || stageRow.StageID || requestedStageId || 0);
+  const dungeonID = Number(dungeon.m_DungeonID || requestedDungeonId || 0);
+  if (!stageId || !dungeonID) return null;
+
+  const dungeonType = String(dungeon.m_DungeonType || "");
+  const cutsceneOnly = dungeonType === "NDT_CUTSCENE";
+  const mapStrID = String(dungeon.m_DungeonMapStrID || "");
+  return {
+    stageId,
+    stageStrID: String(stageRow.m_StageStrID || ""),
+    dungeonID,
+    dungeonStrID: String(dungeon.m_DungeonStrID || stageRow.m_StageBattleStrID || ""),
+    mapID: cutsceneOnly ? 0 : mapIdForMapStrId(mapStrID),
+    mapStrID,
+    episodeId: Number(stageRow.m_EpisodeID || 0),
+    actId: Number(stageRow.m_ActID || 0),
+    stageIndex: Number(stageRow.m_StageIndex || 0),
+    stageUINum: Number(stageRow.m_StageUINum || stageRow.m_StageIndex || 0),
+    stageType: String(stageRow.m_StageType || ""),
+    stageSubType: String(stageRow.m_StageSubType || ""),
+    dungeonType,
+    eventDeckId: cutsceneOnly ? 0 : resolveGenericEventDeckId(stageRow, dungeon),
+    tutorial: false,
+    cutsceneOnly,
+    initialUnits: [],
+    autoDeployUnits: [],
+  };
+}
+
+function resolveGenericEventDeckId(stageRow, dungeon) {
+  const explicit = Number(dungeon && dungeon.m_UseEventDeck);
+  if (Number.isInteger(explicit) && explicit > 0) return explicit;
+  const dungeonId = Number(dungeon && dungeon.m_DungeonID);
+  if (dungeonId > 0 && getEventDeckTemplet(dungeonId)) return dungeonId;
+  return 0;
+}
+
+function mapIdForMapStrId(mapStrId) {
+  const strId = String(mapStrId || "");
+  if (!strId) return 0;
+  const map = loadMapIdByStrId();
+  return Number(map.get(strId) || 0) || 0;
+}
+
+function loadMapIdByStrId() {
+  if (cachedMapIdByStrId) return cachedMapIdByStrId;
+  cachedMapIdByStrId = new Map();
+  try {
+    const parsed = JSON.parse(fs.readFileSync(MAP_TABLE_PATH, "utf8"));
+    const records = Array.isArray(parsed && parsed.records) ? parsed.records : Array.isArray(parsed) ? parsed : [];
+    for (const record of records) {
+      const mapStrId = String(record && record.m_MapStrID ? record.m_MapStrID : "");
+      const mapId = Number(record && record.m_MapID);
+      if (mapStrId && Number.isInteger(mapId) && mapId > 0) cachedMapIdByStrId.set(mapStrId, mapId);
+    }
+  } catch (err) {
+    console.log(`[map-table] failed to load ${MAP_TABLE_PATH}: ${summarizeErrorLine(err)}`);
+  }
+  return cachedMapIdByStrId;
 }
 
 function getDungeonRewardGroupIds(dungeonEntry) {
@@ -2748,6 +3378,9 @@ function grantStageClearLoot(user, dungeonId, stageId, options = {}) {
     mergeReward(reward, grantStageFirstClearReward(ctx, user, stageId, { regDate }));
   }
 
+  const mainReward = grantStageMainReward(ctx, user, stageId, { regDate });
+  mergeReward(reward, mainReward.reward);
+
   const rewardGroupIds = getDungeonRewardGroupIds(entry);
   result.rewardGroupIds = rewardGroupIds;
   for (const groupId of rewardGroupIds) {
@@ -2764,7 +3397,9 @@ function grantStageClearLoot(user, dungeonId, stageId, options = {}) {
   result.changed = hasRewardPayload(reward) || combatExpResult.operatorExpApplied;
   if (result.changed && USE_LOCAL_USER_DB) saveUserDb();
   console.log(
-    `[stage-loot] dungeonID=${dungeonId} stageID=${stageId} credits=${creditAmount} groups=${rewardGroupIds.join(",") || "-"} misc=${
+    `[stage-loot] dungeonID=${dungeonId} stageID=${stageId} credits=${creditAmount} main=${
+      mainReward.summary || "-"
+    } groups=${rewardGroupIds.join(",") || "-"} misc=${
       reward.miscItems.length
     } units=${reward.units.length} operators=${reward.operators.length} equips=${reward.equips.length} unitExpTargets=${unitExpDataList.length}`
   );
@@ -2781,6 +3416,36 @@ function grantStageFirstClearReward(ctx, user, stageId, options = {}) {
     regDate: options.regDate,
     expandPackages: false,
   });
+}
+
+function grantStageMainReward(ctx, user, stageId, options = {}) {
+  const stage = getStageTableEntry(stageId);
+  const rewardType = String(stage && (stage.m_MainRewardType || stage.MainRewardType || ""));
+  const rewardId = Number(stage && (stage.m_MainRewardID || stage.MainRewardID || 0));
+  const minQuantity = Math.max(0, Number(stage && (stage.m_MainRewardMin || stage.MainRewardMin || 0)) || 0);
+  const maxQuantity = Math.max(minQuantity, Number(stage && (stage.m_MainRewardMax || stage.MainRewardMax || minQuantity)) || minQuantity);
+  if (!rewardType || rewardType === "RT_NONE" || rewardId <= 0 || maxQuantity <= 0) {
+    return { reward: createEmptyReward(), summary: "" };
+  }
+  if (!stageMainRewardProbabilityPass(user, stageId, stage && (stage.m_MainRewardProbability || stage.MainRewardProbability))) {
+    return { reward: createEmptyReward(), summary: "" };
+  }
+  const quantity = pickDungeonRewardQuantity(user, `stage-main:${stageId}:${rewardType}:${rewardId}`, minQuantity, maxQuantity);
+  if (quantity <= 0) return { reward: createEmptyReward(), summary: "" };
+  return {
+    reward: grantRewardByType(ctx, user, rewardType, rewardId, quantity, quantity, 0, {
+      regDate: options.regDate,
+      expandPackages: false,
+    }),
+    summary: `${rewardType}:${rewardId}x${quantity}`,
+  };
+}
+
+function stageMainRewardProbabilityPass(user, stageId, probability) {
+  const chance = Math.max(0, Math.trunc(Number(probability == null ? 10000 : probability) || 0));
+  if (chance >= 10000) return true;
+  if (chance <= 0) return false;
+  return nextStageRewardCursor(user, `stage-main-prob:${stageId}`) % 10000 < chance;
 }
 
 function hasRewardPayload(reward) {
@@ -3060,6 +3725,162 @@ function buildDungeonClearData(dungeonId, options = {}) {
   ]);
 }
 
+function trackStageClearMissionProgress(user, dungeonId, stageId, battleState = {}) {
+  if (!user || typeof user !== "object") return false;
+  const resolvedDungeonId = Number(dungeonId || 0);
+  const resolvedStageId = Number(stageId || stageIdForDungeonId(resolvedDungeonId) || 0);
+  if (!resolvedDungeonId && !resolvedStageId) return false;
+  const now = dateTimeBinaryNow();
+  const details = {
+    now,
+    dungeonId: resolvedDungeonId,
+    stageId: resolvedStageId,
+    value: resolvedDungeonId || resolvedStageId,
+  };
+  let changed = false;
+  const changedConditions = new Set();
+  const track = (condition, amount, extraDetails = details) => {
+    const tracked = trackMissionEvent(user, condition, amount, extraDetails);
+    if (tracked) changedConditions.add(condition);
+    changed = tracked || changed;
+  };
+  track("DUNGEON_CLEAR", 1);
+  track("DUNGEON_CLEARED", 1);
+  track("PHASE_CLEAR", 1);
+  track("PHASE_CLEARED", 1);
+  track("WARFARE_CLEAR", 1);
+  track("WARFARE_CLEARED", 1);
+  track("DAILY_DUNGEON_PLAY", 1);
+  track("EC_SUPPLY_CLEAR", 1);
+  track("EC_SUPPLY_CLEARED", 1);
+  const missionResults = resolveDungeonMissionResults(resolvedDungeonId, {
+    win: true,
+    battleState,
+    missionResult1: battleState && battleState.missionResult1,
+    missionResult2: battleState && battleState.missionResult2,
+  });
+  if (missionResults.missionResult1 !== false && missionResults.missionResult2 !== false) {
+    track("DUNGEON_CLEAR_PERFECT", 1);
+    track("PHASE_CLEAR_PERFECT", 1);
+    track("PHASE_CLEARED_PERFECT", 1);
+    track("WARFARE_CLEAR_PERFECT", 1);
+    track("WARFARE_CLEARED_PERFECT", 1);
+  }
+  const eterniumCost = getStageEterniumCost(resolvedStageId);
+  if (eterniumCost > 0) {
+    track("USE_ETERNIUM", eterniumCost, {
+      ...details,
+      itemId: RESOURCE_ITEM_IDS.ETERNIUM,
+      resourceId: RESOURCE_ITEM_IDS.ETERNIUM,
+    });
+  }
+  if (changed) refreshMissionProgress(user, { now, conditions: Array.from(changedConditions) });
+  return changed;
+}
+
+function sendStageClearMissionUpdate(socket, user, options = {}) {
+  sendMissionUpdateForTabs(socket, user, FAST_LOBBY_MISSION_TABS, {
+    ...options,
+    label: options.label || "stage-clear-mission-update",
+  });
+}
+
+function repairPostTutorialGuideMissionsForSocket(socket, options = {}) {
+  const user = socket && socket.session && socket.session.user;
+  if (!user || typeof user !== "object") return 0;
+  if (CLEAR_ALL_MISSIONS_STATUS) return 0;
+  const repaired = repairPostTutorialGuideMissionCompletions(user);
+  if (repaired > 0 && USE_LOCAL_USER_DB) saveUserDb();
+  if (options.notify !== false) sendPostTutorialGuideMissionCompleteAck(socket, user, options);
+  return repaired;
+}
+
+function sendPostTutorialGuideMissionCompleteAck(socket, user, options = {}) {
+  if (!user || typeof user !== "object") return false;
+  if (!socket || !socket.session || !socket.session.gameReplay) return false;
+  const replay = socket.session.gameReplay;
+  if (options.once !== false && replay.postTutorialGuideMissionCompleteAckSent) return false;
+  let sent = false;
+  for (const missionId of POST_TUTORIAL_GUIDE_MISSION_IDS) {
+    const mission = findCompletedMissionById(user, missionId);
+    if (!mission || !(mission.rewardClaimed === true || mission.isComplete === true || mission.claimedAt)) continue;
+    sendServerGamePacket(
+      socket,
+      MISSION_COMPLETE_ACK,
+      buildMissionCompleteAckPayload({ missionID: Number(missionId) }),
+      options.label || "post-tutorial-guide-mission-complete"
+    );
+    sent = true;
+  }
+  if (sent) replay.postTutorialGuideMissionCompleteAckSent = true;
+  return sent;
+}
+
+function sendMissionUpdateForTabs(socket, user, tabIds, options = {}) {
+  if (!user || typeof user !== "object") return false;
+  if (!socket || !socket.session || !socket.session.gameReplay) return false;
+  const now = options.now || dateTimeBinaryNow();
+  const seen = new Set();
+  const missions = [];
+  for (const tabId of uniqueMissionTabs(tabIds)) {
+    for (const [, mission] of buildAccountMissionDataEntries(user, { tabId, now })) {
+      const key = `${Number(mission && mission.groupId || 0)}:${Number(mission && mission.missionID || 0)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      missions.push(mission);
+    }
+  }
+  if (missions.length <= 0) return false;
+  sendServerGamePacket(
+    socket,
+    MISSION_UPDATE_NOT,
+    writeObjectList(missions.map((mission) => writeNullableObject(buildMissionData(Number(mission && mission.missionID || 0), mission)))),
+    options.label || "mission-update"
+  );
+  return true;
+}
+
+function getStageEterniumCost(stageId) {
+  const stage = getStageTableEntry(stageId);
+  const reqItemId = Number(stage && (stage.m_StageReqItemID || stage.StageReqItemID || 0));
+  if (reqItemId !== RESOURCE_ITEM_IDS.ETERNIUM) return 0;
+  return Math.max(0, Number(stage && (stage.m_StageReqItemCount || stage.StageReqItemCount || 0)) || 0);
+}
+
+function getStageReqItemCost(stageId) {
+  const stage = getStageTableEntry(stageId);
+  const itemId = Number(stage && (stage.m_StageReqItemID || stage.StageReqItemID || 0));
+  const count = Math.max(0, Number(stage && (stage.m_StageReqItemCount || stage.StageReqItemCount || 0)) || 0);
+  if (!Number.isInteger(itemId) || itemId <= 0 || count <= 0) return null;
+  return { itemId, count };
+}
+
+function spendStageReqItemCost(user, stageId, options = {}) {
+  if (!user || typeof user !== "object") return [];
+  const cost = getStageReqItemCost(stageId);
+  if (!cost) return [];
+  const multiplier = Math.max(1, Number(options.multiplier || 1) || 1);
+  const totalCount = cost.count * multiplier;
+  stamina.refreshTimedStamina(user, {
+    now: dateTimeBinaryNow(),
+    itemIds: [cost.itemId],
+    initializeMissing: true,
+  });
+  const updated = spendMiscItem(user, cost.itemId, totalCount, { regDate: dateTimeBinaryNow() });
+  return updated ? [updated] : [];
+}
+
+function spendStageReqItemCostForReplay(replay, user, stageId) {
+  if (!replay || !user) return [];
+  const dynamicGame = replay.dynamicGame && typeof replay.dynamicGame === "object" ? replay.dynamicGame : {};
+  const key = `${Number(stageId || 0)}:${String(dynamicGame.gameUID || dynamicGame.gameUid || "")}`;
+  replay.spentStageReqItemCosts = replay.spentStageReqItemCosts && typeof replay.spentStageReqItemCosts === "object" ? replay.spentStageReqItemCosts : {};
+  if (replay.spentStageReqItemCosts[key]) return [];
+  const costItems = spendStageReqItemCost(user, stageId);
+  replay.spentStageReqItemCosts[key] = true;
+  return costItems;
+}
+
 function buildPhaseClearData(stageId, options = {}) {
   const missionResult1 =
     typeof options.missionResult1 === "boolean"
@@ -3093,31 +3914,32 @@ function episodeCompleteKey(episodeId, difficulty = 0) {
   return (BigInt(Number(episodeId || 0)) << 32n) | BigInt(Number(difficulty || 0) >>> 0);
 }
 
-function buildEpisodeCompleteData(episodeId, difficulty, completeCount) {
+function buildEpisodeCompleteData(episodeId, difficulty, completeCount, rewardFlags = []) {
+  const flags = Array.isArray(rewardFlags) ? rewardFlags : [];
   return Buffer.concat([
     writeSignedVarInt(Number(episodeId || 0)),
     writeSignedVarInt(Number(difficulty || 0)),
     writeSignedVarInt(Math.max(0, Number(completeCount || 0) || 0)),
-    writeBoolList([false, false, false]),
+    writeBoolList([Boolean(flags[0]), Boolean(flags[1]), Boolean(flags[2])]),
   ]);
 }
 
-function episode1StageMedalValue(stage) {
+function mainStoryStageMedalValue(stage) {
   if (!stage) return 0;
   if (stage.cutsceneOnly) return 0;
   return stage.tutorial ? 1 : 3;
 }
 
-function getEpisode1CompletedStageStates(user, extraStageIds = []) {
+function getMainStoryCompletedStageStates(user, extraStageIds = []) {
   if (!user || typeof user !== "object") return [];
-  const episode = ensureEpisode1State(user);
-  const states = episode && episode.stages && typeof episode.stages === "object" ? episode.stages : {};
+  const mainStory = ensureMainStoryState(user);
+  const states = mainStory && mainStory.stages && typeof mainStory.stages === "object" ? mainStory.stages : {};
   const forcedStageIds = new Set(
     (Array.isArray(extraStageIds) ? extraStageIds : [extraStageIds])
       .map(Number)
       .filter((stageId) => Number.isInteger(stageId) && stageId > 0)
   );
-  return EPISODE1_STAGE_CHAIN.map((stage) => {
+  return MAIN_STORY_STAGE_CHAIN.map((stage) => {
     const stageId = Number(stage.stageId || 0);
     const state = states[String(stageId)] || {};
     if (state.completed !== true && !forcedStageIds.has(stageId)) return null;
@@ -3131,17 +3953,23 @@ function getEpisode1CompletedStageStates(user, extraStageIds = []) {
   }).filter(Boolean);
 }
 
-function getEpisode1CompleteMedalCount(user, extraStageIds = []) {
-  return getEpisode1CompletedStageStates(user, extraStageIds).reduce(
-    (total, stage) => total + episode1StageMedalValue(stage),
+function getMainStoryEpisodeCompleteMedalCount(user, episodeId, extraStageIds = []) {
+  return getMainStoryCompletedStageStates(user, extraStageIds).reduce(
+    (total, stage) => (Number(stage.episodeId || 0) === Number(episodeId || 0) ? total + mainStoryStageMedalValue(stage) : total),
     0
   );
 }
 
-function buildEpisode1CompleteData(user, extraStageIds = []) {
-  const completeCount = getEpisode1CompleteMedalCount(user, extraStageIds);
+function buildMainStoryEpisodeCompleteData(user, episodeId, extraStageIds = []) {
+  const completeCount = getMainStoryEpisodeCompleteMedalCount(user, episodeId, extraStageIds);
   if (completeCount <= 0) return null;
-  return buildEpisodeCompleteData(2, 0, completeCount);
+  return buildEpisodeCompleteData(episodeId, 0, completeCount, collection.getEpisodeRewardFlags(user, episodeId, 0));
+}
+
+function buildMainStoryEpisodeCompleteDataForStage(user, stageId) {
+  const stage = getMainStoryStageByStageId(stageId);
+  if (!stage) return null;
+  return buildMainStoryEpisodeCompleteData(user, stage.episodeId, [stage.stageId]);
 }
 
 function recordTutorialDungeonClear(socket, replay) {
@@ -3201,6 +4029,7 @@ function tutorialPhaseKey(stage) {
 function ensureTutorialState(user) {
   if (!user) return null;
   user.tutorial = user.tutorial && typeof user.tutorial === "object" ? user.tutorial : {};
+  ensureTutorialNicknameMissionMarker(user);
   user.tutorial.enabled = user.tutorial.enabled !== false;
   user.tutorial.firstStageId = Number(user.tutorial.firstStageId || TUTORIAL_STAGE_CHAIN[0].stageId);
   user.tutorial.firstDungeonId = Number(user.tutorial.firstDungeonId || TUTORIAL_STAGE_CHAIN[0].dungeonID);
@@ -3238,6 +4067,24 @@ function ensureTutorialState(user) {
   user.tutorial.nextStageId = nextStage ? nextStage.stageId : 0;
   user.tutorial.nextDungeonId = nextStage ? nextStage.dungeonID : 0;
   return user.tutorial;
+}
+
+function ensureTutorialNicknameMissionMarker(user) {
+  if (!user || !user.tutorial || user.tutorial.nicknameChanged !== true) return false;
+  user.completedMissions =
+    user.completedMissions && typeof user.completedMissions === "object" ? user.completedMissions : {};
+  if (user.completedMissions["999"]) return false;
+  user.completedMissions["999"] = {
+    tabId: 1,
+    groupId: 999,
+    missionID: 999,
+    times: 1,
+    lastUpdateDate: String(dateTimeBinaryNow()),
+    isComplete: true,
+    rewardReady: true,
+    completedAt: user.tutorial.nicknameChangedAt || new Date().toISOString(),
+  };
+  return true;
 }
 
 function nextTutorialStageForUser(user) {
@@ -3301,16 +4148,17 @@ function resetLocalProgressForUser(user, options = {}) {
   user.stagePlayData = {};
   user.completedMissions = {};
   user.unlockedStageIds = [];
+  user.mainStory = {};
   user.episode1 = {};
   resetTutorialProgressForUser(user, { save: false, force: options.force === true });
-  ensureEpisode1State(user);
+  ensureMainStoryState(user);
   if (USE_LOCAL_USER_DB && options.save !== false) saveUserDb();
   return true;
 }
 
 function resetCampaignProgressForUser(user, options = {}) {
   if (!user || typeof user !== "object") return false;
-  const changed = resetEpisode1PostTutorialProgress(user);
+  const changed = resetMainStoryPostTutorialProgress(user);
   if (USE_LOCAL_USER_DB && options.save !== false && changed) saveUserDb();
   return changed;
 }
@@ -3421,11 +4269,118 @@ function preparePostTutorialLogin(user, resetKey = "") {
   ensurePostTutorialUserLevel(user);
   user.loginFlow = "post-tutorial";
   if (resetKey) localProgressResetUsers.add(resetKey);
-  ensureEpisode1State(user);
+  ensureMainStoryState(user);
+  const repairedTutorialMissions = CLEAR_ALL_MISSIONS_STATUS
+    ? 0
+    : repairStageGatedTutorialMissionCompletions(user) + repairPostTutorialGuideMissionCompletions(user);
+  if (repairedTutorialMissions > 0 && USE_LOCAL_USER_DB) saveUserDb();
   console.log(
-    `[post-tutorial-login] uid=${user.userUid || "(ephemeral)"} completed=1 nextStage=0 nextDungeon=0`
+    `[post-tutorial-login] uid=${user.userUid || "(ephemeral)"} completed=1 nextStage=0 nextDungeon=0${
+      repairedTutorialMissions > 0 ? ` repairedTutorialMissions=${repairedTutorialMissions}` : ""
+    }`
   );
   return true;
+}
+
+function repairStageGatedTutorialMissionCompletions(user) {
+  if (!user || typeof user !== "object" || !hasPersistedTutorialCompletion(user)) return 0;
+  let repaired = 0;
+  for (const row of getMissionTempletsByTabId(1)) {
+    if (!row || String(row.m_MissionCond || "").toUpperCase() !== "TUTORIAL") continue;
+    if (missionRowHasReward(row)) continue;
+    const missionId = Number(row.m_MissionID || 0);
+    const forceStageId = Number(row.m_ForceClearStage || 0);
+    if (!missionId || !forceStageId || !isTutorialRepairStageCleared(user, forceStageId)) continue;
+    const existing = findCompletedMissionById(user, missionId);
+    if (existing && (existing.rewardClaimed === true || existing.isComplete === true || existing.claimedAt)) continue;
+    if (
+      markMissionCompleteForUser(user, missionId, {
+        tabId: Number(row.m_MissionTabId || 1) || 1,
+        groupId: Number(row.m_MissionCounterGroupID || row.m_GroupId || missionId) || missionId,
+        times: Math.max(1, Number(row.m_Times || 0) || 1),
+        rewardClaimed: true,
+        rewardReady: true,
+        save: false,
+      })
+    ) {
+      repaired += 1;
+    }
+  }
+  return repaired;
+}
+
+function repairPostTutorialGuideMissionCompletions(user) {
+  if (!user || typeof user !== "object") return 0;
+  let repaired = 0;
+  const wanted = new Set(POST_TUTORIAL_GUIDE_MISSION_IDS);
+  for (const row of getMissionTempletsByTabId(1)) {
+    if (!row || String(row.m_MissionCond || "").toUpperCase() !== "TUTORIAL") continue;
+    const missionId = Number(row.m_MissionID || 0);
+    if (!wanted.has(missionId) || missionRowHasReward(row)) continue;
+    if (!shouldPersistPostTutorialGuideMission(user, missionId)) continue;
+    const existing = findCompletedMissionById(user, missionId);
+    if (existing && (existing.rewardClaimed === true || existing.isComplete === true || existing.claimedAt)) continue;
+    if (
+      markMissionCompleteForUser(user, missionId, {
+        tabId: Number(row.m_MissionTabId || 1) || 1,
+        groupId: Number(row.m_MissionCounterGroupID || row.m_GroupId || missionId) || missionId,
+        times: Math.max(1, Number(row.m_Times || 0) || 1),
+        rewardClaimed: true,
+        rewardReady: true,
+        save: false,
+      })
+    ) {
+      repaired += 1;
+    }
+  }
+  return repaired;
+}
+
+function shouldPersistPostTutorialGuideMission(user, missionId) {
+  if (hasPersistedTutorialCompletion(user)) return true;
+  const stageId = Number(POST_TUTORIAL_GUIDE_REQUIREMENT_STAGE_IDS[Number(missionId)] || 0);
+  if (!stageId) return false;
+  if (isTutorialRepairStageCleared(user, stageId)) return true;
+
+  const stage = getMainStoryStageByStageId(stageId);
+  const dungeonId = Number(stage && stage.dungeonID || 0);
+  const dungeonClear = user && user.dungeonClear && typeof user.dungeonClear === "object" ? user.dungeonClear : {};
+  const clear = dungeonId ? dungeonClear[String(dungeonId)] : null;
+  return Boolean(clear && clear.cleared !== false);
+}
+
+function missionRowHasReward(row) {
+  for (let index = 1; index <= 5; index += 1) {
+    if (row && row[`m_RewardType_${index}`] && Number(row[`m_RewardID_${index}`] || 0) > 0) return true;
+  }
+  return false;
+}
+
+function findCompletedMissionById(user, missionId) {
+  const completedMissions =
+    user && user.completedMissions && typeof user.completedMissions === "object" ? user.completedMissions : {};
+  const direct = completedMissions[String(missionId)];
+  if (direct) return direct;
+  return Object.values(completedMissions).find((mission) => Number(mission && mission.missionID) === Number(missionId)) || null;
+}
+
+function isTutorialRepairStageCleared(user, stageId) {
+  const numericStageId = Number(stageId || 0);
+  if (!numericStageId) return false;
+  const stagePlayData = user.stagePlayData && typeof user.stagePlayData === "object" ? user.stagePlayData : {};
+  if (stagePlayData[String(numericStageId)]) return true;
+  for (const containerName of ["mainStory", "episode1"]) {
+    const container = user[containerName];
+    const state = container && container.stages && typeof container.stages === "object" ? container.stages[String(numericStageId)] : null;
+    if (state && state.completed === true) return true;
+  }
+  const tutorialStage = TUTORIAL_STAGE_CHAIN.find((stage) => Number(stage.stageId || 0) === numericStageId);
+  if (tutorialStage) {
+    const tutorial = ensureTutorialState(user);
+    const phase = tutorial && tutorial.phases && tutorial.phases[tutorialPhaseKey(tutorialStage)];
+    return Boolean(phase && phase.completed === true);
+  }
+  return false;
 }
 
 function recordTutorialDungeonClearForUser(user, dungeonId, stageId, battleState = {}, options = {}) {
@@ -3488,10 +4443,11 @@ function recordTutorialDungeonClearForUser(user, dungeonId, stageId, battleState
   }
   if (firstStageClear) {
     grantStageClearExp(user, stageMeta.stageId, stageMeta.dungeonID);
+    trackStageClearMissionProgress(user, stageMeta.dungeonID, stageMeta.stageId, battleState);
     changed = true;
   }
   if (recordGameplayUnlockClearForUser(user, stageMeta.dungeonID, stageMeta.stageId, { save: false })) changed = true;
-  ensureEpisode1State(user);
+  ensureMainStoryState(user);
   if (USE_LOCAL_USER_DB && options.save !== false && changed) saveUserDb();
   return true;
 }
@@ -3599,7 +4555,15 @@ function recordPersistentCutsceneViewForUser(user, dungeonId, stageId = 0, optio
 }
 
 function shouldPersistCutsceneView(dungeonId, stageId) {
-  return isTutorialDungeonId(Number(dungeonId || 0)) || isTutorialStageId(Number(stageId || 0));
+  const resolvedDungeonId = Number(dungeonId || 0);
+  const resolvedStageId = Number(stageId || 0);
+  const mainStoryStage = getMainStoryStageByStageId(resolvedStageId);
+  return (
+    isTutorialDungeonId(resolvedDungeonId) ||
+    isTutorialStageId(resolvedStageId) ||
+    isMainStoryCutsceneDungeonId(resolvedDungeonId) ||
+    Boolean(mainStoryStage && mainStoryStage.cutsceneOnly)
+  );
 }
 
 function hasTutorialCompletionMarker(user) {
@@ -3647,34 +4611,39 @@ function ensureTutorialCompletionProgress(user, battleState = {}, options = {}) 
 
 function ensurePostTutorialUserLevel(user) {
   if (!user || typeof user !== "object") return false;
-  const currentLevel = Math.max(1, Number(user.level || 1) || 1);
-  const nextLevel = Math.max(currentLevel, POST_TUTORIAL_MIN_USER_LEVEL);
-  if (currentLevel === nextLevel && Number(user.level || 0) === nextLevel) return false;
-  user.level = nextLevel;
-  return true;
+  const beforeLevel = Math.max(1, Number(user.level || 1) || 1);
+  const beforeExp = String(user.exp == null ? "0" : user.exp);
+  const beforeTotalExp = String(user.totalExp == null ? "0" : user.totalExp);
+  if (beforeLevel < POST_TUTORIAL_MIN_USER_LEVEL) user.level = POST_TUTORIAL_MIN_USER_LEVEL;
+  ensureAccountProgress(user);
+  return (
+    beforeLevel !== Number(user.level || 1) ||
+    beforeExp !== String(user.exp == null ? "0" : user.exp) ||
+    beforeTotalExp !== String(user.totalExp == null ? "0" : user.totalExp)
+  );
 }
 
 function getJoinLobbyUserLevel(user) {
-  const currentLevel = Math.max(1, Number(user && user.level ? user.level : 1) || 1);
-  return hasPersistedTutorialCompletion(user) ? Math.max(currentLevel, POST_TUTORIAL_MIN_USER_LEVEL) : currentLevel;
+  if (!user || typeof user !== "object") return 1;
+  if (hasPersistedTutorialCompletion(user)) {
+    ensurePostTutorialUserLevel(user);
+  } else {
+    ensureAccountProgress(user);
+  }
+  return Math.max(1, Number(user.level || 1) || 1);
 }
 
 function recordMissionComplete(socket, req) {
   const user = socket && socket.session && socket.session.user;
   if (!user || !req || !req.missionID) return null;
   const result = completeAccountMission(user, req, { now: dateTimeBinaryNow() });
-  const changed = markMissionCompleteForUser(user, req.missionID, {
-    tabId: req.tabId,
-    groupId: req.groupId,
-    times: 1,
-    save: true,
-  });
   console.log(
     `[mission] complete uid=${user.userUid} missionID=${req.missionID} tabId=${req.tabId} groupId=${req.groupId} exp=${
       result && result.reward ? result.reward.userExp : 0
     } achievePoint=${result && result.reward ? result.reward.achievePoint : "0"}`
   );
-  return result || changed;
+  if (result && result.changed && USE_LOCAL_USER_DB) saveUserDb();
+  return result;
 }
 
 function markMissionCompleteForUser(user, missionId, options = {}) {
@@ -3692,10 +4661,11 @@ function markMissionCompleteForUser(user, missionId, options = {}) {
     missionID: numericMissionId,
     times: Number(options.times || existing.times || 1),
     lastUpdateDate: String(options.lastUpdateDate || existing.lastUpdateDate || dateTimeBinaryNow()),
-    isComplete: true,
-    rewardClaimed: options.rewardClaimed !== false && existing.rewardClaimed !== false,
+    isComplete: options.rewardClaimed === true,
+    rewardReady: options.rewardReady !== false,
+    rewardClaimed: options.rewardClaimed === true,
     completedAt: existing.completedAt || new Date().toISOString(),
-    claimedAt: existing.claimedAt || new Date().toISOString(),
+    claimedAt: options.rewardClaimed === true ? existing.claimedAt || new Date().toISOString() : existing.claimedAt || "",
   };
   if (USE_LOCAL_USER_DB && options.save !== false) saveUserDb();
   return true;
@@ -3829,6 +4799,12 @@ function decodeGameLoadReq(payload) {
     offset = supportingUserUid.offset;
     const hasEventDeckData = decrypted.readUInt8(offset) !== 0;
     offset += 1;
+    let eventDeckData = null;
+    if (hasEventDeckData) {
+      const parsedEventDeck = readNkmEventDeckData(decrypted, offset);
+      eventDeckData = parsedEventDeck.value;
+      offset = parsedEventDeck.offset;
+    }
     const rewardMultiply = safeReadSignedVarInt(decrypted, offset);
     return {
       isDev,
@@ -3841,11 +4817,46 @@ function decodeGameLoadReq(payload) {
       exploreID: exploreID.value,
       supportingUserUid: supportingUserUid.value,
       hasEventDeckData,
+      eventDeckData,
       rewardMultiply: rewardMultiply.value,
     };
   } catch (_) {
     return null;
   }
+}
+
+function readNkmEventDeckData(buffer, offset) {
+  const shipUid = readSignedVarLong(buffer, offset);
+  offset = shipUid.offset;
+  const unitMap = readIntLongMap(buffer, offset);
+  offset = unitMap.offset;
+  const operatorUid = readSignedVarLong(buffer, offset);
+  offset = operatorUid.offset;
+  const leaderIndex = readSignedVarInt(buffer, offset);
+  offset = leaderIndex.offset;
+  return {
+    value: {
+      shipUid: shipUid.value,
+      units: unitMap.value,
+      operatorUid: operatorUid.value,
+      leaderIndex: leaderIndex.value,
+    },
+    offset,
+  };
+}
+
+function readIntLongMap(buffer, offset) {
+  const count = readVarInt(buffer, offset);
+  offset = count.offset;
+  const entries = {};
+  for (let index = 0; index < count.value; index += 1) {
+    const key = readSignedVarInt(buffer, offset);
+    offset = key.offset;
+    const value = readSignedVarLong(buffer, offset);
+    offset = value.offset;
+    entries[key.value] = value.value;
+  }
+  return { value: entries, offset };
 }
 
 function decodeGameRespawnReq(payload) {
@@ -3911,37 +4922,22 @@ function decodeGameShipSkillReq(payload) {
 
 function logGameLoadReq(payload) {
   try {
-    const decrypted = decryptCopy(payload);
-    let offset = 0;
-    const isDev = decrypted.readUInt8(offset) !== 0;
-    offset += 1;
-    const selectDeckIndex = decrypted.readUInt8(offset);
-    offset += 1;
-    const stageID = readSignedVarInt(decrypted, offset);
-    offset = stageID.offset;
-    const diveStageID = readSignedVarInt(decrypted, offset);
-    offset = diveStageID.offset;
-    const dungeonID = readSignedVarInt(decrypted, offset);
-    offset = dungeonID.offset;
-    const palaceID = readSignedVarInt(decrypted, offset);
-    offset = palaceID.offset;
-    const fierceBossId = readSignedVarInt(decrypted, offset);
-    offset = fierceBossId.offset;
-    const exploreID = readSignedVarInt(decrypted, offset);
-    offset = exploreID.offset;
-    const supportingUserUid = readSignedVarLong(decrypted, offset);
-    offset = supportingUserUid.offset;
-    const hasEventDeckData = decrypted.readUInt8(offset) !== 0;
-    offset += 1;
-    const rewardMultiply = safeReadSignedVarInt(decrypted, offset);
+    const req = decodeGameLoadReq(payload);
+    if (!req) throw new Error("decode returned null");
+    const eventDeckUnits = req.eventDeckData
+      ? Object.entries(req.eventDeckData.units || {})
+          .filter(([, uid]) => toBigInt(uid || 0) > 0n)
+          .map(([slot, uid]) => `${slot}:${uid}`)
+          .join(",")
+      : "";
     console.log(
-      `[GAME_LOAD_REQ] isDev=${isDev ? 1 : 0} deck=${selectDeckIndex} stageID=${stageID.value} diveStageID=${
-        diveStageID.value
-      } dungeonID=${dungeonID.value} palaceID=${palaceID.value} fierceBossId=${fierceBossId.value} exploreID=${
-        exploreID.value
-      } supportingUserUid=${supportingUserUid.value} eventDeck=${hasEventDeckData ? 1 : 0} rewardMultiply=${
-        rewardMultiply.value
-      }`
+      `[GAME_LOAD_REQ] isDev=${req.isDev ? 1 : 0} deck=${req.selectDeckIndex} stageID=${req.stageID} diveStageID=${
+        req.diveStageID
+      } dungeonID=${req.dungeonID} palaceID=${req.palaceID} fierceBossId=${req.fierceBossId} exploreID=${
+        req.exploreID
+      } supportingUserUid=${req.supportingUserUid} eventDeck=${req.hasEventDeckData ? 1 : 0} rewardMultiply=${
+        req.rewardMultiply
+      }${eventDeckUnits ? ` eventDeckUnits=${eventDeckUnits}` : ""}`
     );
   } catch (err) {
     console.log(`[GAME_LOAD_REQ] decode failed: ${err.message}`);
@@ -3992,6 +4988,8 @@ function buildCapturedLoginLikeAck(sequence, packetId, user, label, fallbackBuil
     "local-access-token";
   lastEffectiveAccessToken = token;
   if (user && token) user.accessToken = token;
+  const contentsTag = mergeTags(template.contentsTag, REQUIRED_CONTENTS_TAGS);
+  const openTag = mergeTags(template.openTag, REQUIRED_STORY_OPEN_TAGS);
 
   const rawPayload = buildLoginAckRaw({
     errorCode: template.errorCode,
@@ -3999,13 +4997,13 @@ function buildCapturedLoginLikeAck(sequence, packetId, user, label, fallbackBuil
     gameServerIP: GAME_SERVER_IP,
     gameServerPort: GAME_SERVER_PORT,
     contentsVersion: template.contentsVersion,
-    contentsTag: template.contentsTag,
-    openTag: template.openTag,
+    contentsTag,
+    openTag,
   });
 
   const compressedPayload = lz4StreamWrapUncompressed(rawPayload);
   console.log(
-    `[${label} official-template] version=${template.contentsVersion} tags=${template.contentsTag.length} openTags=${template.openTag.length} tokenLen=${token.length} gameServer=${GAME_SERVER_IP}:${GAME_SERVER_PORT} payloadSize=${compressedPayload.length}`
+    `[${label} official-template] version=${template.contentsVersion} tags=${contentsTag.length} openTags=${openTag.length} tokenLen=${token.length} gameServer=${GAME_SERVER_IP}:${GAME_SERVER_PORT} payloadSize=${compressedPayload.length}`
   );
   return buildFramedPacket(sequence, packetId, compressedPayload, true);
 }
@@ -4058,10 +5056,22 @@ function buildLoginLikePayload(user) {
 function buildMinimalJoinLobbyPayload(user) {
   const scrubbedTutorialClears = scrubTutorialEpisodeClearProgress(user);
   if (scrubbedTutorialClears && USE_LOCAL_USER_DB) saveUserDb();
-  ensureEpisode1State(user);
+  ensureMainStoryState(user);
   ensureDefaultLineup(user);
   ensureDefaultLineup(user, { deckType: 3, index: 0 });
-  const now = writeInt64LE(dateTimeBinaryNow());
+  const lobbyNow = dateTimeBinaryNow();
+  const refreshedStamina = stamina.refreshTimedStamina(user, {
+    now: lobbyNow,
+    initializeMissing: true,
+  });
+  if (refreshedStamina.changed && USE_LOCAL_USER_DB) saveUserDb();
+  const now = writeInt64LE(lobbyNow);
+  const lastEterniumSupplyTakeTime = writeInt64LE(
+    stamina.getChargeItemLastUpdateDate(user, stamina.ITEM_IDS.ETERNIUM, lobbyNow)
+  );
+  const pvpPointChargeTime = writeInt64LE(
+    stamina.getChargeItemLastUpdateDate(user, stamina.ITEM_IDS.PVP_CHARGE_POINT, lobbyNow)
+  );
   const userUid = BigInt(user.userUid || "1000000001");
   const friendCode = BigInt(user.friendCode || "10000001");
   const nickname = user.nickname || "LocalAdmin";
@@ -4088,13 +5098,13 @@ function buildMinimalJoinLobbyPayload(user) {
     now, // utcTime
     writeInt64LE(0n), // utcOffset
     now, // lastCreditSupplyTakeTime
-    now, // lastEterniumSupplyTakeTime
+    lastEterniumSupplyTakeTime,
     writeDoubleLE(0),
     writeObjectList([]), // shopChainTabNestResetList
     writeNullableObject(buildPvpBanResultData()), // pvpBanResult
     writeNullableObject(buildPvpStateData()), // asyncPvpState
     writeNullableObject(buildPvpStateData()), // leaguePvpState
-    now, // pvpPointChargeTime
+    pvpPointChargeTime,
     writeBool(false), // rankPvpOpen
     writeBool(false), // leaguePvpOpen
     writeObjectList([]), // ReturningUserStates
@@ -4105,7 +5115,7 @@ function buildMinimalJoinLobbyPayload(user) {
     writeNullableObject(buildEventInfoData()), // eventInfo
     writeString(user.reconnectKey || ""),
     writeNullableObject(buildZlongUserData()), // zlongUserData
-    writeNullableObject(buildBackgroundInfoData()), // backGroundInfo
+    writeNullableObject(buildBackgroundInfoData(user)), // backGroundInfo
     writeNullableObject(buildPrivateGuildData()), // privateGuildData
     now, // blockMuteEndDate
     writeBool(false), // marketReviewCompletion
@@ -4122,8 +5132,8 @@ function buildMinimalJoinLobbyPayload(user) {
     writeNullObject(), // phaseModeState
     writeObjectList([]), // serverKillCountDataList
     writeObjectList([]), // killCountDataList
-    writeObjectList([]), // completedUnitMissions
-    writeObjectList([]), // rewardEnableUnitMissions
+    writeObjectList(collection.buildCompletedUnitMissionPayloads(user).map(writeNullableObject)), // completedUnitMissions
+    writeObjectList(collection.buildRewardEnableUnitMissionPayloads(user).map(writeNullableObject)), // rewardEnableUnitMissions
     writeNullableObject(buildPvpCastingVoteData()), // pvpCastingVoteData
     writeObjectList([]), // intervalData
     writeObjectList([]), // consumerPackages
@@ -4140,7 +5150,7 @@ function buildMinimalJoinLobbyPayload(user) {
     writeObjectList(getAllCustomPickupContracts(user).map((contract) => writeNullableObject(buildSerializedCustomPickupContractData(contract)))), // customPickupContracts
     writeNullableObject(buildPotentialOptionCandidateData()), // potentialOptionCandidate
     writeNullableObject(buildPvpCastingVoteData()), // pvpDraftVoteData
-    writeNullableObject(buildSupportUnitData()), // supportUnitProfileData
+    writeNullableObject(buildSupportUnitData(user)), // supportUnitProfileData
     writeBool(false), // hasRemainReward
   ]);
 }
@@ -4250,20 +5260,50 @@ function hasLocalAccountState(user) {
   const contractStates = user.contractStates && typeof user.contractStates === "object" ? user.contractStates : {};
   const dungeonClear = user.dungeonClear && typeof user.dungeonClear === "object" ? user.dungeonClear : {};
   const stagePlayData = user.stagePlayData && typeof user.stagePlayData === "object" ? user.stagePlayData : {};
+  const persistentCutsceneViews =
+    user.persistentCutsceneViews && typeof user.persistentCutsceneViews === "object" ? user.persistentCutsceneViews : {};
+  const support = user.support && typeof user.support === "object" ? user.support : {};
   if (Array.isArray(user.unlockedStageIds) && user.unlockedStageIds.length > 0) return true;
+  if (user.mainStory && typeof user.mainStory === "object") return true;
   if (user.episode1 && typeof user.episode1 === "object") return true;
   if (inventory.localTouchedAt) return true;
   if (Object.keys(inventory.equips || {}).length > 0) return true;
   if (Array.isArray(inventory.skins) && inventory.skins.length > 0) return true;
   if (Object.keys(army.units || {}).length > 0) return true;
   if (Object.keys(army.ships || {}).length > 0) return true;
+  if (Object.keys(army.trophies || {}).length > 0) return true;
   if (Object.keys(army.operators || {}).length > 0) return true;
   if (Object.keys(army.deckSets || {}).length > 0) return true;
   if (Object.keys(completedMissions).length > 0) return true;
   if (Object.keys(contractStates).length > 0) return true;
   if (Object.keys(dungeonClear).length > 0) return true;
   if (Object.keys(stagePlayData).length > 0) return true;
+  if (Object.keys(persistentCutsceneViews).length > 0) return true;
+  if (Object.keys(support).length > 0) return true;
+  if (hasSavedCombatControls(user)) return true;
+  if (lobbyCustomization.hasLobbyCustomization(user)) return true;
+  if (simulation.hasSimulationState(user)) return true;
+  if (stamina.hasStaminaState(user)) return true;
+  if (collection.hasCollectionState(user)) return true;
   return Boolean(user.nickname && user.nickname !== "LocalAdmin");
+}
+
+function getCompletedTutorialStageStates(user) {
+  const tutorial = ensureTutorialState(user);
+  const phases = tutorial && tutorial.phases && typeof tutorial.phases === "object" ? tutorial.phases : {};
+  return TUTORIAL_STAGE_CHAIN.map((stage) => {
+    const phase = phases[tutorialPhaseKey(stage)] || phases[String(stage.stageId)];
+    if (!phase || phase.completed !== true) return null;
+    return {
+      ...stage,
+      dungeonId: stage.dungeonID,
+      completed: true,
+      completedAt: phase.completedAt || tutorial.completedAt || "",
+      bestClearTimeSec: Number(phase.bestClearTimeSec || 0),
+      missionResult1: true,
+      missionResult2: true,
+    };
+  }).filter(Boolean);
 }
 
 function buildDungeonClearEntries(user) {
@@ -4281,7 +5321,19 @@ function buildDungeonClearEntries(user) {
       );
     }
   }
-  for (const stage of getEpisode1CompletedStageStates(user)) {
+  for (const stage of getCompletedTutorialStageStates(user)) {
+    const dungeonId = Number(stage.dungeonID || stage.dungeonId || 0);
+    if (Number.isFinite(dungeonId) && dungeonId > 0) {
+      entries.set(
+        dungeonId,
+        buildDungeonClearData(dungeonId, {
+          missionResult1: stage.missionResult1 !== false,
+          missionResult2: stage.missionResult2 !== false,
+        })
+      );
+    }
+  }
+  for (const stage of getMainStoryCompletedStageStates(user)) {
     const dungeonId = Number(stage.dungeonID || stage.dungeonId || 0);
     if (Number.isFinite(dungeonId) && dungeonId > 0) {
       entries.set(
@@ -4305,7 +5357,13 @@ function buildStagePlayDataList(user) {
       entries.set(stageId, writeNullableObject(buildStagePlayData(stageId, { gameTime: Number((data && data.bestClearTimeSec) || 0) })));
     }
   }
-  for (const stage of getEpisode1CompletedStageStates(user)) {
+  for (const stage of getCompletedTutorialStageStates(user)) {
+    const stageId = Number(stage.stageId || 0);
+    if (Number.isFinite(stageId) && stageId > 0) {
+      entries.set(stageId, writeNullableObject(buildStagePlayData(stageId, { gameTime: Number(stage.bestClearTimeSec || 0) })));
+    }
+  }
+  for (const stage of getMainStoryCompletedStageStates(user)) {
     const stageId = Number(stage.stageId || 0);
     if (Number.isFinite(stageId) && stageId > 0) {
       entries.set(stageId, writeNullableObject(buildStagePlayData(stageId, { gameTime: Number(stage.bestClearTimeSec || 0) })));
@@ -4315,7 +5373,10 @@ function buildStagePlayDataList(user) {
 }
 
 function buildPhaseClearDataList(user) {
-  return getEpisode1CompletedStageStates(user)
+  const stages = new Map();
+  for (const stage of getCompletedTutorialStageStates(user)) stages.set(Number(stage.stageId || 0), stage);
+  for (const stage of getMainStoryCompletedStageStates(user)) stages.set(Number(stage.stageId || 0), stage);
+  return Array.from(stages.values())
     .filter((stage) => Number(stage.stageId || 0) > 0 && !stage.cutsceneOnly)
     .map((stage) =>
       writeNullableObject(
@@ -4328,29 +5389,36 @@ function buildPhaseClearDataList(user) {
 }
 
 function buildEpisodeCompleteEntries(user) {
-  const episodeCompleteData = buildEpisode1CompleteData(user);
-  return episodeCompleteData ? [[episodeCompleteKey(2, 0), episodeCompleteData]] : [];
+  const entries = [];
+  const episodeIds = new Set(getMainStoryCompletedStageStates(user).map((stage) => Number(stage.episodeId || 0)).filter((id) => id > 0));
+  for (const episodeId of Array.from(episodeIds).sort((a, b) => a - b)) {
+    const episodeCompleteData = buildMainStoryEpisodeCompleteData(user, episodeId);
+    if (episodeCompleteData) entries.push([episodeCompleteKey(episodeId, 0), episodeCompleteData]);
+  }
+  return entries;
 }
 
 function buildMinimalUserData(user, userUid, friendCode, nickname) {
+  const userLevel = getJoinLobbyUserLevel(user);
+  const userLevelExp = Number(user && user.exp ? user.exp : 0) || 0;
   const now = dateTimeBinaryNow();
   return Buffer.concat([
     writeSignedVarLong(userUid),
     writeSignedVarLong(friendCode),
     writeString(nickname),
-    writeSignedVarInt(getJoinLobbyUserLevel(user)),
-    writeSignedVarInt(Number(user && user.exp ? user.exp : 0) || 0), // level exp
+    writeSignedVarInt(userLevel),
+    writeSignedVarInt(userLevelExp), // level exp
     writeSignedVarInt(1), // NORMAL_USER
     writeNullableObject(Buffer.concat([writeInt64LE(now), writeInt64LE(now), writeInt64LE(0n)])), // NKMUserDateData
     writeNullableObject(buildMinimalInventoryData(user)),
     writeNullableObject(buildMinimalArmyData(user)),
-    writeNullableObject(buildMinimalUserOption()),
+    writeNullableObject(buildMinimalUserOption(user)),
     writeObjectMapInt(buildDungeonClearEntries(user)), // m_dicNKMDungeonClearData
     writeNullableObject(buildWorldMapData()), // m_WorldmapData
     writeObjectMapInt([]), // m_dicNKMWarfareClearData
     writeNullableObject(buildMinimalShopData(user)),
     writeNullableObject(buildMinimalMissionData(user)),
-    writeObjectMapInt([]), // m_dicNKMCounterCaseData
+    writeObjectMapInt(simulation.buildCounterCaseDataEntries(user)), // m_dicNKMCounterCaseData
     writeNullableObject(buildCraftData()), // m_CraftData
     writeObjectMapLong(buildEpisodeCompleteEntries(user)), // m_dicEpisodeCompleteData
     writeNullableObject(buildPvpStateData()), // m_PvpData
@@ -4364,10 +5432,10 @@ function buildMinimalUserData(user, userUid, friendCode, nickname) {
     writeSignedVarInt(0), // UserState
     writeObjectList([]), // m_companyBuffDataList
     writeNullableObject(buildShadowPalaceData()), // m_ShadowPalace
-    writeNullableObject(buildBackgroundInfoData()), // backGroundInfo
+    writeNullableObject(buildBackgroundInfoData(user)), // backGroundInfo
     writeNullObject(), // m_RecallHistoryData
     writeNullObject(), // m_BirthDayData
-    writeNullableObject(buildJukeboxData()), // m_JukeboxData
+    writeNullableObject(buildJukeboxData(user)), // m_JukeboxData
   ]);
 }
 
@@ -4378,7 +5446,7 @@ function buildMinimalInventoryData(user) {
     writeObjectMapInt(buildInventoryMiscEntries(user)), // m_ItemMiscData
     writeObjectMapLong(equipEntries), // m_ItemEquipData
     writeIntList(getSkinIds(user)), // m_ItemSkinData
-    writeObjectMapInt([]), // m_dicMiscCollectionData
+    writeObjectMapInt(collection.buildMiscCollectionEntries(user)), // m_dicMiscCollectionData
   ]);
 }
 
@@ -4403,19 +5471,20 @@ function buildItemMiscData(item) {
 function buildMinimalArmyData(user) {
   const units = getArmyUnits(user);
   const ships = getArmyShips(user);
+  const trophies = getArmyTrophies(user);
   const operators = getArmyOperators(user);
   return Buffer.concat([
     writeSignedVarInt(Math.max(300, units.length + 100)), // m_MaxUnitCount
     writeSignedVarInt(Math.max(200, ships.length + 50)), // m_MaxShipCount
     writeSignedVarInt(Math.max(100, operators.length + 50)), // m_MaxOperatorCount
-    writeSignedVarInt(100), // m_MaxTrophyCount
+    writeSignedVarInt(Math.max(100, trophies.length + 50)), // m_MaxTrophyCount
     buildDefaultDeckSetArray(user), // deckSets
     writeObjectMapLong(ships.map((unit) => [unit.unitUid, buildSerializedUnitData(unit)])), // ships
     writeObjectMapLong(units.map((unit) => [unit.unitUid, buildSerializedUnitData(unit)])), // units
     writeObjectMapLong(operators.map((operator) => [operator.uid || operator.operatorUid, buildSerializedOperatorData(operator)])), // operators
-    writeObjectMapLong([]), // trophies
-    writeSignedVarInt(0), // illustrate unit id
-    writeObjectMapInt([]), // team collection
+    writeObjectMapLong(trophies.map((unit) => [unit.unitUid, buildSerializedUnitData(unit)])), // trophies
+    writeIntList(collection.buildIllustratedUnitIds(user)), // m_illustrateUnit
+    writeObjectMapInt(collection.buildTeamCollectionEntries(user)), // team collection
   ]);
 }
 
@@ -4526,16 +5595,16 @@ function buildShadowPalaceData() {
   ]);
 }
 
-function buildJukeboxData() {
-  return writeObjectMapInt([]);
+function buildJukeboxData(user) {
+  return lobbyCustomization.buildJukeboxData(user);
 }
 
 function buildZlongUserData() {
   return writeString("");
 }
 
-function buildBackgroundInfoData() {
-  return Buffer.concat([writeSignedVarInt(0), writeSignedVarInt(0), writeObjectList([])]);
+function buildBackgroundInfoData(user) {
+  return lobbyCustomization.buildBackgroundInfoData(user);
 }
 
 function buildTrimIntervalData() {
@@ -4693,9 +5762,11 @@ function buildGuildSimpleData() {
   return Buffer.concat([writeSignedVarLong(0n), writeString(""), writeSignedVarLong(0n)]);
 }
 
-function buildSupportUnitData() {
+function buildSupportUnitData(user) {
+  const supportUnit = ensureSupportUnit(user);
+  if (supportUnit) return buildPersistedSupportUnitData(user, supportUnit);
   return Buffer.concat([
-    writeSignedVarLong(0n),
+    writeSignedVarLong(toBigInt(user && user.userUid ? user.userUid : 0)),
     writeNullableObject(buildAsyncUnitEquipData()),
     writeSignedVarLong(0n),
   ]);
@@ -4705,9 +5776,10 @@ function buildAsyncUnitEquipData() {
   return Buffer.concat([writeNullableObject(buildAsyncUnitData()), writeObjectList([])]);
 }
 
-function buildMinimalUserOption() {
+function buildMinimalUserOption(user) {
+  const controls = getSavedCombatControls(user);
   return Buffer.concat([
-    writeBool(false), // m_bAutoRespawn
+    writeBool(controls.autoRespawnEnabled), // m_bAutoRespawn
     writeSignedVarInt(0), // ActionCameraType
     writeBool(true), // m_bTrackCamera
     writeBool(true), // m_bViewSkillCutIn
@@ -4715,8 +5787,8 @@ function buildMinimalUserOption() {
     writeBool(true), // m_bAutoWarfareRepair
     writeBool(false), // m_bPlayCutscene
     writeBool(false), // m_bAutoDive
-    writeSignedVarInt(0), // speed
-    writeSignedVarInt(1), // auto skill off (NKM_GAME_AUTO_SKILL_TYPE.NGST_OFF_HYPER)
+    writeSignedVarInt(controls.gameSpeedType), // speed
+    writeSignedVarInt(controls.autoSkillType), // auto skill off (NKM_GAME_AUTO_SKILL_TYPE.NGST_OFF_HYPER)
     writeBool(true), // auto sync friend deck
     writeSignedVarInt(0), // default pvp auto respawn
     writeSignedVarInt(0), // private pvp invitation
@@ -4726,7 +5798,7 @@ function buildMinimalUserOption() {
 function buildMinimalShopData(user) {
   return Buffer.concat([
     writeObjectMapInt(buildShopPurchaseHistoryEntries(user)), // histories
-    writeNullObject(), // randomShop
+    writeNullableObject(buildSerializedRandomShopData(user)), // randomShop
     writeObjectMapInt([]), // subscriptions
   ]);
 }
@@ -4745,24 +5817,90 @@ function buildShopPurchaseHistoryData(history) {
 }
 
 function buildMinimalMissionData(user) {
+  const repairedTutorialMissions = CLEAR_ALL_MISSIONS_STATUS ? 0 : repairPostTutorialGuideMissionCompletions(user);
+  if (repairedTutorialMissions > 0 && USE_LOCAL_USER_DB) saveUserDb();
+  const missionEntries = LOBBY_LOCAL_MISSION_DATA
+    ? buildSerializedMissionDataEntries(user, { now: Date.now(), fastLobby: true })
+    : [];
   return Buffer.concat([
     writeObjectMapInt([]), // dicRefreshInfo
-    writeObjectMapInt(buildMissionDataEntries(user)), // dicMissions
+    writeObjectMapInt(missionEntries), // dicMissions
     writeSignedVarLong(getAchievePoint(user)), // achievePoint
   ]);
 }
 
-function buildMissionDataEntries(user) {
+function buildSerializedMissionDataEntries(user, options = {}) {
+  const entries = options.fastLobby
+    ? buildFastLobbyMissionDataEntries(user, options)
+    : buildAccountMissionDataEntries(user, options);
+  return entries.map(([groupId, mission]) => [
+    Number(groupId || (mission && mission.groupId) || (mission && mission.missionID) || 0),
+    buildMissionData(Number(mission && mission.missionID) || 0, mission),
+  ]);
+}
+
+function buildFastLobbyMissionDataEntries(user, options = {}) {
+  const result = new Map();
+  for (const [groupId, mission] of buildPersistedLobbyMissionEntries(user)) {
+    result.set(Number(groupId), [Number(groupId), mission]);
+  }
+  for (const tabId of FAST_LOBBY_MISSION_TABS) {
+    for (const [groupId, mission] of buildAccountMissionDataEntries(user, { ...options, fastLobby: false, tabId })) {
+      result.set(Number(groupId), [Number(groupId), mission]);
+    }
+  }
+  return Array.from(result.values()).sort((a, b) => Number(a[0]) - Number(b[0]));
+}
+
+function buildPersistedLobbyMissionEntries(user) {
   const completedMissions =
     user && user.completedMissions && typeof user.completedMissions === "object" ? user.completedMissions : {};
-  return Object.entries(completedMissions)
-    .map(([key, mission]) => {
-      const missionId = Number((mission && mission.missionID) || key);
-      if (!Number.isInteger(missionId) || missionId <= 0) return null;
-      const groupId = Number((mission && mission.groupId) || missionId);
-      return [groupId, buildMissionData(missionId, mission)];
-    })
-    .filter(Boolean);
+  const result = new Map();
+  for (const [key, mission] of Object.entries(completedMissions)) {
+    const snapshot = normalizePersistedMissionSnapshot(key, mission);
+    if (!snapshot || shouldSkipPersistedLobbyMission(snapshot)) continue;
+    const groupId = Number(snapshot.groupId || snapshot.missionID || 0);
+    if (!Number.isInteger(groupId) || groupId <= 0) continue;
+    const existing = result.get(groupId);
+    if (!existing || shouldPreferMissionSnapshot(snapshot, existing)) result.set(groupId, snapshot);
+  }
+  return Array.from(result.entries());
+}
+
+function normalizePersistedMissionSnapshot(key, mission) {
+  if (!mission || typeof mission !== "object") return null;
+  const numericKey = Number(String(key || "").split(":")[0]);
+  const missionID = Number(mission.missionID || mission.missionId || mission.id || numericKey || 0);
+  const groupId = Number(mission.groupId || mission.group_id || mission.missionGroupId || missionID || 0);
+  if (!Number.isInteger(missionID) || missionID <= 0 || !Number.isInteger(groupId) || groupId <= 0) return null;
+  const claimed = mission.rewardClaimed === true || mission.isComplete === true || Boolean(mission.claimedAt);
+  return {
+    ...mission,
+    tabId: Number(mission.tabId || 1) || 1,
+    groupId,
+    missionID,
+    times: Math.max(0, Number(mission.times || mission.targetTimes || (claimed ? 1 : 0)) || 0),
+    targetTimes: Math.max(1, Number(mission.targetTimes || mission.times || 1) || 1),
+    rewardReady: mission.rewardReady === true || claimed,
+    isComplete: claimed || mission.isComplete === true,
+    rewardClaimed: claimed,
+    lastUpdateDate: mission.lastUpdateDate || dateTimeTicksNow(),
+  };
+}
+
+function shouldSkipPersistedLobbyMission(mission) {
+  const tabId = Number(mission && mission.tabId || 0);
+  return tabId === 2 || tabId === 3;
+}
+
+function shouldPreferMissionSnapshot(candidate, existing) {
+  const candidateMissionId = Number(candidate && candidate.missionID || 0);
+  const existingMissionId = Number(existing && existing.missionID || 0);
+  if (candidateMissionId !== existingMissionId) return candidateMissionId > existingMissionId;
+  const candidateClaimed = candidate && candidate.rewardClaimed === true ? 1 : 0;
+  const existingClaimed = existing && existing.rewardClaimed === true ? 1 : 0;
+  if (candidateClaimed !== existingClaimed) return candidateClaimed > existingClaimed;
+  return Number(candidate && candidate.times || 0) > Number(existing && existing.times || 0);
 }
 
 function buildMissionData(missionId, mission = {}) {
@@ -4770,19 +5908,24 @@ function buildMissionData(missionId, mission = {}) {
     writeSignedVarInt(Number(mission.tabId || 1)),
     writeSignedVarInt(missionId),
     writeSignedVarInt(Number(mission.groupId || missionId)),
-    writeSignedVarLong(BigInt(Math.max(0, Number(mission.times || 1)))),
-    writeSignedVarLong(coerceDateTimeBinary(mission.lastUpdateDate)),
-    writeBool(mission.isComplete !== false),
+    writeSignedVarLong(BigInt(Math.max(0, Number(mission.times || 0)))),
+    writeSignedVarLong(coerceDateTimeTicks(mission.lastUpdateDate)),
+    writeBool(mission.rewardClaimed === true || mission.isComplete === true || Boolean(mission.claimedAt)),
   ]);
 }
 
-function coerceDateTimeBinary(value) {
+function coerceDateTimeTicks(value) {
   try {
-    if (value == null || value === "") return dateTimeBinaryNow();
-    return BigInt(String(value));
+    if (value == null || value === "") return dateTimeTicksNow();
+    const parsed = BigInt(String(value));
+    return parsed > 9000000000000000n ? parsed & 0x3fffffffffffffffn : parsed;
   } catch (_) {
-    return dateTimeBinaryNow();
+    return dateTimeTicksNow();
   }
+}
+
+function dateTimeTicksNow() {
+  return BigInt(Date.now()) * 10000n + 621355968000000000n;
 }
 
 function loadUserDb(filePath) {
@@ -5002,8 +6145,11 @@ function ensureUserDefaults(user) {
   ensureAccountProgress(user);
   user.authLevel = Number(user.authLevel || 1);
   user.contentsVersion = user.contentsVersion || CONTENTS_VERSION;
-  user.contentsTags = Array.isArray(user.contentsTags) && user.contentsTags.length ? user.contentsTags : CONTENTS_TAGS.slice();
-  user.openTags = Array.isArray(user.openTags) ? user.openTags : OPEN_TAGS.slice();
+  user.contentsTags = mergeTags(
+    Array.isArray(user.contentsTags) && user.contentsTags.length ? user.contentsTags : CONTENTS_TAGS,
+    REQUIRED_CONTENTS_TAGS
+  );
+  user.openTags = mergeTags(Array.isArray(user.openTags) && user.openTags.length ? user.openTags : OPEN_TAGS, REQUIRED_STORY_OPEN_TAGS);
   user.dungeonClear = user.dungeonClear && typeof user.dungeonClear === "object" ? user.dungeonClear : {};
   user.completedMissions =
     user.completedMissions && typeof user.completedMissions === "object" ? user.completedMissions : {};
@@ -5019,7 +6165,8 @@ function ensureUserDefaults(user) {
     : { enabled: true, firstStageId: 11211, firstDungeonId: 1004 };
   ensureTutorialState(user);
   scrubTutorialEpisodeClearProgress(user);
-  ensureEpisode1State(user);
+  ensureMainStoryState(user);
+  if (!CLEAR_ALL_MISSIONS_STATUS) repairPostTutorialGuideMissionCompletions(user);
   return user;
 }
 
@@ -5518,6 +6665,17 @@ function parseTags(raw) {
     .split(",")
     .map((tag) => tag.trim())
     .filter(Boolean);
+}
+
+function mergeTags(...groups) {
+  return Array.from(
+    new Set(
+      groups
+        .flatMap((group) => (Array.isArray(group) ? group : parseTags(String(group || ""))))
+        .map((tag) => String(tag || "").trim())
+        .filter(Boolean)
+    )
+  );
 }
 
 function parseGameUnitGroups(raw) {

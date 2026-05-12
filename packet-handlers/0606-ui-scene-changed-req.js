@@ -1,6 +1,7 @@
 const { readSignedVarInt } = require("../modules/packet-codec");
 
 const NSI_GAME = 3;
+const NSI_OPERATION = 9;
 
 module.exports = {
   packetId: 606,
@@ -12,6 +13,12 @@ module.exports = {
     }
     const replay = socket.session && socket.session.gameReplay;
     if (replay) replay.lastSceneId = sceneId;
+    if (sceneId === NSI_OPERATION && typeof ctx.repairPostTutorialGuideMissionsForSocket === "function") {
+      ctx.repairPostTutorialGuideMissionsForSocket(socket, {
+        label: "operation-post-tutorial-guide-mission-complete",
+        notify: true,
+      });
+    }
     if (
       ctx.config.DYNAMIC_BATTLE_MANAGER &&
       replay &&

@@ -90,7 +90,13 @@ function buildInitialBattleSync(replay, options = {}) {
   const battleState = replay.battleState || null;
   if (!battleState) {
     const gameTime = Number(replay.syntheticGameTime || 4);
-    return buildGameSync({ gameTime, absoluteGameTime: gameTime }, options);
+    return buildGameSync({
+      gameTime,
+      absoluteGameTime: gameTime,
+      dynamicGame: game,
+      gameSpeedType: replay.gameSpeedType,
+      autoSkillType: replay.autoSkillType,
+    }, options);
   }
   game.initialUnitsSent = true;
   // Stage units map into 822 here. They must reference gameUnitUIDs that already
@@ -100,6 +106,9 @@ function buildInitialBattleSync(replay, options = {}) {
       gameTime: battleState.gameTime,
       absoluteGameTime: battleState.absoluteGameTime,
       remainGameTime: battleState.remainGameTime,
+      dynamicGame: game,
+      gameSpeedType: replay.gameSpeedType,
+      autoSkillType: replay.autoSkillType,
       units: battleState.units,
       gameStates: [battleState.gameState],
     },

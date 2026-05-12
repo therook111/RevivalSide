@@ -41,6 +41,7 @@ const {
 } = require("../unit");
 const { getPlayableShipIds, getPlayableOperatorIds } = require("../game-data");
 const { getEquipItems } = require("../equipment");
+const { ensureAccountProgress } = require("../account-progression");
 
 const PACKET_NAMES = Object.freeze({
   15: "WARFARE_FRIEND_LIST_REQ",
@@ -68,9 +69,7 @@ function createCombatRosterHandlers() {
         const request = decodeRequest(ctx, packetId, packet.payload);
         const response = buildResponse(ctx, user, packetId, request);
         console.log(`[roster:${PACKET_NAMES[packetId]}] ACK packetId=${response.packetId} ${response.log || ""}`.trim());
-        ctx.sendResponse(socket, packet.sequence, response.packetId, () =>
-          ctx.buildEncryptedPacket(packet.sequence, response.packetId, response.payload)
-        );
+        sendRosterResponse(ctx, socket, packet, response);
         if (ctx.config.USE_LOCAL_USER_DB) ctx.saveUserDb();
         return true;
       },
@@ -370,19 +369,95 @@ function setMySupportAck(user, unitUid) {
   const supportUnit = getUnitForSupport(user, unitUid) || ensureSupportUnit(user);
   user.support = user.support && typeof user.support === "object" ? user.support : {};
   user.support.mySupportUnitUid = supportUnit ? String(toBigInt(supportUnit.unitUid)) : "0";
+  user.support.mySupportUnitUpdatedAt = new Date().toISOString();
   return ack(1665, Buffer.concat([writeSignedVarInt(0), writeNullableObject(buildSupportUnitData(user, supportUnit))]), `unitUid=${user.support.mySupportUnitUid}`);
 }
 
 function setDungeonSupportAck(user, rawRequestPayload) {
   user.support = user.support && typeof user.support === "object" ? user.support : {};
   if (rawRequestPayload && rawRequestPayload.length) {
-    user.support.dungeonSupportRaw = rawRequestPayload.toString("base64");
+    persistDungeonSupportSelection(user, rawRequestPayload);
     return ack(1667, Buffer.concat([writeSignedVarInt(0), rawRequestPayload]), "echo=raw");
   }
   const supportUnit = ensureSupportUnit(user);
   const payload = writeNullableObject(buildDungeonSupportData(user, supportUnit, { deckType: 1, index: 0 }));
-  user.support.dungeonSupportRaw = payload.toString("base64");
+  persistDungeonSupportSelection(user, payload);
   return ack(1667, Buffer.concat([writeSignedVarInt(0), payload]), "echo=generated");
+}
+
+function persistDungeonSupportSelection(user, rawRequestPayload) {
+  user.support = user.support && typeof user.support === "object" ? user.support : {};
+  const raw = Buffer.isBuffer(rawRequestPayload) ? rawRequestPayload : Buffer.from(rawRequestPayload || []);
+  const parsed = decodeDungeonSupportSelection(raw);
+  if (parsed.userUid === "0") {
+    delete user.support.dungeonSupportRaw;
+    delete user.support.dungeonSupportUserUid;
+    delete user.support.dungeonSupportDeckIndex;
+    user.support.dungeonSupportUpdatedAt = new Date().toISOString();
+    return;
+  }
+  user.support.dungeonSupportRaw = raw.toString("base64");
+  if (parsed.userUid) user.support.dungeonSupportUserUid = parsed.userUid;
+  if (parsed.deckIndex) user.support.dungeonSupportDeckIndex = parsed.deckIndex;
+  user.support.dungeonSupportUpdatedAt = new Date().toISOString();
+}
+
+function decodeDungeonSupportSelection(rawRequestPayload) {
+  if (!rawRequestPayload || !rawRequestPayload.length) return { userUid: "", deckIndex: null };
+  let objectOffset = 0;
+  try {
+    const present = readBool(rawRequestPayload, 0);
+    if (!present.value && rawRequestPayload.length === present.offset) return { userUid: "0", deckIndex: null };
+    if (present.value) objectOffset = present.offset;
+  } catch (_) {
+    objectOffset = 0;
+  }
+
+  try {
+    const userUid = readSignedVarLong(rawRequestPayload, objectOffset);
+    return {
+      userUid: String(toBigInt(userUid.value || 0)),
+      deckIndex: decodeDeckIndexFromTail(rawRequestPayload),
+    };
+  } catch (_) {
+    if (objectOffset !== 0) {
+      try {
+        const userUid = readSignedVarLong(rawRequestPayload, 0);
+        return {
+          userUid: String(toBigInt(userUid.value || 0)),
+          deckIndex: decodeDeckIndexFromTail(rawRequestPayload),
+        };
+      } catch (_) {
+        return { userUid: "", deckIndex: null };
+      }
+    }
+    return { userUid: "", deckIndex: null };
+  }
+}
+
+function decodeDeckIndexFromTail(rawRequestPayload) {
+  const start = Math.max(0, rawRequestPayload.length - 12);
+  let nullDeckIndex = null;
+  for (let offset = start; offset < rawRequestPayload.length; offset += 1) {
+    try {
+      const present = readBool(rawRequestPayload, offset);
+      if (!present.value) {
+        if (present.offset === rawRequestPayload.length) nullDeckIndex = { deckType: 0, index: 0 };
+        continue;
+      }
+      const deckType = readSignedVarInt(rawRequestPayload, present.offset);
+      const index = readByte(rawRequestPayload, deckType.offset);
+      if (index.offset === rawRequestPayload.length) {
+        return {
+          deckType: Number(deckType.value || 0),
+          index: Number(index.value || 0),
+        };
+      }
+    } catch (_) {
+      // Try the next possible tail offset.
+    }
+  }
+  return nullDeckIndex;
 }
 
 function updateDefenceDeckAck(user, rawRequestPayload) {
@@ -399,10 +474,27 @@ function updateDefenceDeckAck(user, rawRequestPayload) {
 
 function ensureSupportUnit(user) {
   user.support = user.support && typeof user.support === "object" ? user.support : {};
+  hydratePersistedDungeonSupportSelection(user);
   const saved = user.support.mySupportUnitUid;
   const unit = getUnitForSupport(user, saved) || getArmyUnits(user)[0] || null;
-  if (unit) user.support.mySupportUnitUid = String(toBigInt(unit.unitUid));
+  if (unit) {
+    user.support.mySupportUnitUid = String(toBigInt(unit.unitUid));
+  } else if (saved != null && String(toBigInt(saved)) !== "0") {
+    user.support.mySupportUnitUid = "0";
+  }
   return unit;
+}
+
+function hydratePersistedDungeonSupportSelection(user) {
+  const support = user && user.support && typeof user.support === "object" ? user.support : null;
+  if (!support || !support.dungeonSupportRaw || support.dungeonSupportUserUid) return;
+  try {
+    const parsed = decodeDungeonSupportSelection(Buffer.from(String(support.dungeonSupportRaw), "base64"));
+    if (parsed.userUid && parsed.userUid !== "0") support.dungeonSupportUserUid = parsed.userUid;
+    if (parsed.deckIndex) support.dungeonSupportDeckIndex = parsed.deckIndex;
+  } catch (_) {
+    // Keep the legacy raw value; it can still be echoed back on the next selection.
+  }
 }
 
 function getUnitForSupport(user, unitUid) {
@@ -462,6 +554,7 @@ function buildAsyncUnitData(unit) {
 }
 
 function buildCommonProfileData(user) {
+  user = ensureAccountProgress(user || {}) || {};
   return Buffer.concat([
     writeSignedVarLong(toBigInt(user.userUid || 0)),
     writeSignedVarLong(toBigInt(user.friendCode || 0)),
@@ -641,6 +734,16 @@ function ack(packetId, payload, log = "") {
   return { packetId, payload, log };
 }
 
+function sendRosterResponse(ctx, socket, packet, response) {
+  if (ctx && typeof ctx.sendGameResponse === "function") {
+    ctx.sendGameResponse(socket, packet, response.packetId, response.payload, `roster-${response.packetId}`);
+    return;
+  }
+  ctx.sendResponse(socket, packet.sequence, response.packetId, () =>
+    ctx.buildEncryptedPacket(packet.sequence, response.packetId, response.payload)
+  );
+}
+
 function normalizeFixedArray(values, length, fallback) {
   const result = Array.isArray(values) ? values.slice(0, length) : [];
   while (result.length < length) result.push(fallback);
@@ -663,4 +766,8 @@ function normalizeSlotIndex(slotId, length) {
 
 module.exports = {
   createCombatRosterHandlers,
+  ensureSupportUnit,
+  buildSupportUnitData,
+  buildSupportUnitProfileData,
+  buildDungeonSupportData,
 };

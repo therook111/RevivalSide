@@ -1,5 +1,5 @@
 const { ensureLoginRewardPosts } = require("../modules/admin");
-const { ensureAttendanceRewardPosts } = require("../modules/attendance");
+const { buildAttendanceNotifyPayload, ensureAttendanceRewardPosts } = require("../modules/attendance");
 
 module.exports = {
   packetId: 204,
@@ -36,6 +36,13 @@ module.exports = {
           joinLobbyPayload,
           "join-lobby-local-progress"
         );
+        if (typeof ctx.repairPostTutorialGuideMissionsForSocket === "function") {
+          ctx.repairPostTutorialGuideMissionsForSocket(socket, {
+            label: "join-lobby-post-tutorial-guide-mission-complete",
+            notify: true,
+          });
+        }
+        ctx.sendStaminaChargeNotifications(socket, "join-lobby-charge-item", { includeUnchanged: true, itemIds: [2, 13] });
         replay.localJoinLobbyAckSent = true;
         sendPostLobbyBootTemplates(ctx, socket, replay);
         ctx.skipCapturedGameThroughPacketId(socket, ctx.constants.JOIN_LOBBY_ACK);
@@ -44,6 +51,12 @@ module.exports = {
           console.log("[JOIN_LOBBY_REQ] using captured lobby ACK; local account overlay disabled");
         }
         ctx.sendCapturedGameThroughPacketId(socket, ctx.constants.JOIN_LOBBY_ACK, "join-lobby");
+        if (typeof ctx.repairPostTutorialGuideMissionsForSocket === "function") {
+          ctx.repairPostTutorialGuideMissionsForSocket(socket, {
+            label: "join-lobby-post-tutorial-guide-mission-complete",
+            notify: true,
+          });
+        }
       }
       return true;
     }
@@ -60,13 +73,21 @@ module.exports = {
       joinLobbyPayload,
       "join-lobby-local-progress"
     );
+    if (typeof ctx.repairPostTutorialGuideMissionsForSocket === "function") {
+      ctx.repairPostTutorialGuideMissionsForSocket(socket, {
+        label: "join-lobby-post-tutorial-guide-mission-complete",
+        notify: true,
+      });
+    }
+    replay.nextServerSequence = Math.max(Number(replay.nextServerSequence || 1), Number(packet.sequence || 0) + 1);
+    ctx.sendStaminaChargeNotifications(socket, "join-lobby-charge-item", { includeUnchanged: true, itemIds: [2, 13] });
     replay.localJoinLobbyAckSent = true;
     sendPostLobbyBootTemplates(ctx, socket, replay);
     return true;
   },
 };
 
-function sendJoinLobbyBootTemplates(ctx, socket, replay) {
+function sendJoinLobbyBootTemplates(ctx, socket, replay, user) {
   ctx.sendCapturedGameTemplateRange(socket, 1, 1, "join-lobby-boot");
   ctx.sendServerGamePacket(
     socket,
@@ -74,14 +95,16 @@ function sendJoinLobbyBootTemplates(ctx, socket, replay) {
     Buffer.concat([ctx.writeSignedVarInt(0), ctx.writeSignedVarInt(0)]),
     "join-lobby-boot-company-buff"
   );
-  ctx.sendCapturedGameTemplateRange(socket, 3, 7, "join-lobby-boot");
+  ctx.sendCapturedGameTemplateRange(socket, 3, 5, "join-lobby-boot");
+  const attendancePayload = buildAttendanceNotifyPayload(user, { consumePrompt: true });
+  if (attendancePayload) {
+    ctx.sendServerGamePacket(socket, 1640, attendancePayload, "attendance-not");
+  }
+  ctx.sendCapturedGameTemplateRange(socket, 7, 7, "join-lobby-boot");
   replay.bootLobbyTemplateSent = true;
 }
 
 function sendPostLobbyBootTemplates(ctx, socket, replay) {
   if (replay.bootPostListTemplateSent) return;
-  // In the official boot these notifies arrive immediately after JOIN_LOBBY_ACK
-  // and before POST_LIST_REQ. They include the mission/achievement prompt data.
-  ctx.sendCapturedGameTemplateRange(socket, 9, 18, "post-lobby-boot");
   replay.bootPostListTemplateSent = true;
 }

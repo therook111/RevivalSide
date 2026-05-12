@@ -270,6 +270,22 @@ function buildRewardUnitExpData(unitExp) {
   ]);
 }
 
+function buildMoldItemData(mold) {
+  const data = mold || {};
+  return Buffer.concat([
+    writeSignedVarInt(Number(data.moldId != null ? data.moldId : data.m_MoldID || 0) || 0),
+    writeSignedVarLong(toBigInt(data.count != null ? data.count : data.m_Count || 0)),
+  ]);
+}
+
+function buildBingoTileData(tile) {
+  const data = tile || {};
+  return Buffer.concat([
+    writeSignedVarInt(Number(data.eventId != null ? data.eventId : data.m_EventID || 0) || 0),
+    writeSignedVarInt(Number(data.tileIndex != null ? data.tileIndex : data.m_TileIndex || 0) || 0),
+  ]);
+}
+
 function buildShipCmdSlotData(slot) {
   const data = slot || {};
   return Buffer.concat([
@@ -365,6 +381,16 @@ function buildRewardData(reward) {
   const emoticonIds = Array.isArray(data.emoticonIds) ? data.emoticonIds : [];
   const units = Array.isArray(data.units) ? data.units : Array.isArray(data.unitDataList) ? data.unitDataList : [];
   const operators = Array.isArray(data.operators) ? data.operators : [];
+  const moldItems = Array.isArray(data.moldItems)
+    ? data.moldItems
+    : Array.isArray(data.moldItemDataList)
+      ? data.moldItemDataList
+      : [];
+  const bingoTiles = Array.isArray(data.bingoTiles)
+    ? data.bingoTiles
+    : Array.isArray(data.bingoTileList)
+      ? data.bingoTileList
+      : [];
   const unitExpDataList = Array.isArray(data.unitExpDataList)
     ? data.unitExpDataList
     : Array.isArray(data.unitExpData)
@@ -386,13 +412,13 @@ function buildRewardData(reward) {
     writeNullableObjectList(equips.map(buildEquipItemData)), // equipItemDataList
     writeNullableObjectList(unitExpDataList.map(buildRewardUnitExpData)), // unitExpDataList
     writeIntList(skinIds),
-    writeNullableObjectList([]), // moldItemDataList
+    writeNullableObjectList(moldItems.map(buildMoldItemData)), // moldItemDataList
     writeNullableObjectList([]), // companyBuffDataList
     writeNullableObjectList([]), // companyBuffDataList duplicate
     writeIntList(emoticonIds),
     writeSignedVarInt(Number(data.dailyMissionPoint || 0) || 0),
     writeSignedVarInt(Number(data.weeklyMissionPoint || 0) || 0),
-    writeNullableObjectList([]), // bingoTileList
+    writeNullableObjectList(bingoTiles.map(buildBingoTileData)), // bingoTileList
     writeSignedVarLong(toBigInt(data.achievePoint || 0)),
     writeNullableObjectList(operators.map(buildOperatorData)),
     writeNullableObjectList(data.contractList || []),
@@ -680,6 +706,8 @@ module.exports = {
   buildEquipProfileInfoData,
   buildItemMiscData,
   buildRewardUnitExpData,
+  buildMoldItemData,
+  buildBingoTileData,
   buildShipCmdSlotData,
   buildShipCmdModuleData,
   buildShipModuleCandidateData,

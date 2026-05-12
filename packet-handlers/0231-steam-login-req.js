@@ -15,13 +15,14 @@ module.exports = {
       socket.session.user = user;
       ctx.setLastEffectiveAccessToken(user.accessToken || "");
       ctx.prepareTutorialLogin(user);
+      ctx.recordMissionLogin(user, { now: ctx.dateTimeBinaryNow ? ctx.dateTimeBinaryNow() : undefined });
       const cleanup = applyLocalAccountCleanup(user, ctx.config);
       const rewardPosts = ensureLoginRewardPosts(user);
       const attendancePosts = ensureAttendanceRewardPosts(user);
       ctx.saveUserDb();
       if (cleanup.changed) {
         console.log(
-          `[user-db] cleanup uid=${user.userUid} unitsLevel1=${cleanup.unitsLevel1} gearUnenhanced=${cleanup.gearUnenhanced} shipsLevel1=${cleanup.shipsLevel1} operatorsLevel1=${cleanup.operatorsLevel1}`
+          `[user-db] cleanup uid=${user.userUid} missionStatus=${cleanup.missionStatus || 0} unitsLevel1=${cleanup.unitsLevel1} gearUnenhanced=${cleanup.gearUnenhanced} shipsLevel1=${cleanup.shipsLevel1} operatorsLevel1=${cleanup.operatorsLevel1}`
         );
       }
       console.log(

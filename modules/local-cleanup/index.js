@@ -15,10 +15,19 @@ function applyLocalAccountCleanup(user, options = {}) {
     shipsLevel1: 0,
     operatorsLevel1: 0,
     gearUnenhanced: 0,
+    missionStatus: 0,
     changed: false,
   };
   if (!user || typeof user !== "object") return result;
 
+  const clearAllMissionsStatus = optionFlag(
+    options.CLEAR_ALL_MISSIONS_STATUS,
+    "clearAllMissionsStatus",
+    "clearallmissionsstatus",
+    "CLEARALLMISSIONSSTATUS",
+    "CS_CLEAR_ALL_MISSIONS_STATUS",
+    "CS_CLEAR_ALL_MISSION_STATUS"
+  );
   const clearUnitsLevel1 = optionFlag(options.CLEAR_UNITS_LEVEL1, "clearUnitsLevel1", "CLEARUNITSLEVEL1", "CS_CLEAR_UNITS_LEVEL1", "CS_CLEAR_UNITS_LEVEL_1");
   const clearGearUnenhanced = optionFlag(options.CLEAR_GEAR_UNENHANCED, "clearGearUnenhanced", "CLEARGEARUNENHANCED", "CS_CLEAR_GEAR_UNENHANCED");
   const clearShipsLevel1 = optionFlag(options.CLEAR_SHIPS_LEVEL1, "clearShipsLevel1", "CLEARSHIPSLEVEL1", "CS_CLEAR_SHIPS_LEVEL1", "CS_CLEAR_SHIPS_LEVEL_1");
@@ -30,10 +39,14 @@ function applyLocalAccountCleanup(user, options = {}) {
     "CS_CLEAR_OPERATORS_LEVEL_1"
   );
 
-  if (!clearUnitsLevel1 && !clearGearUnenhanced && !clearShipsLevel1 && !clearOperatorsLevel1) return result;
+  if (!clearAllMissionsStatus && !clearUnitsLevel1 && !clearGearUnenhanced && !clearShipsLevel1 && !clearOperatorsLevel1) return result;
 
-  ensureArmy(user);
-  ensureEquipInventory(user);
+  if (clearAllMissionsStatus) {
+    result.missionStatus = clearMissionStatus(user);
+  }
+
+  if (clearUnitsLevel1 || clearShipsLevel1 || clearOperatorsLevel1) ensureArmy(user);
+  if (clearGearUnenhanced) ensureEquipInventory(user);
 
   const removedUnitUids = [];
   if (clearUnitsLevel1) {
@@ -75,7 +88,8 @@ function applyLocalAccountCleanup(user, options = {}) {
     result.unitsLevel1 > 0 ||
     result.shipsLevel1 > 0 ||
     result.operatorsLevel1 > 0 ||
-    result.gearUnenhanced > 0;
+    result.gearUnenhanced > 0 ||
+    result.missionStatus > 0;
   if (result.changed) {
     user.localCleanup = user.localCleanup && typeof user.localCleanup === "object" ? user.localCleanup : {};
     user.localCleanup.lastAppliedAt = new Date().toISOString();
@@ -84,9 +98,30 @@ function applyLocalAccountCleanup(user, options = {}) {
       shipsLevel1: result.shipsLevel1,
       operatorsLevel1: result.operatorsLevel1,
       gearUnenhanced: result.gearUnenhanced,
+      missionStatus: result.missionStatus,
     };
   }
   return result;
+}
+
+function clearMissionStatus(user) {
+  if (!user || typeof user !== "object") return 0;
+  let cleared = 0;
+  if (user.completedMissions && typeof user.completedMissions === "object") {
+    cleared += Object.keys(user.completedMissions).length;
+  }
+  if (user.missionCounters && typeof user.missionCounters === "object") {
+    cleared += Object.keys(user.missionCounters).length;
+  }
+  if (Array.isArray(user.missionLoginDays)) cleared += user.missionLoginDays.length;
+  if (Number(user.dailyMissionPoint || 0) > 0) cleared += 1;
+  if (Number(user.weeklyMissionPoint || 0) > 0) cleared += 1;
+  user.completedMissions = {};
+  user.missionCounters = {};
+  user.missionLoginDays = [];
+  user.dailyMissionPoint = 0;
+  user.weeklyMissionPoint = 0;
+  return cleared;
 }
 
 function optionFlag(value, ...envKeys) {

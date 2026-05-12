@@ -29,6 +29,7 @@ function createItemHandler(packetId, name) {
         packetId === PACKETS.RANDOM_ITEM_BOX_OPEN_REQ
           ? buildRandomItemBoxOpenAck(ctx, user, request)
           : buildChoiceItemUseAck(ctx, user, request);
+      trackItemUseMission(ctx, user, request);
       console.log(`[item:${name}] ACK packetId=${response.packetId} itemId=${request.itemId || request.itemID || 0} count=${request.count || 1}`);
       ctx.sendResponse(socket, packet.sequence, response.packetId, () =>
         ctx.buildEncryptedPacket(packet.sequence, response.packetId, response.payload)
@@ -37,6 +38,23 @@ function createItemHandler(packetId, name) {
       return true;
     },
   };
+}
+
+function trackItemUseMission(ctx, user, request = {}) {
+  if (!ctx || typeof ctx.trackMissionEvent !== "function") return;
+  const itemId = Number(request.itemId || request.itemID || 0);
+  const count = Math.max(1, Number(request.count || 1) || 1);
+  if (itemId <= 0 || count <= 0) return;
+  const nowValue = now(ctx);
+  const changed = ctx.trackMissionEvent(user, "USE_RESOURCE", count, {
+    now: nowValue,
+    itemId,
+    resourceId: itemId,
+    value: itemId,
+  });
+  if (changed && typeof ctx.refreshMissionProgress === "function") {
+    ctx.refreshMissionProgress(user, { now: nowValue, conditions: ["USE_RESOURCE"] });
+  }
 }
 
 function buildRandomItemBoxOpenAck(ctx, user, request) {

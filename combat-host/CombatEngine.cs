@@ -521,8 +521,11 @@ internal sealed class CombatEngine
             {
                 var unit = stage.PlayerDeck.Units[index];
                 if (string.IsNullOrWhiteSpace(unit.UnitUid)) continue;
-                var group = index < stage.DeployableGameUnitUIDGroups.Count
-                    ? stage.DeployableGameUnitUIDGroups[index]
+                var groupIndex = unit.SlotIndex >= 0 && unit.SlotIndex < stage.DeployableGameUnitUIDGroups.Count
+                    ? unit.SlotIndex
+                    : index;
+                var group = groupIndex < stage.DeployableGameUnitUIDGroups.Count
+                    ? stage.DeployableGameUnitUIDGroups[groupIndex]
                     : [];
                 if (group.Count == 0) continue;
                 pools.Ordered.Add(new UnitPool

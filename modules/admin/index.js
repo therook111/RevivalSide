@@ -30,6 +30,7 @@ const {
   getAllMiscItemIds,
   getPlayableUnitIds,
   getPlayableShipIds,
+  getTrophyUnitIds,
   getPlayableOperatorIds,
   getAllEquipIds,
   getAllSkinIds,
@@ -102,6 +103,12 @@ const DEFAULT_NEWBIE_REWARDS = Object.freeze([
 const DEFAULT_SIGN_IN_REWARDS = Object.freeze([
   { rewardType: "RT_MISC", id: RESOURCE_ITEM_IDS.CREDIT, count: envRewardCount("CS_SIGN_IN_CREDIT_REWARD", 30000) },
   { rewardType: "RT_MISC", id: RESOURCE_ITEM_IDS.ETERNIUM, count: envRewardCount("CS_SIGN_IN_ETERNIUM_REWARD", 1000) },
+]);
+const MAX_MAZE_CDR_SET_OPTION_ID = 241900;
+const MAX_MAZE_GEAR_BUNDLE = Object.freeze([
+  { id: 561141, count: 1 },
+  { id: 561241, count: 1 },
+  { id: 561341, count: 2 },
 ]);
 const GEAR_STAT_ALIASES = Object.freeze({
   ATK: "NST_ATK",
@@ -269,6 +276,9 @@ function handleAdminCommand(ctx, user, messageText) {
     const topic = String(tokens.shift() || "").toLowerCase();
     return { reply: topic === "gear" ? gearHelpText() : adminHelpText(), createdPosts: 0 };
   }
+  if (command === "clear") {
+    return clearAdminInbox(user);
+  }
   if (command !== "give" && command !== "grant" && command !== "mail") {
     return { reply: `Unknown admin command: ${command}\n${adminHelpText()}`, createdPosts: 0 };
   }
@@ -294,8 +304,9 @@ function parseGiveCommand(tokens, user = null) {
 
   if (kind === "everything") {
     countText = idText || countText;
-    return buildAllRewards(["items", "skins", "emoticons", "units", "ships", "operators", "gears"], countText);
+    return buildAllRewards(["items", "skins", "emoticons", "units", "trophies", "ships", "operators", "gears"], countText);
   }
+  if (kind === "maxmaze" || kind === "maze") return buildMaxMazeGearRewards(user);
   if (kind === "all") {
     kind = idText;
     idText = "all";
@@ -315,6 +326,9 @@ function parseGiveCommand(tokens, user = null) {
   if (!rewardIdExists(type, id) && !(normalizeKind(kind) === "currency" && Object.values(RESOURCE_ITEM_IDS).includes(id))) {
     return { ok: false, error: `No ${kind} id ${id} exists in local tables.` };
   }
+  if (normalizeKind(kind) === "trophy" && !isTrophyUnitId(id)) {
+    return { ok: false, error: `Unit id ${id} is not a NUST_TRAINER trophy unit.` };
+  }
   if (normalizeKind(kind) === "gear") return buildGearReward(id, [countText, ...tokens].filter((token) => token != null && token !== ""), user);
 
   const count = normalizeRewardCount(countText || 1);
@@ -324,6 +338,61 @@ function parseGiveCommand(tokens, user = null) {
     rewards,
     title: "Admin Delivery",
     contents: `Admin queued ${describeReward(rewards[0])}.`,
+  };
+}
+
+function buildMaxMazeGearRewards(user = null) {
+  const rewards = [];
+  for (const entry of MAX_MAZE_GEAR_BUNDLE) {
+    const gearOptions = buildMaxMazeGearOptions();
+    const validation = validateEquipCustomSubstats(entry.id, gearOptions.customSubstats || [], {
+      overrideUnsupportedSubstats: gearOptions.overrideUnsupportedSubstats,
+    });
+    const setValidation = validateGearSetOption(entry.id, gearOptions.setOptionId, {
+      overrideUnsupportedSetBonus: gearOptions.overrideUnsupportedSetBonus,
+    });
+    if (!setValidation.ok && setValidation.error) return setValidation;
+    if (!validation.ok && validation.unsupported.length) {
+      return { ok: false, error: formatUnsupportedSubstats(validation.unsupported) };
+    }
+    if (setValidation.unsupported) {
+      return { ok: false, error: formatUnsupportedSetBonus(setValidation.unsupported) };
+    }
+    rewards.push({
+      rewardType: "RT_EQUIP",
+      id: entry.id,
+      count: entry.count,
+      gearOptions,
+    });
+  }
+
+  if (user) ensureAdminState(user).pendingGearOverride = null;
+  return {
+    ok: true,
+    rewards,
+    title: "Admin Max Maze Delivery",
+    contents: "Admin queued a max Maze CDR set: weapon, armor, and two accessories.",
+  };
+}
+
+function buildMaxMazeGearOptions() {
+  return {
+    setOptionId: MAX_MAZE_CDR_SET_OPTION_ID,
+    customMainStat: {
+      type: "DEFAULT",
+      valueKind: "max",
+      value: null,
+      levelValueKind: "max",
+      levelValue: null,
+    },
+    customSubstats: [
+      {
+        slot: 2,
+        type: "NST_SKILL_COOL_TIME_REDUCE_RATE",
+        valueKind: "max",
+        value: null,
+      },
+    ],
   };
 }
 
@@ -714,6 +783,29 @@ function createAdminRewardPosts(user, rewards, title, contents) {
     posts.push(post);
   }
   return posts;
+}
+
+function clearAdminInbox(user) {
+  const state = ensureAdminState(user);
+  let clearedPosts = 0;
+  let clearedRewardLines = 0;
+  state.posts = state.posts.filter((post) => {
+    if (post.received) return true;
+    clearedPosts += 1;
+    clearedRewardLines += Array.isArray(post.rewards) ? post.rewards.length : 0;
+    return false;
+  });
+  state.pendingGearOverride = null;
+
+  if (!clearedPosts) {
+    return { reply: "Inbox is already clear.", createdPosts: 0, clearedPosts: 0, clearedRewardLines: 0 };
+  }
+  return {
+    reply: `Cleared ${clearedRewardLines} reward line${clearedRewardLines === 1 ? "" : "s"} from ${clearedPosts} inbox mail${clearedPosts === 1 ? "" : "s"}.`,
+    createdPosts: 0,
+    clearedPosts,
+    clearedRewardLines,
+  };
 }
 
 function ensureLoginRewardPosts(user, options = {}) {
@@ -1150,6 +1242,8 @@ function rewardTypeForKind(kind) {
       return "RT_MISC";
     case "unit":
       return "RT_UNIT";
+    case "trophy":
+      return "RT_UNIT";
     case "ship":
       return "RT_SHIP";
     case "operator":
@@ -1170,6 +1264,7 @@ function normalizeKind(kind) {
   if (["currency", "curr", "resource", "resources", "money"].includes(value)) return "currency";
   if (["item", "items", "misc", "miscitem", "miscitems"].includes(value)) return "item";
   if (["unit", "units", "character", "characters", "employee", "employees"].includes(value)) return "unit";
+  if (["trophy", "trophies", "trainer", "trainers"].includes(value)) return "trophy";
   if (["ship", "ships"].includes(value)) return "ship";
   if (["operator", "operators", "op", "ops"].includes(value)) return "operator";
   if (["gear", "gears", "equip", "equips", "equipment"].includes(value)) return "gear";
@@ -1197,6 +1292,8 @@ function idsForKind(kind) {
       return getAllMiscItemIds();
     case "unit":
       return getPlayableUnitIds();
+    case "trophy":
+      return getTrophyUnitIds();
     case "ship":
       return getPlayableShipIds();
     case "operator":
@@ -1229,6 +1326,11 @@ function rewardIdExists(rewardType, id) {
     default:
       return false;
   }
+}
+
+function isTrophyUnitId(id) {
+  const templet = getUnitTemplet(id);
+  return Boolean(templet && String(templet.m_NKM_UNIT_STYLE_TYPE || "") === "NUST_TRAINER");
 }
 
 function normalizeRewardType(type) {
@@ -1276,6 +1378,7 @@ function gearHelpText() {
     ...setRows.map((row) => `${row.id} ${row.name} parts=${row.parts} ${row.effects}`),
     "",
     "Usage:",
+    "/give maxmaze",
     "/give gear <gearId> [count] [set=<setId|alias>] [main=<stat>=<value|max>] [mainlevel=<value|max>] [substat=value|max] [substat=value|max]",
     "/give gear <gearId> set=hit main=default=max mainlevel=max sub1=7=max sub2=13=0.10",
     "/give gear <gearId> set=221200 main=NST_HP=2279 sub1=NST_CRITICAL_DAMAGE_RATE=max sub2=NST_SKILL_COOL_TIME_REDUCE_RATE=0.10",
@@ -1405,21 +1508,24 @@ function adminHelpText() {
     "/give currency <credits|eternium|quartz|admincoins|id> <count>",
     "/give item <id> <count>",
     "/give unit <id> [count]",
+    "/give trophy <id> [count]",
     "/give ship <id> [count]",
     "/give operator <id> [count]",
     "/give gear <id> [count] [set=<setId|alias>] [main=<stat>=<value|max>] [substat=value|max] [substat=value|max]",
+    "/give maxmaze",
     "/help gear",
     "/give skin <id>",
     "/give emoticon <id>",
-    "/give all items|units|ships|operators|gears|skins|emoticons [count]",
+    "/give all items|units|trophies|ships|operators|gears|skins|emoticons [count]",
     "/give everything [count]",
+    "/clear",
     "Rewards are delivered to Mail and granted when claimed.",
   ].join("\n");
 }
 
 function isAdminCommand(message) {
   const text = String(message || "").trim().toLowerCase();
-  return text.startsWith("/admin") || text.startsWith("/give") || text.startsWith("/grant") || text.startsWith("/mail") || text === "/help";
+  return text.startsWith("/admin") || text.startsWith("/give") || text.startsWith("/grant") || text.startsWith("/mail") || text.startsWith("/clear") || text === "/help";
 }
 
 function tokenizeCommand(input) {
@@ -1530,6 +1636,7 @@ module.exports = {
   ensureAdminState,
   ensureLoginRewardPosts,
   createAdminRewardPosts,
+  clearAdminInbox,
   handleAdminCommand,
   buildPostData,
   buildChatMessageData,

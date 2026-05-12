@@ -9,6 +9,8 @@
     "check:handlers": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Get-ChildItem packet-handlers,modules -Recurse -Filter *.js | Where-Object { $_.DirectoryName -match '[\\\\/]handlers$' } | ForEach-Object { node --check $_.FullName }\"",
     "build:combat-host": "dotnet build combat-host/CombatHost.csproj --nologo",
     "publish:combat-host": "dotnet publish combat-host/CombatHost.csproj -c Release --nologo -o prebuilt/combat-host",
-    "generate:packet-schema": "node tools/generate-packet-schema.js"
+    "generate:packet-schema": "node tools/generate-packet-schema.js",
+    "wiki:build": "node tools/build-revivalside-wiki.js",
+    "wiki:serve": "node tools/serve-revivalside-wiki.js"
   }
 }

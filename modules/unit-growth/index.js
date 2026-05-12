@@ -38,8 +38,16 @@ const {
   removeArmyUnitUids,
   removeOperatorUids,
 } = require("../unit");
-const { getPlayableShipIds } = require("../game-data");
-const { spendMiscItem, RESOURCE_ITEM_IDS } = require("../inventory");
+const {
+  getMaxLimitBreakRank,
+  getPlayableShipIds,
+  getUnitLimitBreakCosts,
+  getUnitSkillIndex,
+  getUnitSkillMaxLevel,
+  getUnitSkillUpgradeCosts,
+} = require("../game-data");
+const { spendMiscItem, getMiscItem, RESOURCE_ITEM_IDS } = require("../inventory");
+const collection = require("../collection");
 
 const PACKETS = Object.freeze({
   ENHANCE_UNIT_REQ: 1400,
@@ -120,6 +128,15 @@ const NEGOTIATION_OPTIONS = Object.freeze({
   PERMANENT_CONTRACT_EXP_BONUS_PERCENT: 20,
 });
 
+const ERROR_CODES = Object.freeze({
+  OK: 0,
+  UNIT_NOT_EXIST: 133,
+  UNIT_SKILL_NOT_EXIST: 147,
+  UNIT_SKILL_TEMPLET_NOT_EXIST: 148,
+  UNIT_SKILL_ALREADY_MAX: 149,
+  UNIT_SKILL_NOT_ENOUGH_ITEM: 151,
+});
+
 function createUnitGrowthHandlers() {
   return [
     handler(PACKETS.ENHANCE_UNIT_REQ, "ENHANCE_UNIT_REQ", handleEnhanceUnit),
@@ -156,14 +173,88 @@ function handler(packetId, name, buildResponse) {
       const request = decodeRequest(ctx, packetId, packet.payload);
       const response = buildResponse(ctx, user, request);
       if (!response) return false;
+      trackUnitGrowthMission(ctx, user, packetId, request);
       console.log(`[unit-growth:${name}] ACK packetId=${response.packetId} ${formatRequest(request)}`);
       ctx.sendResponse(socket, packet.sequence, response.packetId, () =>
         ctx.buildEncryptedPacket(packet.sequence, response.packetId, response.payload)
       );
+      sendUnitMissionCollectionUpdate(ctx, socket, user, packetId, request);
       persistUserDb(ctx);
       return true;
     },
   };
+}
+
+function sendUnitMissionCollectionUpdate(ctx, socket, user, packetId, request = {}) {
+  if (packetId !== PACKETS.NEGOTIATE_REQ && packetId !== PACKETS.LIMIT_BREAK_UNIT_REQ) return;
+  const unit = getArmyUnitByUid(user, request.unitUid);
+  if (!unit || !collection || typeof collection.sendUnitMissionUpdatedNot !== "function") return;
+  collection.sendUnitMissionUpdatedNot(ctx, socket, user, { unitIds: [unit.unitId] });
+}
+
+function trackUnitGrowthMission(ctx, user, packetId, request = {}) {
+  if (!ctx || typeof ctx.trackMissionEvent !== "function") return;
+  const now = ctx.dateTimeBinaryNow ? ctx.dateTimeBinaryNow() : undefined;
+  let changed = false;
+  const changedConditions = new Set();
+  const track = (condition, amount = 1, details = {}) => {
+    const tracked = ctx.trackMissionEvent(user, condition, amount, { now, ...details });
+    if (tracked) changedConditions.add(condition);
+    changed = tracked || changed;
+  };
+  const trackResourceSpend = (itemId, amount) => {
+    const numericItemId = Number(itemId || 0);
+    const numericAmount = Math.max(0, Math.trunc(Number(amount || 0) || 0));
+    if (numericItemId > 0 && numericAmount > 0) {
+      track("USE_RESOURCE", numericAmount, { itemId: numericItemId, resourceId: numericItemId, value: numericItemId });
+    }
+  };
+
+  switch (packetId) {
+    case PACKETS.ENHANCE_UNIT_REQ:
+      track("UNIT_TRAINING", 1, { unitUid: request.unitUid });
+      break;
+    case PACKETS.LIMIT_BREAK_UNIT_REQ:
+      track("UNIT_LIMITBREAK", 1, { unitUid: request.unitUid });
+      track("UNIT_GROWTH_LIMIT", 1, { unitUid: request.unitUid });
+      break;
+    case PACKETS.UNIT_TACTIC_UPDATE_REQ:
+      track("UNIT_GROWTH_TACTICAL", 1, { unitUid: request.unitUid });
+      break;
+    case PACKETS.UNIT_SKILL_UPGRADE_REQ:
+      track("UNIT_GROWTH_SKILL_LEVEL_3", 1, { unitUid: request.unitUid, value: request.skillId });
+      track("UNIT_GROWTH_SKILL_LEVEL_MAX", 1, { unitUid: request.unitUid, value: request.skillId });
+      break;
+    case PACKETS.CONTRACT_PERMANENTLY_REQ:
+      track("UNIT_GROWTH_PERMANENT", 1, { unitUid: request.unitUid });
+      break;
+    case PACKETS.SHIP_LEVELUP_REQ:
+      track("SHIP_LEVELUP", 1, { unitUid: request.shipUid });
+      break;
+    case PACKETS.LIMIT_BREAK_SHIP_REQ:
+      track("SHIP_LIMITBREAK", 1, { unitUid: request.shipUid });
+      break;
+    case PACKETS.OPERATOR_LEVELUP_REQ:
+      for (const material of request.materials || []) trackResourceSpend(material.itemId, material.count);
+      break;
+    case PACKETS.NEGOTIATE_REQ: {
+      const unit = getArmyUnitByUid(user, request.unitUid);
+      const materials = normalizeMaterialList(request.materials, UNIT_NEGOTIATION_MATERIALS, {
+        maxCount: NEGOTIATION_OPTIONS.MAX_MATERIAL_USAGE_LIMIT,
+      });
+      const selection = normalizeNegotiationSelection(request.negotiateBossSelection);
+      track("NEGOTIATION_TRY", 1, { unitUid: request.unitUid });
+      for (const material of materials) trackResourceSpend(material.itemId, material.count);
+      if (unit) trackResourceSpend(RESOURCE_ITEM_IDS.CREDIT, calculateNegotiationSalary(materials, selection));
+      break;
+    }
+    default:
+      break;
+  }
+
+  if (changed && typeof ctx.refreshMissionProgress === "function") {
+    ctx.refreshMissionProgress(user, { now, conditions: Array.from(changedConditions) });
+  }
 }
 
 function handleEnhanceUnit(_ctx, user, request) {
@@ -188,19 +279,39 @@ function handleRemoveUnit(_ctx, user, request) {
 }
 
 function handleLimitBreakUnit(_ctx, user, request) {
-  const unit = limitBreakUnit(user, request.unitUid) || getArmyUnitByUid(user, request.unitUid);
-  return response(PACKETS.LIMIT_BREAK_UNIT_ACK, [ok(), nullableUnit(unit), emptyItemList()]);
+  const currentUnit = getArmyUnitByUid(user, request.unitUid);
+  const costItems = currentUnit ? spendLimitBreakCosts(user, currentUnit) : [];
+  const unit = limitBreakUnit(user, request.unitUid) || currentUnit;
+  return response(PACKETS.LIMIT_BREAK_UNIT_ACK, [
+    ok(),
+    nullableUnit(unit),
+    writeNullableObjectList(costItems.map(buildItemMiscData)),
+  ]);
 }
 
 function handleSkillUpgrade(_ctx, user, request) {
-  const result = upgradeUnitSkill(user, request.unitUid, request.skillId) || {};
-  return response(PACKETS.UNIT_SKILL_UPGRADE_ACK, [
-    ok(),
-    writeSignedVarLong(request.unitUid),
-    writeSignedVarInt(request.skillId || 0),
-    writeSignedVarInt(result.skillLevel || 1),
-    emptyItemList(),
-  ]);
+  const unit = getArmyUnitByUid(user, request.unitUid);
+  if (!unit) return skillUpgradeResponse(request, ERROR_CODES.UNIT_NOT_EXIST, 1, []);
+
+  const skillIndex = resolveRequestedSkillIndex(unit, request.skillId);
+  if (skillIndex < 0) return skillUpgradeResponse(request, ERROR_CODES.UNIT_SKILL_NOT_EXIST, 1, []);
+
+  const currentLevel = getCurrentSkillLevel(unit, skillIndex);
+  const maxLevel = Math.max(1, getUnitSkillMaxLevel(request.skillId) || 5);
+  if (currentLevel >= maxLevel) {
+    return skillUpgradeResponse(request, ERROR_CODES.UNIT_SKILL_ALREADY_MAX, currentLevel, []);
+  }
+
+  const targetLevel = currentLevel + 1;
+  const costs = getUnitSkillUpgradeCosts(request.skillId, targetLevel);
+  if (!costs) return skillUpgradeResponse(request, ERROR_CODES.UNIT_SKILL_TEMPLET_NOT_EXIST, currentLevel, []);
+  if (!hasEnoughSkillUpgradeItems(user, costs)) {
+    return skillUpgradeResponse(request, ERROR_CODES.UNIT_SKILL_NOT_ENOUGH_ITEM, currentLevel, []);
+  }
+
+  const result = upgradeUnitSkill(user, request.unitUid, request.skillId, { maxSkillLevel: maxLevel }) || {};
+  const costItems = spendSkillUpgradeCosts(user, costs);
+  return skillUpgradeResponse(request, ERROR_CODES.OK, result.skillLevel || targetLevel, costItems);
 }
 
 function handleShipBuild(_ctx, user, request) {
@@ -387,6 +498,62 @@ function calculateNegotiationLoyalty(unit, materials, selection = NEGOTIATE_BOSS
     gain = Math.floor((gain * (100 + NEGOTIATION_OPTIONS.RAISE_LOYALTY_INCREASE_PERCENT)) / 100);
   }
   return Math.min(10000, current + gain);
+}
+
+function skillUpgradeResponse(request, errorCode, skillLevel, costItems) {
+  return response(PACKETS.UNIT_SKILL_UPGRADE_ACK, [
+    writeSignedVarInt(errorCode),
+    writeSignedVarLong(request.unitUid),
+    writeSignedVarInt(request.skillId || 0),
+    writeSignedVarInt(skillLevel || 1),
+    writeNullableObjectList((Array.isArray(costItems) ? costItems : []).map(buildItemMiscData)),
+  ]);
+}
+
+function resolveRequestedSkillIndex(unit, skillId) {
+  const mappedIndex = getUnitSkillIndex(unit && unit.unitId, skillId);
+  if (mappedIndex >= 0) return mappedIndex;
+  const numeric = Number(skillId || 0);
+  return Number.isInteger(numeric) && numeric >= 1 && numeric <= 5 ? numeric - 1 : -1;
+}
+
+function getCurrentSkillLevel(unit, skillIndex) {
+  const levels = Array.isArray(unit && unit.skillLevels) ? unit.skillLevels : [];
+  return Math.max(1, Math.trunc(Number(levels[skillIndex]) || 1));
+}
+
+function hasEnoughSkillUpgradeItems(user, costs) {
+  return (Array.isArray(costs) ? costs : []).every((cost) => hasEnoughMiscItem(user, cost.itemId, cost.count));
+}
+
+function hasEnoughMiscItem(user, itemId, count) {
+  const amount = Math.max(0, Math.trunc(Number(count || 0)));
+  if (amount <= 0) return true;
+  const item = getMiscItem(user, itemId);
+  if (!item) return false;
+  return toBigInt(item.countFree, 0n) + toBigInt(item.countPaid, 0n) >= BigInt(amount);
+}
+
+function spendSkillUpgradeCosts(user, costs) {
+  const updatedByItem = new Map();
+  for (const cost of Array.isArray(costs) ? costs : []) {
+    const item = spendMiscItem(user, cost.itemId, cost.count);
+    if (item) updatedByItem.set(Number(item.itemId), item);
+  }
+  return Array.from(updatedByItem.values()).sort((a, b) => Number(a.itemId) - Number(b.itemId));
+}
+
+function spendLimitBreakCosts(user, unit) {
+  const currentRank = Math.max(0, Number(unit && unit.limitBreakLevel) || 0);
+  const cap = getMaxLimitBreakRank({ maxLevel: 120 });
+  if (!unit || currentRank >= cap) return [];
+  const costs = getUnitLimitBreakCosts(unit.unitId, currentRank + 1);
+  const updatedByItem = new Map();
+  for (const cost of costs) {
+    const item = spendMiscItem(user, cost.itemId, cost.count);
+    if (item) updatedByItem.set(Number(item.itemId), item);
+  }
+  return Array.from(updatedByItem.values()).sort((a, b) => Number(a.itemId) - Number(b.itemId));
 }
 
 function spendNegotiationCosts(user, materials, finalSalary) {

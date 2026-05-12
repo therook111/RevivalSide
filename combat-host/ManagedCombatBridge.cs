@@ -45,6 +45,7 @@ internal static class ManagedCombatBridge
         "selectableContractState",
         "stagePlayDataList",
         "reconnectKey",
+        "backGroundInfo",
         "unlockedStageIds",
         "phaseClearDataList",
         "phaseModeState",
@@ -68,12 +69,13 @@ internal static class ManagedCombatBridge
         "m_UserOption",
         "m_dicNKMDungeonClearData",
         "m_dicNKMWarfareClearData",
-        "m_ShopData",
         "m_MissionData",
+        "m_ShopData",
         "m_dicNKMCounterCaseData",
         "m_dicEpisodeCompleteData",
         "m_companyBuffDataList",
-        "backGroundInfo"
+        "backGroundInfo",
+        "m_JukeboxData"
     ];
 
     private static void CopyField(ManagedRuntime runtime, object source, object target, string fieldName)
@@ -449,6 +451,12 @@ internal static class ManagedCombatBridge
             if (usesEventDeck)
             {
                 runtime.ApplyEventDeckTeamA(gameData, eventDeckId);
+                runtime.ApplyPlayerDeckFreeSlotsTeamA(
+                    gameData,
+                    data.Stage?.PlayerDeck,
+                    data.Stage?.EventDeckFreeUnitSlots,
+                    data.Stage?.EventDeckFreeShipSlot == true,
+                    eventDeckId);
             }
             else if (usesTutorialEventDeck)
             {
@@ -1372,6 +1380,158 @@ internal static class ManagedCombatBridge
             RefreshTeamDeck(gameData, teamA, resetDeck: true);
         }
 
+        public void ApplyPlayerDeckFreeSlotsTeamA(
+            object gameData,
+            PlayerDeckData? playerDeck,
+            IEnumerable<int>? freeSlots,
+            bool usePlayerShip,
+            int eventDeckId = 0)
+        {
+            var slotSet = freeSlots?
+                .Where(slot => slot >= 0 && slot < 8)
+                .Distinct()
+                .Order()
+                .ToList();
+            if (playerDeck == null || playerDeck.Units.Count == 0 || slotSet == null || slotSet.Count == 0) return;
+
+            var teamA = GetField(gameData, "m_NKMGameTeamDataA");
+            if (teamA == null) return;
+
+            var userUid = ParseLong(playerDeck.UserUid);
+            SetField(teamA, "m_eNKM_TEAM_TYPE", Enum.Parse(GetType("NKM.NKM_TEAM_TYPE"), "NTT_A1"));
+            SetField(teamA, "m_user_uid", userUid);
+            SetField(teamA, "m_UserLevel", Math.Max(1, playerDeck.UserLevel));
+            SetField(teamA, "m_UserNickname", playerDeck.Nickname ?? "");
+
+            if (usePlayerShip && playerDeck.ShipUnitId > 0)
+            {
+                var shipUid = ParseLong(playerDeck.ShipUid);
+                if (shipUid <= 0) shipUid = userUid > 0 ? userUid + 1 : 1;
+                SetField(teamA, "m_MainShip", CreateBasicUnit(
+                    playerDeck.ShipUnitId,
+                    shipUid,
+                    Math.Max(1, playerDeck.ShipLevel),
+                    playerDeck.ShipSkinId,
+                    0,
+                    0,
+                    userUid,
+                    null,
+                    null));
+            }
+
+            var unitList = GetField(teamA, "m_listUnitData");
+            if (unitList == null) return;
+            var eventDeckSlotPositions = GetEventDeckGeneratedUnitPositions(eventDeckId);
+
+            var usedPlayerUnitUids = new HashSet<long>();
+            if (unitList is IEnumerable existingUnits)
+            {
+                foreach (var existingUnit in existingUnits)
+                {
+                    if (existingUnit == null) continue;
+                    var unitUid = Convert.ToInt64(GetField(existingUnit, "m_UnitUID") ?? 0, CultureInfo.InvariantCulture);
+                    if (unitUid > 0) usedPlayerUnitUids.Add(unitUid);
+                }
+            }
+
+            var orderedPlayerUnits = playerDeck.Units.OrderBy(unit => unit.SlotIndex).ToList();
+            long firstAddedUnitUid = 0;
+            foreach (var slotIndex in slotSet)
+            {
+                var unitData = orderedPlayerUnits.FirstOrDefault(unit => unit.SlotIndex == slotIndex && IsUsable(unit));
+                if (unitData == null) continue;
+
+                var unitUid = ParseLong(unitData.UnitUid);
+                var unit = CreateBasicUnit(
+                    unitData.UnitId,
+                    unitUid,
+                    Math.Max(1, unitData.Level),
+                    unitData.SkinId,
+                    unitData.TacticLevel,
+                    unitData.LimitBreakLevel,
+                    userUid,
+                    unitData.SkillLevels,
+                    unitData.EquipItemUids.Select(ParseLong));
+                if (!eventDeckSlotPositions.TryGetValue(slotIndex, out var existingUnitIndex) ||
+                    !TrySetCollectionItem(unitList, existingUnitIndex, unit))
+                {
+                    AddCollectionItem(unitList, unit);
+                }
+                usedPlayerUnitUids.Add(unitUid);
+                if (firstAddedUnitUid <= 0) firstAddedUnitUid = unitUid;
+            }
+
+            var leaderUid = Convert.ToInt64(GetField(teamA, "m_LeaderUnitUID") ?? 0, CultureInfo.InvariantCulture);
+            if (leaderUid <= 0)
+            {
+                var playerLeaderUid = ParseLong(playerDeck.LeaderUnitUid);
+                SetField(teamA, "m_LeaderUnitUID", playerLeaderUid > 0 ? playerLeaderUid : firstAddedUnitUid);
+            }
+
+            RefreshTeamDeck(gameData, teamA, resetDeck: true);
+
+            bool IsUsable(PlayerUnitData unitData)
+            {
+                var unitUid = ParseLong(unitData.UnitUid);
+                return unitData.UnitId > 0 && unitUid > 0 && !usedPlayerUnitUids.Contains(unitUid);
+            }
+        }
+
+        private Dictionary<int, int> GetEventDeckGeneratedUnitPositions(int eventDeckId)
+        {
+            var positions = new Dictionary<int, int>();
+            if (eventDeckId <= 0) return positions;
+
+            var dungeonManagerType = GetType("NKM.NKMDungeonManager");
+            var eventDeckTemplet = GetEventDeckTemplet(dungeonManagerType, eventDeckId);
+            if (eventDeckTemplet == null) return positions;
+
+            var getUnitSlot = eventDeckTemplet.GetType().GetMethod(
+                "GetUnitSlot",
+                BindingFlags.Public | BindingFlags.Instance,
+                null,
+                [typeof(int)],
+                null);
+            if (getUnitSlot == null) return positions;
+
+            var generatedIndex = 0;
+            for (var slotIndex = 0; slotIndex < 8; slotIndex++)
+            {
+                var slot = getUnitSlot.Invoke(eventDeckTemplet, [slotIndex]);
+                if (slot == null) continue;
+                var slotType = GetField(slot, "m_eType")?.ToString() ?? "";
+                if (!EventDeckSlotCreatesPresetUnit(slotType)) continue;
+                positions[slotIndex] = generatedIndex;
+                generatedIndex++;
+            }
+            return positions;
+        }
+
+        private static bool EventDeckSlotCreatesPresetUnit(string slotType)
+        {
+            return slotType is "ST_GUEST" or "ST_NPC" or "ST_RANDOM";
+        }
+
+        private static bool TrySetCollectionItem(object collection, int index, object value)
+        {
+            if (index < 0) return false;
+            if (collection is IList list)
+            {
+                if (index >= list.Count) return false;
+                list[index] = value;
+                return true;
+            }
+
+            var countProperty = collection.GetType().GetProperty("Count", BindingFlags.Public | BindingFlags.Instance);
+            var count = Convert.ToInt32(countProperty?.GetValue(collection) ?? 0, CultureInfo.InvariantCulture);
+            if (index >= count) return false;
+
+            var itemProperty = collection.GetType().GetProperty("Item", BindingFlags.Public | BindingFlags.Instance);
+            if (itemProperty == null) return false;
+            itemProperty.SetValue(collection, value, [index]);
+            return true;
+        }
+
         public void ApplyPlayerIdentityTeamA(object gameData, PlayerDeckData? playerDeck)
         {
             if (playerDeck == null) return;
@@ -1443,6 +1603,12 @@ internal static class ManagedCombatBridge
             else if (ShouldApplyEventDeck(dynamicGame.StageID, dynamicGame.DungeonID, eventDeckId))
             {
                 ApplyEventDeckTeamA(gameData, eventDeckId);
+                ApplyPlayerDeckFreeSlotsTeamA(
+                    gameData,
+                    data.Stage?.PlayerDeck,
+                    data.Stage?.EventDeckFreeUnitSlots,
+                    data.Stage?.EventDeckFreeShipSlot == true,
+                    eventDeckId);
             }
             else
             {
@@ -1567,6 +1733,7 @@ internal static class ManagedCombatBridge
 
         private void ApplyEventDeckUnits(object teamA, Type dungeonManagerType, object eventDeckTemplet)
         {
+            var armyData = Create("NKM.NKMArmyData");
             var eventDeckData = Create("NKM.NKMEventDeckData");
             var inventoryData = Create("NKM.NKMInventoryData");
             var teamType = GetType("NKM.NKM_TEAM_TYPE");
@@ -1586,7 +1753,7 @@ internal static class ManagedCombatBridge
                     typeof(bool)
                 ],
                 null);
-            var gameUnitDataList = makeUnits?.Invoke(null, [null, eventDeckTemplet, null, eventDeckData, inventoryData, teamA1, false]);
+            var gameUnitDataList = makeUnits?.Invoke(null, [armyData, eventDeckTemplet, null, eventDeckData, inventoryData, teamA1, false]);
             var unitList = GetField(teamA, "m_listUnitData");
             unitList?.GetType().GetMethod("Clear", BindingFlags.Public | BindingFlags.Instance)?.Invoke(unitList, null);
 

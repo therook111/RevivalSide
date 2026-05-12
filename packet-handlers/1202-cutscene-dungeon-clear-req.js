@@ -6,7 +6,7 @@ module.exports = {
     ctx.recordPersistentCutsceneView(socket, dungeonId);
     ctx.recordGameplayUnlockClear(socket, dungeonId);
     ctx.recordTutorialCutsceneClear(socket, dungeonId);
-    ctx.recordEpisode1DungeonClear(socket, dungeonId);
+    ctx.recordMainStoryDungeonClear(socket, dungeonId);
     if (ctx.config.REPLAY_CAPTURED_GAME_FLOW && ctx.capturedGameFlow) {
       ctx.sendServerGamePacket(
         socket,

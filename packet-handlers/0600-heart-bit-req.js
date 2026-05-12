@@ -11,6 +11,7 @@ module.exports = {
     if (ctx.config.REPLAY_CAPTURED_GAME_FLOW && ctx.capturedGameFlow) {
       if (!replay.loadCompleteReceived) {
         ctx.sendServerGamePacket(socket, ctx.constants.HEART_BIT_ACK, ctx.writeSignedVarLong(time), "heart-bit");
+        ctx.sendStaminaChargeNotifications(socket, "heart-bit-charge-item");
         console.log("[capture-game] heartbeat before GAME_LOAD_COMPLETE_REQ; deferring combat sync until load complete");
         return true;
       }
@@ -33,7 +34,7 @@ module.exports = {
         }
         const packets =
           replay.dynamicGame && !replay.dynamicGame.initialUnitsSent
-            ? ctx.ensureGameStartPackets(ctx.buildInitialBattlePackets(replay))
+            ? ctx.ensureGameStartPackets(ctx.buildInitialBattlePackets(replay), replay, socket)
             : ctx.buildGameSyncPackets({
                 battleState: replay.battleState,
                 dynamicGame: replay.dynamicGame,
@@ -83,6 +84,10 @@ module.exports = {
       return true;
     }
     ctx.sendGameResponse(socket, packet, ctx.constants.HEART_BIT_ACK, ctx.writeSignedVarLong(time), "heart-bit");
+    if (typeof ctx.sendStaminaChargeNotifications === "function") {
+      replay.nextServerSequence = Math.max(Number(replay.nextServerSequence || 1), Number(packet.sequence || 0) + 1);
+      ctx.sendStaminaChargeNotifications(socket, "heart-bit-charge-item");
+    }
     return true;
   },
 };

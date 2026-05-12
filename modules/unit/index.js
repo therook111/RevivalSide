@@ -4,6 +4,10 @@ const {
   resolveUnitId,
   getPieceTemplet,
   getSkinTemplet,
+  getUnitSkillIndex,
+  getUnitSkillMaxLevel,
+  getLimitBreakMaxLevel,
+  getMaxLimitBreakRank,
   getUnitLevelByTotalExp,
   getTotalExpForUnitLevel,
   getOperatorTotalExpForLevel,
@@ -14,16 +18,18 @@ const {
 const { grantSkin } = require("../inventory");
 
 const DEFAULT_NEXT_UNIT_UID = 9000000000000001n;
+const UNIT_LIMIT_BREAK_MAX_LEVEL = 120;
 const DECK_TYPE_NORMAL = 1;
 const DECK_TYPE_DAILY = 3;
 const DECK_TYPE_DIVE = 8;
 const DECK_TYPE_EXPLORE = 10;
 
 function ensureArmy(user) {
-  if (!user || typeof user !== "object") return { units: {}, ships: {}, operators: {}, decks: [] };
+  if (!user || typeof user !== "object") return { units: {}, ships: {}, trophies: {}, operators: {}, decks: [] };
   user.army = user.army && typeof user.army === "object" ? user.army : {};
   user.army.units = user.army.units && typeof user.army.units === "object" ? user.army.units : {};
   user.army.ships = user.army.ships && typeof user.army.ships === "object" ? user.army.ships : {};
+  user.army.trophies = user.army.trophies && typeof user.army.trophies === "object" ? user.army.trophies : {};
   user.army.operators = user.army.operators && typeof user.army.operators === "object" ? user.army.operators : {};
   user.army.decks = Array.isArray(user.army.decks) ? user.army.decks : [];
   user.army.deckSets = user.army.deckSets && typeof user.army.deckSets === "object" ? user.army.deckSets : {};
@@ -31,6 +37,8 @@ function ensureArmy(user) {
 
   normalizeUnitMap(user.army.units);
   normalizeUnitMap(user.army.ships);
+  normalizeUnitMap(user.army.trophies);
+  normalizeArmyUnitBuckets(user.army);
   normalizeOperatorMap(user.army.operators);
   normalizeDeckSets(user.army);
   return user.army;
@@ -48,6 +56,14 @@ function getArmyUnits(user) {
 function getArmyShips(user) {
   const army = ensureArmy(user);
   return Object.values(army.ships)
+    .map(normalizeUnit)
+    .filter(Boolean)
+    .sort((a, b) => Number(toBigInt(a.unitUid) - toBigInt(b.unitUid)));
+}
+
+function getArmyTrophies(user) {
+  const army = ensureArmy(user);
+  return Object.values(army.trophies)
     .map(normalizeUnit)
     .filter(Boolean)
     .sort((a, b) => Number(toBigInt(a.unitUid) - toBigInt(b.unitUid)));
@@ -114,34 +130,46 @@ function ensureDefaultLineup(user, options = {}) {
   return deck;
 }
 
-function buildPlayerDeckForGameLoad(user, req = {}) {
+function buildPlayerDeckForGameLoad(user, req = {}, options = {}) {
   if (!user) return null;
   const deckIndex = resolveDeckIndexForGameLoad(user, req);
   ensureDefaultLineup(user, deckIndex);
   const army = ensureArmy(user);
   const deck = ensureDeck(user, deckIndex);
+  const allowedUnitSlots = normalizeAllowedUnitSlots(options.allowedUnitSlots);
+  const explicitSlotUnitUids = normalizeSlotUnitUidMap(options.slotUnitUids || options.eventDeckUnitUids);
+  const unitSlotAssignments = buildDeckUnitSlotAssignments(deck, allowedUnitSlots, explicitSlotUnitUids);
   const units = [];
   let leaderUnitUid = "0";
+  let leaderIndex = Number(options.leaderIndex != null ? options.leaderIndex : deck.leaderIndex);
 
-  for (let slotIndex = 0; slotIndex < deck.unitUids.length; slotIndex += 1) {
-    const uid = toBigInt(deck.unitUids[slotIndex] || 0);
+  for (const assignment of unitSlotAssignments) {
+    const slotIndex = assignment.slotIndex;
+    const uid = toBigInt(assignment.unitUid || 0);
     if (uid <= 0n) continue;
     const unit = normalizeUnit(army.units[uid.toString()]);
     if (!unit || !isSerializableArmyUnit(unit)) continue;
     const serialized = buildPlayerDeckUnit(unit, slotIndex);
     units.push(serialized);
-    if (slotIndex === deck.leaderIndex) leaderUnitUid = serialized.unitUid;
+    if (slotIndex === leaderIndex) {
+      leaderUnitUid = serialized.unitUid;
+      leaderIndex = slotIndex;
+    }
   }
 
   if (!units.length) return null;
   if (toBigInt(leaderUnitUid) <= 0n) {
     leaderUnitUid = units[0].unitUid;
-    deck.leaderIndex = units[0].slotIndex;
+    leaderIndex = units[0].slotIndex;
+    if (!allowedUnitSlots) deck.leaderIndex = leaderIndex;
   }
 
-  const ship = normalizeUnit(army.ships[String(toBigInt(deck.shipUid || 0))]) || getArmyShips(user)[0] || null;
+  const requestedShipUid = toBigInt(options.shipUid || 0) > 0n ? String(toBigInt(options.shipUid)) : deck.shipUid;
+  const requestedOperatorUid =
+    toBigInt(options.operatorUid || 0) > 0n ? String(toBigInt(options.operatorUid)) : deck.operatorUid;
+  const ship = normalizeUnit(army.ships[String(toBigInt(requestedShipUid || 0))]) || getArmyShips(user)[0] || null;
   const operator =
-    (army.operators && army.operators[String(toBigInt(deck.operatorUid || 0))]) || getArmyOperators(user)[0] || null;
+    (army.operators && army.operators[String(toBigInt(requestedOperatorUid || 0))]) || getArmyOperators(user)[0] || null;
 
   if (ship && toBigInt(deck.shipUid || 0) <= 0n) deck.shipUid = ship.unitUid;
   if (operator && toBigInt(deck.operatorUid || 0) <= 0n) deck.operatorUid = String(toBigInt(operator.uid || operator.operatorUid || 0));
@@ -152,7 +180,7 @@ function buildPlayerDeckForGameLoad(user, req = {}) {
     userLevel: Number(user.level || 1),
     deckType: deck.deckType,
     deckIndex: deck.index,
-    leaderIndex: deck.leaderIndex,
+    leaderIndex,
     leaderUnitUid,
     shipUid: ship ? String(toBigInt(ship.unitUid || 0)) : "0",
     shipUnitId: ship ? Number(ship.unitId || 0) : 0,
@@ -163,6 +191,68 @@ function buildPlayerDeckForGameLoad(user, req = {}) {
     operatorLevel: operator ? Number(operator.level || 1) : 1,
     units,
   };
+}
+
+function normalizeAllowedUnitSlots(slots) {
+  if (!Array.isArray(slots)) return null;
+  const normalized = slots
+    .map((slot) => Number(slot))
+    .filter((slot) => Number.isInteger(slot) && slot >= 0 && slot < 8);
+  if (!normalized.length) return null;
+  return Array.from(new Set(normalized)).sort((a, b) => a - b);
+}
+
+function normalizeSlotUnitUidMap(slotUnitUids) {
+  if (!slotUnitUids || typeof slotUnitUids !== "object") return null;
+  const normalized = new Map();
+  for (const [slot, unitUid] of Object.entries(slotUnitUids)) {
+    const slotIndex = Number(slot);
+    const uid = toBigInt(unitUid || 0);
+    if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= 8 || uid <= 0n) continue;
+    normalized.set(slotIndex, String(uid));
+  }
+  return normalized.size > 0 ? normalized : null;
+}
+
+function buildDeckUnitSlotAssignments(deck, allowedUnitSlots, explicitSlotUnitUids = null) {
+  const unitUids = Array.isArray(deck && deck.unitUids) ? deck.unitUids : [];
+  if (explicitSlotUnitUids) {
+    const slots = allowedUnitSlots || Array.from(explicitSlotUnitUids.keys()).sort((a, b) => a - b);
+    return slots
+      .map((slotIndex) => ({ slotIndex, unitUid: explicitSlotUnitUids.get(slotIndex) || 0 }))
+      .filter((assignment) => toBigInt(assignment.unitUid || 0) > 0n);
+  }
+
+  if (!allowedUnitSlots) {
+    return unitUids.map((unitUid, slotIndex) => ({ slotIndex, unitUid }));
+  }
+
+  const used = new Set();
+  const assignments = [];
+  for (const slotIndex of allowedUnitSlots) {
+    const unitUid = unitUids[slotIndex] || 0;
+    if (toBigInt(unitUid || 0) <= 0n) continue;
+    const key = String(toBigInt(unitUid));
+    if (used.has(key)) continue;
+    used.add(key);
+    assignments.push({ slotIndex, unitUid });
+  }
+
+  const freeSlotsNeedingUnits = allowedUnitSlots.filter(
+    (slotIndex) => !assignments.some((assignment) => assignment.slotIndex === slotIndex)
+  );
+  for (const slotIndex of freeSlotsNeedingUnits) {
+    const unitUid = unitUids.find((uid) => {
+      if (toBigInt(uid || 0) <= 0n) return false;
+      const key = String(toBigInt(uid));
+      return !used.has(key);
+    });
+    if (!unitUid) continue;
+    used.add(String(toBigInt(unitUid)));
+    assignments.push({ slotIndex, unitUid });
+  }
+
+  return assignments.sort((a, b) => a.slotIndex - b.slotIndex);
 }
 
 function resolveDeckIndexForGameLoad(user, req = {}) {
@@ -217,14 +307,16 @@ function grantUnit(user, unitIdOrStrId, options = {}) {
   const army = ensureArmy(user);
   const unitUid = allocateUnitUid(user);
   const unit = createUnitData(user, unitId, unitUid, options);
-  const templet = getUnitTemplet(unitId) || {};
-  const target = String(templet.m_NKM_UNIT_TYPE || "") === "NUT_SHIP" ? army.ships : army.units;
-  if (String(templet.m_NKM_UNIT_STYLE_TYPE || "") === "NUST_TRAINER") return null;
+  const templet = getUnitTemplet(unitId);
+  const storageKey = getUnitStorageKey(unitId);
+  if (!templet || !storageKey) return null;
+  const target = army[storageKey];
   target[unit.unitUid.toString()] = unit;
 
   user.collection = user.collection && typeof user.collection === "object" ? user.collection : {};
-  user.collection.units = Array.isArray(user.collection.units) ? user.collection.units : [];
-  if (!user.collection.units.includes(unitId)) user.collection.units.push(unitId);
+  const collectionKey = storageKey === "ships" ? "ships" : storageKey === "trophies" ? "trophies" : "units";
+  user.collection[collectionKey] = Array.isArray(user.collection[collectionKey]) ? user.collection[collectionKey] : [];
+  if (!user.collection[collectionKey].includes(unitId)) user.collection[collectionKey].push(unitId);
 
   return unit;
 }
@@ -247,6 +339,9 @@ function grantOperator(user, unitIdOrStrId, options = {}) {
     regDate: String(options.regDate || dateTimeBinaryNow()),
   };
   army.operators[operator.uid] = operator;
+  user.collection = user.collection && typeof user.collection === "object" ? user.collection : {};
+  user.collection.operators = Array.isArray(user.collection.operators) ? user.collection.operators : [];
+  if (!user.collection.operators.includes(unitId)) user.collection.operators.push(unitId);
   return operator;
 }
 
@@ -312,7 +407,7 @@ function createUnitData(user, unitId, unitUid, options = {}) {
 
 function setUnitSkin(user, unitUid, skinId) {
   const army = ensureArmy(user);
-  const unit = army.units[String(toBigInt(unitUid))] || army.ships[String(toBigInt(unitUid))];
+  const unit = army.units[String(toBigInt(unitUid))] || army.ships[String(toBigInt(unitUid))] || army.trophies[String(toBigInt(unitUid))];
   if (!unit) return null;
   const numericSkinId = Number(skinId) || 0;
   if (numericSkinId > 0) {
@@ -461,7 +556,7 @@ function updateDeckName(user, deckIndex, name) {
 function getArmyUnitByUid(user, unitUid) {
   const army = ensureArmy(user);
   const key = String(toBigInt(unitUid || 0));
-  return normalizeUnit(army.units[key]) || normalizeUnit(army.ships[key]) || null;
+  return normalizeUnit(army.units[key]) || normalizeUnit(army.ships[key]) || normalizeUnit(army.trophies[key]) || null;
 }
 
 function getArmyOperatorByUid(user, operatorUid) {
@@ -515,7 +610,7 @@ function enhanceUnitStats(user, unitUid, consumeUnitUids = []) {
 function limitBreakUnit(user, unitUid, options = {}) {
   const unit = getArmyUnitByUid(user, unitUid);
   if (!unit) return null;
-  const cap = Math.max(1, Number(options.maxLimitBreakLevel || 6));
+  const cap = Math.max(1, Number(options.maxLimitBreakLevel || getMaxLimitBreakRank({ maxLevel: UNIT_LIMIT_BREAK_MAX_LEVEL })));
   unit.limitBreakLevel = clampInt(Number(unit.limitBreakLevel || 0) + 1, 0, cap);
   unit.level = Math.min(Number(unit.level || 1), getUnitMaxLevel(unit));
   unit.lastGrowthAt = new Date().toISOString();
@@ -528,7 +623,7 @@ function upgradeUnitSkill(user, unitUid, skillId, options = {}) {
   if (!unit) return null;
   const levels = normalizeSkillLevels(unit.skillLevels);
   const index = resolveSkillIndex(unit, skillId);
-  const maxLevel = Math.max(1, Number(options.maxSkillLevel || 5));
+  const maxLevel = Math.max(1, Number(options.maxSkillLevel || getUnitSkillMaxLevel(skillId) || 5));
   levels[index] = clampInt(Number(levels[index] || 1) + 1, 1, maxLevel);
   unit.skillLevels = levels;
   unit.lastGrowthAt = new Date().toISOString();
@@ -666,6 +761,10 @@ function removeArmyUnitUids(user, unitUids = []) {
       clearShipFromDecks(army, uid);
       removed.push(uid);
     }
+    if (army.trophies[uid]) {
+      delete army.trophies[uid];
+      removed.push(uid);
+    }
   }
   return removed;
 }
@@ -708,18 +807,34 @@ function persistNormalizedUnit(user, unit) {
   const army = ensureArmy(user);
   const normalized = normalizeUnit(unit);
   if (!normalized) return null;
-  const templet = getUnitTemplet(normalized.unitId) || {};
-  const target = String(templet.m_NKM_UNIT_TYPE || "") === "NUT_SHIP" ? army.ships : army.units;
+  const storageKey = getUnitStorageKey(normalized.unitId);
+  if (!storageKey) return null;
+  const target = army[storageKey];
+  delete army.units[normalized.unitUid];
+  delete army.ships[normalized.unitUid];
+  delete army.trophies[normalized.unitUid];
   target[normalized.unitUid] = normalized;
   return normalized;
 }
 
 function getUnitMaxLevel(unit, options = {}) {
   if (options.maxLevel != null) return Math.max(1, Number(options.maxLevel) || 1);
-  if (unit && Number(unit.maxLevelOverride || 0) > 0) return Math.max(1, Number(unit.maxLevelOverride));
   const limitBreakLevel = Math.max(0, Number(unit && unit.limitBreakLevel) || 0);
   const reactorLevel = Math.max(0, Number(unit && unit.reactorLevel) || 0);
-  return Math.min(110, 100 + limitBreakLevel + reactorLevel);
+  const maxRank = getMaxLimitBreakRank({ maxLevel: UNIT_LIMIT_BREAK_MAX_LEVEL });
+  const tableMaxLevel = getLimitBreakMaxLevel(Math.min(limitBreakLevel, maxRank), 100);
+  const resolvedMaxLevel = Math.min(UNIT_LIMIT_BREAK_MAX_LEVEL, tableMaxLevel + reactorLevel);
+  const override = Number(unit && unit.maxLevelOverride || 0) || 0;
+  if (override > 0 && !isStaleAwakenedMaxLevelOverride(unit, override, resolvedMaxLevel)) {
+    return Math.max(1, override);
+  }
+  return resolvedMaxLevel;
+}
+
+function isStaleAwakenedMaxLevelOverride(unit, override, resolvedMaxLevel) {
+  if (override !== 110 || resolvedMaxLevel <= override) return false;
+  const templet = getUnitTemplet(unit && unit.unitId);
+  return templet && templet.m_bAwaken === true;
 }
 
 function normalizeUnitExpShape(unit, options = {}) {
@@ -751,7 +866,7 @@ function getUnitRequiredExpForLevel(level) {
   return next > current ? next - current : 0;
 }
 
-function splitUnitTotalExp(totalExp, maxLevel = 110) {
+function splitUnitTotalExp(totalExp, maxLevel = UNIT_LIMIT_BREAK_MAX_LEVEL) {
   const cap = Math.max(1, Number(maxLevel) || 1);
   const hasTable = getTotalExpForUnitLevel(2) > 0 || getTotalExpForUnitLevel(cap) > 0;
   if (!hasTable) {
@@ -853,6 +968,8 @@ function persistNormalizedOperator(user, operator) {
 
 function resolveSkillIndex(unit, skillId) {
   const numeric = Number(skillId || 0);
+  const mappedIndex = getUnitSkillIndex(unit && unit.unitId, numeric);
+  if (mappedIndex >= 0) return mappedIndex;
   if (Number.isInteger(numeric) && numeric >= 1 && numeric <= 5) return numeric - 1;
   const levels = normalizeSkillLevels(unit && unit.skillLevels);
   const firstOpen = levels.findIndex((level) => Number(level || 1) < 5);
@@ -884,6 +1001,20 @@ function isSerializableArmyUnit(unit) {
   return type !== "NUT_SHIP" && type !== "NUT_OPERATOR" && type !== "NUT_SYSTEM" && style !== "NUST_TRAINER";
 }
 
+function isTrophyUnitId(unitId) {
+  const templet = getUnitTemplet(unitId);
+  return Boolean(templet && String(templet.m_NKM_UNIT_STYLE_TYPE || "") === "NUST_TRAINER");
+}
+
+function getUnitStorageKey(unitId) {
+  const templet = getUnitTemplet(unitId);
+  if (!templet || templet.m_bMonster === true) return null;
+  const type = String(templet.m_NKM_UNIT_TYPE || "");
+  if (type === "NUT_SHIP") return "ships";
+  if (type === "NUT_OPERATOR" || type === "NUT_SYSTEM") return null;
+  return isTrophyUnitId(unitId) ? "trophies" : "units";
+}
+
 function normalizeUnitMap(map) {
   for (const [key, value] of Object.entries(map)) {
     const unit = normalizeUnit(value);
@@ -893,6 +1024,23 @@ function normalizeUnitMap(map) {
     }
     if (String(key) !== String(unit.unitUid)) delete map[key];
     map[String(unit.unitUid)] = unit;
+  }
+}
+
+function normalizeArmyUnitBuckets(army) {
+  const buckets = [army.units, army.ships, army.trophies];
+  const units = [];
+  for (const bucket of buckets) {
+    for (const value of Object.values(bucket)) {
+      const unit = normalizeUnit(value);
+      if (unit) units.push(unit);
+    }
+    for (const key of Object.keys(bucket)) delete bucket[key];
+  }
+  for (const unit of units) {
+    const storageKey = getUnitStorageKey(unit.unitId);
+    if (!storageKey) continue;
+    army[storageKey][unit.unitUid] = unit;
   }
 }
 
@@ -1067,7 +1215,14 @@ function defaultDeckCount(deckType) {
 function allocateUnitUid(user) {
   ensureArmy(user);
   let next = toBigInt(user.nextUnitUid, DEFAULT_NEXT_UNIT_UID);
-  while (user.army.units[next.toString()] || user.army.ships[next.toString()] || user.army.operators[next.toString()]) next += 1n;
+  while (
+    user.army.units[next.toString()] ||
+    user.army.ships[next.toString()] ||
+    user.army.trophies[next.toString()] ||
+    user.army.operators[next.toString()]
+  ) {
+    next += 1n;
+  }
   user.nextUnitUid = String(next + 1n);
   return next;
 }
@@ -1111,6 +1266,7 @@ module.exports = {
   ensureArmy,
   getArmyUnits,
   getArmyShips,
+  getArmyTrophies,
   getArmyOperators,
   getArmyDeckSets,
   ensureDefaultLineup,
@@ -1123,6 +1279,7 @@ module.exports = {
   setUnitSkin,
   getArmyUnitByUid,
   getArmyOperatorByUid,
+  getUnitMaxLevel,
   addUnitExp,
   setUnitLevel,
   enhanceUnitStats,

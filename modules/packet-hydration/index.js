@@ -17,6 +17,8 @@ const {
   dateTimeBinaryNow,
   toBigInt,
 } = require("../packet-codec");
+const { buildMissionDataEntries, ensureAccountProgress } = require("../account-progression");
+const { MISSION_UPDATE_NOT, buildMissionUpdateNotPayload } = require("../mission");
 
 const ROOT_DIR = path.resolve(__dirname, "..", "..");
 const schemaPath = path.join(ROOT_DIR, "packet-schema.json");
@@ -39,6 +41,13 @@ function createHydratedAckHandler(packetId, options = {}) {
       ctx.sendResponse(socket, packet.sequence, ackPacket.id, () =>
         ctx.buildEncryptedPacket(packet.sequence, ackPacket.id, payload)
       );
+      if (typeof options.onHandled === "function") {
+        try {
+          options.onHandled(ctx, socket, packet, { requestPacket, ackPacket, name });
+        } catch (err) {
+          console.log(`[hydrate:${name}] onHandled failed: ${err.message}`);
+        }
+      }
       return true;
     },
   };
@@ -46,6 +55,50 @@ function createHydratedAckHandler(packetId, options = {}) {
 
 function createHydratedAckHandlers(packetIds) {
   return packetIds.map((packetId) => createHydratedAckHandler(packetId));
+}
+
+function createMissionTrackingHydratedAckHandler(packetId, conditions, options = {}) {
+  return createHydratedAckHandler(packetId, {
+    ...options,
+    onHandled(ctx, socket, packet, meta) {
+      trackHydratedMissionConditions(ctx, socket, conditions);
+      if (typeof options.onHandled === "function") options.onHandled(ctx, socket, packet, meta);
+    },
+  });
+}
+
+function trackHydratedMissionConditions(ctx, socket, conditions) {
+  const user = socket && socket.session && socket.session.user;
+  if (!user || !ctx || typeof ctx.trackMissionEvent !== "function") return;
+  const now = ctx.dateTimeBinaryNow ? ctx.dateTimeBinaryNow() : dateTimeBinaryNow();
+  const changedConditions = new Set();
+  for (const condition of Array.isArray(conditions) ? conditions : [conditions]) {
+    const normalized = String(condition || "").trim();
+    if (!normalized) continue;
+    if (ctx.trackMissionEvent(user, normalized, 1, { now })) changedConditions.add(normalized);
+  }
+  if (changedConditions.size > 0 && typeof ctx.refreshMissionProgress === "function") {
+    ctx.refreshMissionProgress(user, { now, conditions: Array.from(changedConditions) });
+    sendHydratedMissionUpdate(ctx, socket, user, now);
+    if (ctx.config && ctx.config.USE_LOCAL_USER_DB && typeof ctx.saveUserDb === "function") ctx.saveUserDb();
+  }
+}
+
+function sendHydratedMissionUpdate(ctx, socket, user, now) {
+  if (!ctx || typeof ctx.sendServerGamePacket !== "function" || !socket || !socket.session || !socket.session.gameReplay) return;
+  const seen = new Set();
+  const missions = [];
+  for (const tabId of [2, 3]) {
+    for (const [, mission] of buildMissionDataEntries(user, { tabId, now })) {
+      const key = `${Number(mission.groupId || 0)}:${Number(mission.missionID || 0)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      missions.push(mission);
+    }
+  }
+  if (missions.length > 0) {
+    ctx.sendServerGamePacket(socket, MISSION_UPDATE_NOT, buildMissionUpdateNotPayload(missions), "mission-update");
+  }
 }
 
 function createLoginLikeHydratedHandler(packetId, options = {}) {
@@ -182,6 +235,7 @@ function getOrCreateHydratedLoginUser(ctx, socket) {
 }
 
 function buildUserProfileData(user) {
+  user = ensureAccountProgress(user || {}) || {};
   return Buffer.concat([
     writeNullableObject(buildCommonProfileData(user)),
     writeString(String(user.friendIntro || "")),
@@ -200,6 +254,7 @@ function buildUserProfileData(user) {
 }
 
 function buildCommonProfileData(user) {
+  user = ensureAccountProgress(user || {}) || {};
   return Buffer.concat([
     writeSignedVarLong(toBigInt(user.userUid || 0)),
     writeSignedVarLong(toBigInt(user.friendCode || 0)),
@@ -232,6 +287,7 @@ function getPacket(schema, packetId) {
 module.exports = {
   createHydratedAckHandler,
   createHydratedAckHandlers,
+  createMissionTrackingHydratedAckHandler,
   createLoginLikeHydratedHandler,
   buildHydratedAckPayload,
 };

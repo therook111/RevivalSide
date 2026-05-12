@@ -18,20 +18,32 @@ This repository intentionally does not track client assets, raw packet captures,
 
 ## Quick Start
 
-Read [docs/setup.md](docs/setup.md) first. The short version is:
+Start with [docs/setup.md](docs/setup.md). It is written for first-time users and walks through the wiki, local game data, hosts patching, and the listener without assuming software development experience.
+
+The very short setup is:
 
 ```powershell
 git clone https://github.com/MadlyMoe/RevivalSide.git RevivalSide
 cd RevivalSide
-copy .env.example .env
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
 npm install
 npm run build:combat-host
 ```
 
-Then generate your local table data, patch hosts from an elevated PowerShell prompt, and run:
+Then generate your local table data from your own CounterSide install.
+
+To run the local wiki:
+
+```powershell
+npm run wiki:build
+npm run wiki:serve
+```
+
+To run the server listener, patch hosts from an elevated PowerShell prompt, then run:
 
 ```powershell
 npm run listen
 ```
 
 The default listener uses TCP `127.0.0.1:22000` and HTTP mirror `http://127.0.0.1:8088`.
+The local user profile manager is served from the same process at `http://127.0.0.1:8088/user-manager`.

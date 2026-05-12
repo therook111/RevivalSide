@@ -20,6 +20,8 @@ public sealed class StageData
     public int DungeonID { get; set; }
     public int MapID { get; set; }
     public int EventDeckId { get; set; }
+    public bool UsesHybridEventDeck { get; set; }
+    public bool EventDeckFreeShipSlot { get; set; }
     public int GameUnitUIDIndex { get; set; } = 18;
     public double InitialGameTime { get; set; } = 4;
     public double InitialRemainGameTime { get; set; } = 180;
@@ -29,6 +31,7 @@ public sealed class StageData
     public List<UnitState> InitialUnits { get; set; } = [];
     public List<AutoDeployUnit> AutoDeployUnits { get; set; } = [];
     public List<List<int>> DeployableGameUnitUIDGroups { get; set; } = [];
+    public List<int> EventDeckFreeUnitSlots { get; set; } = [];
     public PlayerDeckData? PlayerDeck { get; set; }
 }
 

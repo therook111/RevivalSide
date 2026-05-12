@@ -58,6 +58,8 @@ function markNicknameTutorialComplete(ctx, user) {
     times: 1,
     lastUpdateDate: String(ctx.dateTimeBinaryNow ? ctx.dateTimeBinaryNow() : "0"),
     isComplete: true,
+    rewardReady: true,
+    completedAt: user.tutorial.nicknameChangedAt,
   };
 }
 

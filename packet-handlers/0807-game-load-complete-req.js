@@ -5,7 +5,7 @@ module.exports = {
     socket.session.gameReplay.loadCompleteReceived = true;
     if (ctx.config.DYNAMIC_BATTLE_MANAGER && socket.session.gameReplay.dynamicGame) {
       const replay = socket.session.gameReplay;
-      const packets = ctx.ensureGameStartPackets(ctx.buildInitialBattlePackets(replay));
+      const packets = ctx.ensureGameStartPackets(ctx.buildInitialBattlePackets(replay), replay, socket);
       replay.pendingGameStartPackets = packets.filter(Boolean);
       socket.session.gameReplay.pendingGameStartBootstrap = true;
       ctx.sendPendingGameStartSync(socket, "load-complete");
