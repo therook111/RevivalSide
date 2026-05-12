@@ -2,9 +2,7 @@ param(
   [switch]$Remove,
   [string]$Address = "127.0.0.1",
   [string[]]$Names = @(
-    "ctsglobal-login.sbside.com",
-    "ctskorea-login.sbside.com",
-    "ctsglobal-cdndown.sbside.com"
+    "ctsglobal-login.sbside.com"
   )
 )
 
@@ -37,7 +35,6 @@ $content = [regex]::Replace($content, $pattern, "")
 if (-not $Remove) {
   $block = @(
     $markerStart
-    "# Local RevivalSide listener and captured HTTP mirror."
     "$Address $($Names -join ' ')"
     $markerEnd
     ""
