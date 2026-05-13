@@ -131,15 +131,18 @@ const EMOTICON_KEYS = ["m_EmoticonID"];
 const LIMITBREAK_SUBSTITUTE_KEYS = ["m_TargetLimitbreakLevel", "m_NKM_UNIT_STYLE_TYPE", "m_NKM_UNIT_GRADE", "m_ItemID", "m_ItemCount"];
 const CONTENTS_UNLOCK_KEYS = ["m_UnlockReqType", "m_UnlockReqValue", "m_ContentsType", "m_ContentsValue"];
 
-const MISSION_TAB_KEYS = ["m_TabID", "m_MissionTab", "m_MissionType", "m_OpenTag"];
+const MISSION_TAB_KEYS = ["m_TabID", "m_MissionTab", "m_MissionType", "m_OpenTag", "m_Visible", "listContentsTagAllow", "listContentsTagIgnore"];
 const MISSION_KEYS = [
   "m_MissionID",
+  "m_OpenTag",
   "m_MissionCounterGroupID",
   "m_GroupId",
   "m_MissionTabId",
   "m_MissionTab",
   "m_MissionCond",
   "m_Times",
+  "m_ResetInterval",
+  "m_ForceClearStage",
   "m_Enabled",
   "m_MissionValue",
   "m_MissionValue1",

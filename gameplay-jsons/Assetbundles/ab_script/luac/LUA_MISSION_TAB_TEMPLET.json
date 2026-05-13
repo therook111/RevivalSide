@@ -6,7 +6,8 @@
     {
       "m_TabID": 1,
       "m_MissionTab": "TUTORIAL",
-      "m_OpenTag": "TAG_COMMON_MISSION_TUTORIAL"
+      "m_OpenTag": "TAG_COMMON_MISSION_TUTORIAL",
+      "m_Visible": false
     },
     {
       "m_TabID": 2,
@@ -61,102 +62,139 @@
     {
       "m_TabID": 11,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SIGMA"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SIGMA",
+      "m_Visible": false,
+      "listContentsTagAllow": [
+        "TAG_MISSION_NOT_USED"
+      ]
     },
     {
       "m_TabID": 12,
       "m_MissionTab": "BINGO",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BINGO_JISOO"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BINGO_JISOO",
+      "m_Visible": false
     },
     {
       "m_TabID": 13,
       "m_MissionTab": "BINGO",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BINGO_NEWYEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BINGO_NEWYEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 14,
       "m_MissionTab": "BINGO",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BINGO_JAKE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BINGO_JAKE",
+      "m_Visible": false
     },
     {
       "m_TabID": 15,
       "m_MissionTab": "BINGO",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BINGO_LONELY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BINGO_LONELY",
+      "m_Visible": false
     },
     {
       "m_TabID": 53,
       "m_MissionTab": "BINGO",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BINGO_NEWYEAR_2022"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BINGO_NEWYEAR_2022",
+      "m_Visible": false
     },
     {
       "m_TabID": 54,
       "m_MissionTab": "BINGO",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BINGO_GAP_2022"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BINGO_GAP_2022",
+      "m_Visible": false
     },
     {
       "m_TabID": 55,
       "m_MissionTab": "BINGO",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BINGO_NEWYEAR_2023"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BINGO_NEWYEAR_2023",
+      "m_Visible": false
     },
     {
       "m_TabID": 56,
       "m_MissionTab": "BINGO",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BINGO_FAM_05_2023"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BINGO_FAM_05_2023",
+      "m_Visible": false
     },
     {
       "m_TabID": 57,
       "m_MissionTab": "BINGO",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BINGO_NEWYEAR_2024"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BINGO_NEWYEAR_2024",
+      "m_Visible": false
     },
     {
       "m_TabID": 60,
       "m_MissionTab": "BINGO",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BINGO_SUMMER_2024"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BINGO_SUMMER_2024",
+      "m_Visible": false
     },
     {
       "m_TabID": 61,
       "m_MissionTab": "BINGO",
-      "m_OpenTag": "TAG_COMMON_EVENT_BINGO_SUMMER_2025"
+      "m_OpenTag": "TAG_COMMON_EVENT_BINGO_SUMMER_2025",
+      "m_Visible": false
     },
     {
       "m_TabID": 16,
       "m_MissionTab": "GROWTH",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false,
+      "listContentsTagAllow": [
+        "TAG_MISSION_NOT_USED"
+      ]
     },
     {
       "m_TabID": 17,
       "m_MissionTab": "GROWTH",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false,
+      "listContentsTagAllow": [
+        "TAG_MISSION_NOT_USED"
+      ]
     },
     {
       "m_TabID": 18,
       "m_MissionTab": "GROWTH",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false,
+      "listContentsTagAllow": [
+        "TAG_MISSION_NOT_USED"
+      ]
     },
     {
       "m_TabID": 19,
       "m_MissionTab": "GROWTH_COMPLETE",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false,
+      "listContentsTagAllow": [
+        "TAG_MISSION_NOT_USED"
+      ]
     },
     {
       "m_TabID": 20,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_GLOBAL_MISSION_CBT"
+      "m_OpenTag": "TAG_GLOBAL_MISSION_CBT",
+      "m_Visible": false
     },
     {
       "m_TabID": 21,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_GLOBAL_MISSION_CBT"
+      "m_OpenTag": "TAG_GLOBAL_MISSION_CBT",
+      "m_Visible": false
     },
     {
       "m_TabID": 22,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CHUSEOK"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CHUSEOK",
+      "m_Visible": false
     },
     {
       "m_TabID": 23,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "listContentsTagAllow": [
+        "TAG_MISSION_NOT_USED"
+      ]
     },
     {
       "m_TabID": 24,
@@ -166,7 +204,10 @@
     {
       "m_TabID": 25,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "listContentsTagAllow": [
+        "TAG_MISSION_NOT_USED"
+      ]
     },
     {
       "m_TabID": 26,
@@ -176,12 +217,17 @@
     {
       "m_TabID": 27,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false,
+      "listContentsTagAllow": [
+        "TAG_MISSION_NOT_USED"
+      ]
     },
     {
       "m_TabID": 28,
       "m_MissionTab": "GUILD",
-      "m_OpenTag": "TAG_COMMON_MISSION_GUILD"
+      "m_OpenTag": "TAG_COMMON_MISSION_GUILD",
+      "m_Visible": false
     },
     {
       "m_TabID": 29,
@@ -206,322 +252,419 @@
     {
       "m_TabID": 36,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HALLOWEEN_PROJECT"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HALLOWEEN_PROJECT",
+      "m_Visible": false
     },
     {
       "m_TabID": 37,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HALLOWEEN_PROJECT"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HALLOWEEN_PROJECT",
+      "m_Visible": false
     },
     {
       "m_TabID": 38,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HALLOWEEN_PROJECT"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HALLOWEEN_PROJECT",
+      "m_Visible": false
     },
     {
       "m_TabID": 39,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HALLOWEEN_PROJECT"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HALLOWEEN_PROJECT",
+      "m_Visible": false
     },
     {
       "m_TabID": 111,
       "m_MissionTab": "MENTORING",
-      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_01"
+      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_01",
+      "m_Visible": false
     },
     {
       "m_TabID": 112,
       "m_MissionTab": "MENTORING",
-      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_02"
+      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_02",
+      "m_Visible": false
     },
     {
       "m_TabID": 113,
       "m_MissionTab": "MENTORING",
-      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_03"
+      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_03",
+      "m_Visible": false
     },
     {
       "m_TabID": 114,
       "m_MissionTab": "MENTORING",
-      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_04"
+      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_04",
+      "m_Visible": false
     },
     {
       "m_TabID": 115,
       "m_MissionTab": "MENTORING",
-      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_05"
+      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_05",
+      "m_Visible": false
     },
     {
       "m_TabID": 201,
       "m_MissionTab": "MENTORING",
-      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_2022_01"
+      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_2022_01",
+      "m_Visible": false
     },
     {
       "m_TabID": 202,
       "m_MissionTab": "MENTORING",
-      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_2022_02"
+      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_2022_02",
+      "m_Visible": false
     },
     {
       "m_TabID": 203,
       "m_MissionTab": "MENTORING",
-      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_2022_03"
+      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_2022_03",
+      "m_Visible": false
     },
     {
       "m_TabID": 204,
       "m_MissionTab": "MENTORING",
-      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_2022_04"
+      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_2022_04",
+      "m_Visible": false
     },
     {
       "m_TabID": 205,
       "m_MissionTab": "MENTORING",
-      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_2023_01"
+      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_2023_01",
+      "m_Visible": false
     },
     {
       "m_TabID": 206,
       "m_MissionTab": "MENTORING",
-      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_2023_02"
+      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_2023_02",
+      "m_Visible": false
     },
     {
       "m_TabID": 207,
       "m_MissionTab": "MENTORING",
-      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_2023_03"
+      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_2023_03",
+      "m_Visible": false
     },
     {
       "m_TabID": 208,
       "m_MissionTab": "MENTORING",
-      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_2023_04"
+      "m_OpenTag": "TAG_COMMON_MISSION_MENTOR_2023_04",
+      "m_Visible": false
     },
     {
       "m_TabID": 91,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false
     },
     {
       "m_TabID": 92,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false
     },
     {
       "m_TabID": 93,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false
     },
     {
       "m_TabID": 94,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false
     },
     {
       "m_TabID": 95,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false
     },
     {
       "m_TabID": 96,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false
     },
     {
       "m_TabID": 97,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false
     },
     {
       "m_TabID": 99,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false
     },
     {
       "m_TabID": 121,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false
     },
     {
       "m_TabID": 122,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false
     },
     {
       "m_TabID": 123,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false
     },
     {
       "m_TabID": 124,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false
     },
     {
       "m_TabID": 125,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false
     },
     {
       "m_TabID": 126,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false
     },
     {
       "m_TabID": 127,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false
     },
     {
       "m_TabID": 129,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false
     },
     {
       "m_TabID": 103,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_300DAYS"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_300DAYS",
+      "m_Visible": false
     },
     {
       "m_TabID": 104,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_300DAYS"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_300DAYS",
+      "m_Visible": false
     },
     {
       "m_TabID": 105,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_300DAYS"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_300DAYS",
+      "m_Visible": false
     },
     {
       "m_TabID": 106,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_300DAYS"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_300DAYS",
+      "m_Visible": false
     },
     {
       "m_TabID": 107,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_300DAYS"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_300DAYS",
+      "m_Visible": false
     },
     {
       "m_TabID": 108,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_300DAYS"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_300DAYS",
+      "m_Visible": false
     },
     {
       "m_TabID": 109,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_300DAYS"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_300DAYS",
+      "m_Visible": false
     },
     {
       "m_TabID": 110,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_300DAYS"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_300DAYS",
+      "m_Visible": false
     },
     {
       "m_TabID": 501,
       "m_MissionTab": "EVENT_PASS",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PASS"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PASS",
+      "m_Visible": false
     },
     {
       "m_TabID": 502,
       "m_MissionTab": "EVENT_PASS",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PASS"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PASS",
+      "m_Visible": false
     },
     {
       "m_TabID": 503,
       "m_MissionTab": "EVENT_PASS",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false,
+      "listContentsTagAllow": [
+        "TAG_MISSION_NOT_USED"
+      ]
     },
     {
       "m_TabID": 504,
       "m_MissionTab": "EVENT_PASS",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false,
+      "listContentsTagAllow": [
+        "TAG_MISSION_NOT_USED"
+      ]
     },
     {
       "m_TabID": 40,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_STREGA"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_STREGA",
+      "m_Visible": false,
+      "listContentsTagAllow": [
+        "TAG_MISSION_NOT_USED"
+      ]
     },
     {
       "m_TabID": 42,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MAID"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MAID",
+      "m_Visible": false,
+      "listContentsTagAllow": [
+        "TAG_MISSION_NOT_USED"
+      ]
     },
     {
       "m_TabID": 43,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_XMAS_PROJECT"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_XMAS_PROJECT",
+      "m_Visible": false
     },
     {
       "m_TabID": 44,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_XMAS_PROJECT"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_XMAS_PROJECT",
+      "m_Visible": false
     },
     {
       "m_TabID": 45,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_XMAS_PROJECT"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_XMAS_PROJECT",
+      "m_Visible": false
     },
     {
       "m_TabID": 46,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_XMAS_PROJECT"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_XMAS_PROJECT",
+      "m_Visible": false
     },
     {
       "m_TabID": 47,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_XMAS"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_XMAS",
+      "m_Visible": false,
+      "listContentsTagAllow": [
+        "TAG_MISSION_NOT_USED"
+      ]
     },
     {
       "m_TabID": 48,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN",
+      "m_Visible": false,
+      "listContentsTagAllow": [
+        "TAG_MISSION_NOT_USED"
+      ]
     },
     {
       "m_TabID": 49,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MILITIA"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MILITIA",
+      "m_Visible": false,
+      "listContentsTagAllow": [
+        "TAG_MISSION_NOT_USED"
+      ]
     },
     {
       "m_TabID": 50,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_VALENTINE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_VALENTINE",
+      "m_Visible": false,
+      "listContentsTagAllow": [
+        "TAG_MISSION_NOT_USED"
+      ]
     },
     {
       "m_TabID": 41,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR",
+      "m_Visible": false,
+      "listContentsTagAllow": [
+        "TAG_MISSION_NOT_USED"
+      ]
     },
     {
       "m_TabID": 1101,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REPLACER_QUEEN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REPLACER_QUEEN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1102,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REPLACER_QUEEN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REPLACER_QUEEN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1103,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REPLACER_QUEEN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REPLACER_QUEEN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1104,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REPLACER_QUEEN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REPLACER_QUEEN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1105,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REPLACER_QUEEN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REPLACER_QUEEN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1100,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REPLACER_QUEEN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REPLACER_QUEEN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 51,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SPRING"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SPRING",
+      "m_Visible": false,
+      "listContentsTagAllow": [
+        "TAG_MISSION_NOT_USED"
+      ]
     },
     {
       "m_TabID": 52,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FOOLSDAY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FOOLSDAY",
+      "m_Visible": false,
+      "listContentsTagAllow": [
+        "TAG_MISSION_NOT_USED"
+      ]
     },
     {
       "m_TabID": 920,
@@ -551,2679 +694,3224 @@
     {
       "m_TabID": 921,
       "m_MissionTab": "USER_LEVEL",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false
     },
     {
       "m_TabID": 931,
       "m_MissionTab": "USER_LEVEL",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false
     },
     {
       "m_TabID": 941,
       "m_MissionTab": "USER_LEVEL",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false
     },
     {
       "m_TabID": 951,
       "m_MissionTab": "USER_LEVEL",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false
     },
     {
       "m_TabID": 961,
       "m_MissionTab": "USER_LEVEL",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false
     },
     {
       "m_TabID": 3202,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DAILY_ONTIME"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DAILY_ONTIME",
+      "m_Visible": false
     },
     {
       "m_TabID": 3203,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DAILY_ONTIME"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DAILY_ONTIME",
+      "m_Visible": false
     },
     {
       "m_TabID": 3218,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_KAKAO_MISSION_2021_08"
+      "m_OpenTag": "TAG_KAKAO_MISSION_2021_08",
+      "m_Visible": false
     },
     {
       "m_TabID": 3229,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_GLOBAL_EVENT_PANDA_SHIP_MISSION"
+      "m_OpenTag": "TAG_GLOBAL_EVENT_PANDA_SHIP_MISSION",
+      "m_Visible": false
     },
     {
       "m_TabID": 3221,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1_5YEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1_5YEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 3222,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1_5YEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1_5YEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 3223,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1_5YEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1_5YEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 3224,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1_5YEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1_5YEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 3231,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_GLOBAL_MISSION_100DAYS"
+      "m_OpenTag": "TAG_GLOBAL_MISSION_100DAYS",
+      "m_Visible": false
     },
     {
       "m_TabID": 3232,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_GLOBAL_MISSION_100DAYS"
+      "m_OpenTag": "TAG_GLOBAL_MISSION_100DAYS",
+      "m_Visible": false
     },
     {
       "m_TabID": 3233,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_GLOBAL_MISSION_100DAYS"
+      "m_OpenTag": "TAG_GLOBAL_MISSION_100DAYS",
+      "m_Visible": false
     },
     {
       "m_TabID": 3230,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_GLOBAL_MISSION_100DAYS"
+      "m_OpenTag": "TAG_GLOBAL_MISSION_100DAYS",
+      "m_Visible": false
     },
     {
       "m_TabID": 3241,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MAINSTREAM_CLEAR_07"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MAINSTREAM_CLEAR_07",
+      "m_Visible": false
     },
     {
       "m_TabID": 3242,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MAINSTREAM_CLEAR_07"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MAINSTREAM_CLEAR_07",
+      "m_Visible": false
     },
     {
       "m_TabID": 3243,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MAINSTREAM_CLEAR_07"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MAINSTREAM_CLEAR_07",
+      "m_Visible": false
     },
     {
       "m_TabID": 3240,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MAINSTREAM_CLEAR_07"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MAINSTREAM_CLEAR_07",
+      "m_Visible": false
     },
     {
       "m_TabID": 3251,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HALLOWEEN_PROJECT_V2"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HALLOWEEN_PROJECT_V2",
+      "m_Visible": false
     },
     {
       "m_TabID": 3252,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HALLOWEEN_PROJECT_V2"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HALLOWEEN_PROJECT_V2",
+      "m_Visible": false
     },
     {
       "m_TabID": 3250,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HALLOWEEN_PROJECT_V2"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HALLOWEEN_PROJECT_V2",
+      "m_Visible": false
     },
     {
       "m_TabID": 3261,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_300DAYS_TWN"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_300DAYS_TWN",
+      "m_Visible": false
     },
     {
       "m_TabID": 3262,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_300DAYS_TWN"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_300DAYS_TWN",
+      "m_Visible": false
     },
     {
       "m_TabID": 3263,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_300DAYS_TWN"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_300DAYS_TWN",
+      "m_Visible": false
     },
     {
       "m_TabID": 3260,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_300DAYS_TWN"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_300DAYS_TWN",
+      "m_Visible": false
     },
     {
       "m_TabID": 3271,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAR_SUPPORT"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAR_SUPPORT",
+      "m_Visible": false
     },
     {
       "m_TabID": 3272,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAR_SUPPORT"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAR_SUPPORT",
+      "m_Visible": false
     },
     {
       "m_TabID": 3273,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAR_SUPPORT"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAR_SUPPORT",
+      "m_Visible": false
     },
     {
       "m_TabID": 3274,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAR_SUPPORT"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAR_SUPPORT",
+      "m_Visible": false
     },
     {
       "m_TabID": 3270,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAR_SUPPORT"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAR_SUPPORT",
+      "m_Visible": false
     },
     {
       "m_TabID": 3281,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SHIP_DRY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SHIP_DRY",
+      "m_Visible": false
     },
     {
       "m_TabID": 3280,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SHIP_DRY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SHIP_DRY",
+      "m_Visible": false
     },
     {
       "m_TabID": 3291,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_OC"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_OC",
+      "m_Visible": false
     },
     {
       "m_TabID": 3290,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_OC"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_OC",
+      "m_Visible": false
     },
     {
       "m_TabID": 3300,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CHUSEOK_2021"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CHUSEOK_2021",
+      "m_Visible": false
     },
     {
       "m_TabID": 3311,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_XMAS_V2"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_XMAS_V2",
+      "m_Visible": false
     },
     {
       "m_TabID": 3312,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_XMAS_V2"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_XMAS_V2",
+      "m_Visible": false
     },
     {
       "m_TabID": 3313,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_XMAS_V2"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_XMAS_V2",
+      "m_Visible": false
     },
     {
       "m_TabID": 3310,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_XMAS_V2"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_XMAS_V2",
+      "m_Visible": false
     },
     {
       "m_TabID": 3320,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_NEW_YEAR_FESTIVAL_2022"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_NEW_YEAR_FESTIVAL_2022",
+      "m_Visible": false
     },
     {
       "m_TabID": 3331,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_VALEN_22"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_VALEN_22",
+      "m_Visible": false
     },
     {
       "m_TabID": 3332,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_VALEN_22"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_VALEN_22",
+      "m_Visible": false
     },
     {
       "m_TabID": 3330,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_VALEN_22"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_VALEN_22",
+      "m_Visible": false
     },
     {
       "m_TabID": 3341,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2ND_ANNIVERSARY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2ND_ANNIVERSARY",
+      "m_Visible": false
     },
     {
       "m_TabID": 3342,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2ND_ANNIVERSARY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2ND_ANNIVERSARY",
+      "m_Visible": false
     },
     {
       "m_TabID": 3343,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2ND_ANNIVERSARY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2ND_ANNIVERSARY",
+      "m_Visible": false
     },
     {
       "m_TabID": 3340,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2ND_ANNIVERSARY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2ND_ANNIVERSARY",
+      "m_Visible": false
     },
     {
       "m_TabID": 3351,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAR_SUPPORT_GLOBAL"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAR_SUPPORT_GLOBAL",
+      "m_Visible": false
     },
     {
       "m_TabID": 3352,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAR_SUPPORT_GLOBAL"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAR_SUPPORT_GLOBAL",
+      "m_Visible": false
     },
     {
       "m_TabID": 3353,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAR_SUPPORT_GLOBAL"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAR_SUPPORT_GLOBAL",
+      "m_Visible": false
     },
     {
       "m_TabID": 3354,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAR_SUPPORT_GLOBAL"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAR_SUPPORT_GLOBAL",
+      "m_Visible": false
     },
     {
       "m_TabID": 3350,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAR_SUPPORT_GLOBAL"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAR_SUPPORT_GLOBAL",
+      "m_Visible": false
     },
     {
       "m_TabID": 3361,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_SPRING_BLOSSOM"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_SPRING_BLOSSOM",
+      "m_Visible": false
     },
     {
       "m_TabID": 3362,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_SPRING_BLOSSOM"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_SPRING_BLOSSOM",
+      "m_Visible": false
     },
     {
       "m_TabID": 3360,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_SPRING_BLOSSOM"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_SPRING_BLOSSOM",
+      "m_Visible": false
     },
     {
       "m_TabID": 3371,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_SONGK"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_SONGK",
+      "m_Visible": false
     },
     {
       "m_TabID": 3372,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_SONGK"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_SONGK",
+      "m_Visible": false
     },
     {
       "m_TabID": 3370,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_SONGK"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_SONGK",
+      "m_Visible": false
     },
     {
       "m_TabID": 3381,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_HARMONY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_HARMONY",
+      "m_Visible": false
     },
     {
       "m_TabID": 3382,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_HARMONY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_HARMONY",
+      "m_Visible": false
     },
     {
       "m_TabID": 3380,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_HARMONY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_HARMONY",
+      "m_Visible": false
     },
     {
       "m_TabID": 3391,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FAM_05"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FAM_05",
+      "m_Visible": false
     },
     {
       "m_TabID": 3392,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FAM_05"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FAM_05",
+      "m_Visible": false
     },
     {
       "m_TabID": 3390,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FAM_05"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FAM_05",
+      "m_Visible": false
     },
     {
       "m_TabID": 3401,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_QLI_EP"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_QLI_EP",
+      "m_Visible": false
     },
     {
       "m_TabID": 3402,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_QLI_EP"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_QLI_EP",
+      "m_Visible": false
     },
     {
       "m_TabID": 3403,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_QLI_EP"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_QLI_EP",
+      "m_Visible": false
     },
     {
       "m_TabID": 3400,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_QLI_EP"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_QLI_EP",
+      "m_Visible": false
     },
     {
       "m_TabID": 3501,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_SUM_OVER"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_SUM_OVER",
+      "m_Visible": false
     },
     {
       "m_TabID": 3502,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_SUM_OVER"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_SUM_OVER",
+      "m_Visible": false
     },
     {
       "m_TabID": 3503,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_SUM_OVER"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_SUM_OVER",
+      "m_Visible": false
     },
     {
       "m_TabID": 3500,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_SUM_OVER"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_SUM_OVER",
+      "m_Visible": false
     },
     {
       "m_TabID": 3511,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_NIGHTMARE_ES"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_NIGHTMARE_ES",
+      "m_Visible": false
     },
     {
       "m_TabID": 3512,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_NIGHTMARE_ES"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_NIGHTMARE_ES",
+      "m_Visible": false
     },
     {
       "m_TabID": 3510,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_NIGHTMARE_ES"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_NIGHTMARE_ES",
+      "m_Visible": false
     },
     {
       "m_TabID": 3521,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_ROYAL_SUP"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_ROYAL_SUP",
+      "m_Visible": false
     },
     {
       "m_TabID": 3522,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_ROYAL_SUP"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_ROYAL_SUP",
+      "m_Visible": false
     },
     {
       "m_TabID": 3520,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_ROYAL_SUP"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_ROYAL_SUP",
+      "m_Visible": false
     },
     {
       "m_TabID": 3531,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2_5ND_ANNIVERSARY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2_5ND_ANNIVERSARY",
+      "m_Visible": false
     },
     {
       "m_TabID": 3532,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2_5ND_ANNIVERSARY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2_5ND_ANNIVERSARY",
+      "m_Visible": false
     },
     {
       "m_TabID": 3533,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2_5ND_ANNIVERSARY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2_5ND_ANNIVERSARY",
+      "m_Visible": false
     },
     {
       "m_TabID": 3530,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2_5ND_ANNIVERSARY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2_5ND_ANNIVERSARY",
+      "m_Visible": false
     },
     {
       "m_TabID": 3541,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_HOLY_DAY_22"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_HOLY_DAY_22",
+      "m_Visible": false
     },
     {
       "m_TabID": 3542,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_HOLY_DAY_22"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_HOLY_DAY_22",
+      "m_Visible": false
     },
     {
       "m_TabID": 3540,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_HOLY_DAY_22"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_HOLY_DAY_22",
+      "m_Visible": false
     },
     {
       "m_TabID": 3551,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_CLB_002"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_CLB_002",
+      "m_Visible": false
     },
     {
       "m_TabID": 3552,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_CLB_002"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_CLB_002",
+      "m_Visible": false
     },
     {
       "m_TabID": 3553,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_CLB_002"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_CLB_002",
+      "m_Visible": false
     },
     {
       "m_TabID": 3550,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_CLB_002"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_CLB_002",
+      "m_Visible": false
     },
     {
       "m_TabID": 3561,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1ST_ANNIVERSARY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1ST_ANNIVERSARY",
+      "m_Visible": false
     },
     {
       "m_TabID": 3562,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1ST_ANNIVERSARY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1ST_ANNIVERSARY",
+      "m_Visible": false
     },
     {
       "m_TabID": 3563,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1ST_ANNIVERSARY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1ST_ANNIVERSARY",
+      "m_Visible": false
     },
     {
       "m_TabID": 3560,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1ST_ANNIVERSARY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1ST_ANNIVERSARY",
+      "m_Visible": false
     },
     {
       "m_TabID": 3571,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HALLOWEEN_PROJECT_V3"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HALLOWEEN_PROJECT_V3",
+      "m_Visible": false
     },
     {
       "m_TabID": 3572,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HALLOWEEN_PROJECT_V3"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HALLOWEEN_PROJECT_V3",
+      "m_Visible": false
     },
     {
       "m_TabID": 3570,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HALLOWEEN_PROJECT_V3"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HALLOWEEN_PROJECT_V3",
+      "m_Visible": false
     },
     {
       "m_TabID": 3581,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1_5YEAR_G"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1_5YEAR_G",
+      "m_Visible": false
     },
     {
       "m_TabID": 3582,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1_5YEAR_G"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1_5YEAR_G",
+      "m_Visible": false
     },
     {
       "m_TabID": 3583,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1_5YEAR_G"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1_5YEAR_G",
+      "m_Visible": false
     },
     {
       "m_TabID": 3580,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1_5YEAR_G"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1_5YEAR_G",
+      "m_Visible": false
     },
     {
       "m_TabID": 3591,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1000_DAYS"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1000_DAYS",
+      "m_Visible": false
     },
     {
       "m_TabID": 3592,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1000_DAYS"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1000_DAYS",
+      "m_Visible": false
     },
     {
       "m_TabID": 3593,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1000_DAYS"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1000_DAYS",
+      "m_Visible": false
     },
     {
       "m_TabID": 3590,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1000_DAYS"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_1000_DAYS",
+      "m_Visible": false
     },
     {
       "m_TabID": 3601,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2ND_ANNIVERSARY_G"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2ND_ANNIVERSARY_G",
+      "m_Visible": false
     },
     {
       "m_TabID": 3602,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2ND_ANNIVERSARY_G"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2ND_ANNIVERSARY_G",
+      "m_Visible": false
     },
     {
       "m_TabID": 3603,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2ND_ANNIVERSARY_G"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2ND_ANNIVERSARY_G",
+      "m_Visible": false
     },
     {
       "m_TabID": 3600,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2ND_ANNIVERSARY_G"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2ND_ANNIVERSARY_G",
+      "m_Visible": false
     },
     {
       "m_TabID": 3611,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SERVICE_TRANSFER"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SERVICE_TRANSFER",
+      "m_Visible": false
     },
     {
       "m_TabID": 3610,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SERVICE_TRANSFER"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SERVICE_TRANSFER",
+      "m_Visible": false
     },
     {
       "m_TabID": 3621,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_XMAS_V3"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_XMAS_V3",
+      "m_Visible": false
     },
     {
       "m_TabID": 3622,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_XMAS_V3"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_XMAS_V3",
+      "m_Visible": false
     },
     {
       "m_TabID": 3620,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_XMAS_V3"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_XMAS_V3",
+      "m_Visible": false
     },
     {
       "m_TabID": 3700,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BLACK_2211"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BLACK_2211",
+      "m_Visible": false
     },
     {
       "m_TabID": 3631,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2_5ND_ANNIVERSARY_G"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2_5ND_ANNIVERSARY_G",
+      "m_Visible": false
     },
     {
       "m_TabID": 3632,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2_5ND_ANNIVERSARY_G"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2_5ND_ANNIVERSARY_G",
+      "m_Visible": false
     },
     {
       "m_TabID": 3633,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2_5ND_ANNIVERSARY_G"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2_5ND_ANNIVERSARY_G",
+      "m_Visible": false
     },
     {
       "m_TabID": 3630,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2_5ND_ANNIVERSARY_G"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_2_5ND_ANNIVERSARY_G",
+      "m_Visible": false
     },
     {
       "m_TabID": 3641,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_NEWYEAR_2023"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_NEWYEAR_2023",
+      "m_Visible": false
     },
     {
       "m_TabID": 3642,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_NEWYEAR_2023"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_NEWYEAR_2023",
+      "m_Visible": false
     },
     {
       "m_TabID": 3640,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_NEWYEAR_2023"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_NEWYEAR_2023",
+      "m_Visible": false
     },
     {
       "m_TabID": 3651,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SPRING_BLOSSOM_V2"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SPRING_BLOSSOM_V2",
+      "m_Visible": false
     },
     {
       "m_TabID": 3652,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SPRING_BLOSSOM_V2"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SPRING_BLOSSOM_V2",
+      "m_Visible": false
     },
     {
       "m_TabID": 3650,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SPRING_BLOSSOM_V2"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SPRING_BLOSSOM_V2",
+      "m_Visible": false
     },
     {
       "m_TabID": 3661,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_HALF_ANN"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_HALF_ANN",
+      "m_Visible": false
     },
     {
       "m_TabID": 3662,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_HALF_ANN"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_HALF_ANN",
+      "m_Visible": false
     },
     {
       "m_TabID": 3663,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_HALF_ANN"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_HALF_ANN",
+      "m_Visible": false
     },
     {
       "m_TabID": 3660,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_HALF_ANN"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_HALF_ANN",
+      "m_Visible": false
     },
     {
       "m_TabID": 3671,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_HALF_ANN_ZL"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_HALF_ANN_ZL",
+      "m_Visible": false
     },
     {
       "m_TabID": 3672,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_HALF_ANN_ZL"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_HALF_ANN_ZL",
+      "m_Visible": false
     },
     {
       "m_TabID": 3673,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_HALF_ANN_ZL"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_HALF_ANN_ZL",
+      "m_Visible": false
     },
     {
       "m_TabID": 3670,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_HALF_ANN_ZL"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_HALF_ANN_ZL",
+      "m_Visible": false
     },
     {
       "m_TabID": 3681,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_1YEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_1YEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 3682,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_1YEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_1YEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 3683,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_1YEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_1YEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 3680,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_1YEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_1YEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 3690,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP",
+      "m_Visible": false
     },
     {
       "m_TabID": 3691,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP_CLB_003"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP_CLB_003",
+      "m_Visible": false
     },
     {
       "m_TabID": 3692,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP_FOOLSDAY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP_FOOLSDAY",
+      "m_Visible": false
     },
     {
       "m_TabID": 3693,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP_BUNNY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP_BUNNY",
+      "m_Visible": false
     },
     {
       "m_TabID": 3694,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP_GUILTY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP_GUILTY",
+      "m_Visible": false
     },
     {
       "m_TabID": 3695,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP_SUMMER"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP_SUMMER",
+      "m_Visible": false
     },
     {
       "m_TabID": 3696,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP_SUMMER_003"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP_SUMMER_003",
+      "m_Visible": false
     },
     {
       "m_TabID": 3697,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP_HEROPARTY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP_HEROPARTY",
+      "m_Visible": false
     },
     {
       "m_TabID": 3698,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP_DANMACHI"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP_DANMACHI",
+      "m_Visible": false
     },
     {
       "m_TabID": 3699,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP_NEWYEAR2025"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP_NEWYEAR2025",
+      "m_Visible": false
     },
     {
       "m_TabID": 37001,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP_WEDDING"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP_WEDDING",
+      "m_Visible": false
     },
     {
       "m_TabID": 37002,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP_SUMMER_004"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP_SUMMER_004",
+      "m_Visible": false
     },
     {
       "m_TabID": 37003,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP_X_MAS"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MISSION_SPECIAL_SHOP_X_MAS",
+      "m_Visible": false
     },
     {
       "m_TabID": 3711,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_CLB_003"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_CLB_003",
+      "m_Visible": false
     },
     {
       "m_TabID": 3710,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_CLB_003"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_PROJECT_CLB_003",
+      "m_Visible": false
     },
     {
       "m_TabID": 3721,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_1_5YEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_1_5YEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 3722,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_1_5YEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_1_5YEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 3723,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_1_5YEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_1_5YEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 3720,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_1_5YEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_1_5YEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 3731,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_2YEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_2YEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 3732,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_2YEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_2YEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 3733,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_2YEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_2YEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 3730,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_2YEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_2YEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 3741,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_2_5YEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_2_5YEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 3742,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_2_5YEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_2_5YEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 3743,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_2_5YEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_2_5YEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 3740,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_2_5YEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_2_5YEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 3751,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_3YEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_3YEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 3752,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_3YEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_3YEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 3753,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_3YEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_3YEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 3750,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_3YEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GLOBAL_FIRST_3YEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 9997,
-      "m_MissionTab": "EVENT"
+      "m_MissionTab": "EVENT",
+      "m_Visible": false,
+      "listContentsTagAllow": [
+        "DEV_MISSION"
+      ]
     },
     {
       "m_TabID": 9998,
-      "m_MissionTab": "EVENT"
+      "m_MissionTab": "EVENT",
+      "m_Visible": false,
+      "listContentsTagAllow": [
+        "DEV_MISSION"
+      ]
     },
     {
       "m_TabID": 9999,
-      "m_MissionTab": "EVENT"
+      "m_MissionTab": "EVENT",
+      "m_Visible": false,
+      "listContentsTagAllow": [
+        "DEV_MISSION"
+      ]
     },
     {
       "m_TabID": 5001,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_VALENTINE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_VALENTINE",
+      "m_Visible": false
     },
     {
       "m_TabID": 5002,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SPRING"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SPRING",
+      "m_Visible": false
     },
     {
       "m_TabID": 5003,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CROSSROAD"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CROSSROAD",
+      "m_Visible": false
     },
     {
       "m_TabID": 5004,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_WANTED_1"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_WANTED_1",
+      "m_Visible": false
     },
     {
       "m_TabID": 5005,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR",
+      "m_Visible": false
     },
     {
       "m_TabID": 5006,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SUMMER_1"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SUMMER_1",
+      "m_Visible": false
     },
     {
       "m_TabID": 5007,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN",
+      "m_Visible": false
     },
     {
       "m_TabID": 5008,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SIGMA"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SIGMA",
+      "m_Visible": false
     },
     {
       "m_TabID": 5009,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_STREGA"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_STREGA",
+      "m_Visible": false
     },
     {
       "m_TabID": 5010,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MAID"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MAID",
+      "m_Visible": false
     },
     {
       "m_TabID": 5011,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_XMAS"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_XMAS",
+      "m_Visible": false
     },
     {
       "m_TabID": 5012,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MILITIA"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MILITIA",
+      "m_Visible": false
     },
     {
       "m_TabID": 5013,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FOOLSDAY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FOOLSDAY",
+      "m_Visible": false
     },
     {
       "m_TabID": 5014,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SHADE_1"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SHADE_1",
+      "m_Visible": false
     },
     {
       "m_TabID": 5015,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SPORTS_1"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SPORTS_1",
+      "m_Visible": false
     },
     {
       "m_TabID": 5016,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CLB_001_1"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CLB_001_1",
+      "m_Visible": false
     },
     {
       "m_TabID": 5017,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SUMMER2021_1"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SUMMER2021_1",
+      "m_Visible": false
     },
     {
       "m_TabID": 5018,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HORIZON_1"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HORIZON_1",
+      "m_Visible": false
     },
     {
       "m_TabID": 5019,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_NANAHARA"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_NANAHARA",
+      "m_Visible": false
     },
     {
       "m_TabID": 5020,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GREMORY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GREMORY",
+      "m_Visible": false
     },
     {
       "m_TabID": 5021,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALPHA"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALPHA",
+      "m_Visible": false
     },
     {
       "m_TabID": 5022,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CARNIVAL_1"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CARNIVAL_1",
+      "m_Visible": false
     },
     {
       "m_TabID": 5023,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_NIGHTMARE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_NIGHTMARE",
+      "m_Visible": false
     },
     {
       "m_TabID": 5024,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_KINGDOM"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_KINGDOM",
+      "m_Visible": false
     },
     {
       "m_TabID": 5025,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_NEVERLAND"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_NEVERLAND",
+      "m_Visible": false
     },
     {
       "m_TabID": 5026,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CLB_002"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CLB_002",
+      "m_Visible": false
     },
     {
       "m_TabID": 5027,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR2_01"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR2_01",
+      "m_Visible": false
     },
     {
       "m_TabID": 5028,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GAMECIRCLE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GAMECIRCLE",
+      "m_Visible": false
     },
     {
       "m_TabID": 5029,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_NANAHARA2"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_NANAHARA2",
+      "m_Visible": false
     },
     {
       "m_TabID": 5030,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_CHARADE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_CHARADE",
+      "m_Visible": false
     },
     {
       "m_TabID": 5031,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_EXILER"
+      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_EXILER",
+      "m_Visible": false
     },
     {
       "m_TabID": 5032,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_ACADEMY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_ACADEMY",
+      "m_Visible": false
     },
     {
       "m_TabID": 5033,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_CHARADE2"
+      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_CHARADE2",
+      "m_Visible": false
     },
     {
       "m_TabID": 5034,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_CARNIVAL2"
+      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_CARNIVAL2",
+      "m_Visible": false
     },
     {
       "m_TabID": 5035,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EP_EVENT_FRONTBAY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EP_EVENT_FRONTBAY",
+      "m_Visible": false
     },
     {
       "m_TabID": 5036,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_PRYDWEN"
+      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_PRYDWEN",
+      "m_Visible": false
     },
     {
       "m_TabID": 5037,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_FLOOR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_FLOOR",
+      "m_Visible": false
     },
     {
       "m_TabID": 5038,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_YAKSHA"
+      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_YAKSHA",
+      "m_Visible": false
     },
     {
       "m_TabID": 5039,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_DOLL"
+      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_DOLL",
+      "m_Visible": false
     },
     {
       "m_TabID": 5040,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_AVENGER"
+      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_AVENGER",
+      "m_Visible": false
     },
     {
       "m_TabID": 5041,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_SWANSONG"
+      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_SWANSONG",
+      "m_Visible": false
     },
     {
       "m_TabID": 5042,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EP_EVENT_DEBT"
+      "m_OpenTag": "TAG_COMMON_MISSION_EP_EVENT_DEBT",
+      "m_Visible": false
     },
     {
       "m_TabID": 5043,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_VARUNA"
+      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_VARUNA",
+      "m_Visible": false
     },
     {
       "m_TabID": 5044,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_LEGACY"
+      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_LEGACY",
+      "m_Visible": false
     },
     {
       "m_TabID": 5045,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EP_EVENT_CLB_004"
+      "m_OpenTag": "TAG_COMMON_MISSION_EP_EVENT_CLB_004",
+      "m_Visible": false
     },
     {
       "m_TabID": 5046,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_WINTERVACATION"
+      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_WINTERVACATION",
+      "m_Visible": false
     },
     {
       "m_TabID": 5047,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_MOONLIGHT"
+      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_MOONLIGHT",
+      "m_Visible": false
     },
     {
       "m_TabID": 5048,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_PRIDE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EP_SUB_PRIDE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1111,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MINISTRA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MINISTRA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1112,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MINISTRA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MINISTRA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1113,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MINISTRA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MINISTRA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1114,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MINISTRA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MINISTRA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1115,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MINISTRA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MINISTRA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1110,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MINISTRA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MINISTRA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1121,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_YOO_MI_NA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_YOO_MI_NA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1122,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_YOO_MI_NA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_YOO_MI_NA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1123,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_YOO_MI_NA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_YOO_MI_NA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1124,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_YOO_MI_NA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_YOO_MI_NA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1125,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_YOO_MI_NA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_YOO_MI_NA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1120,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_YOO_MI_NA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_YOO_MI_NA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1131,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_C_SIXWING_AMY_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_C_SIXWING_AMY_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1132,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_C_SIXWING_AMY_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_C_SIXWING_AMY_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1133,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_C_SIXWING_AMY_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_C_SIXWING_AMY_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1134,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_C_SIXWING_AMY_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_C_SIXWING_AMY_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1135,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_C_SIXWING_AMY_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_C_SIXWING_AMY_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1130,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_C_SIXWING_AMY_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_C_SIXWING_AMY_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1141,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MA_EVOLVE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MA_EVOLVE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1142,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MA_EVOLVE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MA_EVOLVE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1143,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MA_EVOLVE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MA_EVOLVE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1144,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MA_EVOLVE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MA_EVOLVE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1145,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MA_EVOLVE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MA_EVOLVE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1140,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MA_EVOLVE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_MA_EVOLVE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1151,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_YOO_NA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_YOO_NA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1152,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_YOO_NA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_YOO_NA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1153,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_YOO_NA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_YOO_NA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1154,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_YOO_NA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_YOO_NA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1155,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_YOO_NA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_YOO_NA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1150,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_YOO_NA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_YOO_NA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1161,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_SIXWING_NA_YUBIN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_SIXWING_NA_YUBIN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1162,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_SIXWING_NA_YUBIN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_SIXWING_NA_YUBIN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1163,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_SIXWING_NA_YUBIN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_SIXWING_NA_YUBIN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1164,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_SIXWING_NA_YUBIN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_SIXWING_NA_YUBIN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1165,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_SIXWING_NA_YUBIN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_SIXWING_NA_YUBIN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1160,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_SIXWING_NA_YUBIN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_SIXWING_NA_YUBIN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1171,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALT_CA_SEO_YOON_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALT_CA_SEO_YOON_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1172,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALT_CA_SEO_YOON_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALT_CA_SEO_YOON_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1173,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALT_CA_SEO_YOON_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALT_CA_SEO_YOON_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1174,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALT_CA_SEO_YOON_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALT_CA_SEO_YOON_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1175,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALT_CA_SEO_YOON_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALT_CA_SEO_YOON_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1170,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALT_CA_SEO_YOON_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALT_CA_SEO_YOON_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1181,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_JOO_SHI_YOON_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_JOO_SHI_YOON_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1182,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_JOO_SHI_YOON_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_JOO_SHI_YOON_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1183,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_JOO_SHI_YOON_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_JOO_SHI_YOON_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1184,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_JOO_SHI_YOON_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_JOO_SHI_YOON_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1185,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_JOO_SHI_YOON_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_JOO_SHI_YOON_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1180,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_JOO_SHI_YOON_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_JOO_SHI_YOON_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1191,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_ADMIN_LEE_SUYEON_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_ADMIN_LEE_SUYEON_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1192,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_ADMIN_LEE_SUYEON_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_ADMIN_LEE_SUYEON_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1193,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_ADMIN_LEE_SUYEON_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_ADMIN_LEE_SUYEON_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1194,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_ADMIN_LEE_SUYEON_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_ADMIN_LEE_SUYEON_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1195,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_ADMIN_LEE_SUYEON_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_ADMIN_LEE_SUYEON_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1190,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_ADMIN_LEE_SUYEON_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_CA_ADMIN_LEE_SUYEON_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1201,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FUTURE_MA_LOAN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FUTURE_MA_LOAN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1202,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FUTURE_MA_LOAN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FUTURE_MA_LOAN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1203,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FUTURE_MA_LOAN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FUTURE_MA_LOAN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1204,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FUTURE_MA_LOAN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FUTURE_MA_LOAN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1205,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FUTURE_MA_LOAN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FUTURE_MA_LOAN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1200,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FUTURE_MA_LOAN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FUTURE_MA_LOAN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1211,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_JAKE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_JAKE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1212,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_JAKE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_JAKE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1213,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_JAKE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_JAKE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1214,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_JAKE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_JAKE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1215,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_JAKE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_JAKE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1210,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_JAKE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_JAKE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1221,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALPHA_CA_JIA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALPHA_CA_JIA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1222,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALPHA_CA_JIA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALPHA_CA_JIA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1223,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALPHA_CA_JIA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALPHA_CA_JIA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1224,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALPHA_CA_JIA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALPHA_CA_JIA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1225,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALPHA_CA_JIA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALPHA_CA_JIA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1220,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALPHA_CA_JIA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ALPHA_CA_JIA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1231,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HARMONY_CA_CONDUCT_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HARMONY_CA_CONDUCT_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1232,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HARMONY_CA_CONDUCT_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HARMONY_CA_CONDUCT_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1233,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HARMONY_CA_CONDUCT_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HARMONY_CA_CONDUCT_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1234,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HARMONY_CA_CONDUCT_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HARMONY_CA_CONDUCT_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1235,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HARMONY_CA_CONDUCT_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HARMONY_CA_CONDUCT_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1230,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HARMONY_CA_CONDUCT_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HARMONY_CA_CONDUCT_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1241,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_MARIA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_MARIA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1242,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_MARIA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_MARIA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1243,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_MARIA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_MARIA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1244,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_MARIA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_MARIA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1245,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_MARIA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_MARIA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1240,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_MARIA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_MARIA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1251,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BORDER_SA_HORSE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BORDER_SA_HORSE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1252,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BORDER_SA_HORSE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BORDER_SA_HORSE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1253,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BORDER_SA_HORSE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BORDER_SA_HORSE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1254,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BORDER_SA_HORSE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BORDER_SA_HORSE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1255,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BORDER_SA_HORSE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BORDER_SA_HORSE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1250,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BORDER_SA_HORSE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_BORDER_SA_HORSE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1261,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_RAS_MA_TOWER_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_RAS_MA_TOWER_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1262,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_RAS_MA_TOWER_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_RAS_MA_TOWER_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1263,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_RAS_MA_TOWER_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_RAS_MA_TOWER_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1264,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_RAS_MA_TOWER_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_RAS_MA_TOWER_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1265,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_RAS_MA_TOWER_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_RAS_MA_TOWER_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1260,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_RAS_MA_TOWER_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_RAS_MA_TOWER_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1271,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GEASS_MA_SEITEN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GEASS_MA_SEITEN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1272,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GEASS_MA_SEITEN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GEASS_MA_SEITEN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1273,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GEASS_MA_SEITEN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GEASS_MA_SEITEN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1274,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GEASS_MA_SEITEN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GEASS_MA_SEITEN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1275,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GEASS_MA_SEITEN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GEASS_MA_SEITEN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1270,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GEASS_MA_SEITEN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GEASS_MA_SEITEN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1281,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_FROZEN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_FROZEN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1282,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_FROZEN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_FROZEN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1283,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_FROZEN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_FROZEN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1284,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_FROZEN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_FROZEN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1285,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_FROZEN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_FROZEN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1280,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_FROZEN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_FROZEN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1291,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_JAPAN_CA_SENHIME_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_JAPAN_CA_SENHIME_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1292,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_JAPAN_CA_SENHIME_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_JAPAN_CA_SENHIME_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1293,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_JAPAN_CA_SENHIME_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_JAPAN_CA_SENHIME_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1294,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_JAPAN_CA_SENHIME_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_JAPAN_CA_SENHIME_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1295,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_JAPAN_CA_SENHIME_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_JAPAN_CA_SENHIME_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1290,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_JAPAN_CA_SENHIME_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_JAPAN_CA_SENHIME_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1301,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FALLEN_CA_ROSARIA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FALLEN_CA_ROSARIA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1302,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FALLEN_CA_ROSARIA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FALLEN_CA_ROSARIA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1303,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FALLEN_CA_ROSARIA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FALLEN_CA_ROSARIA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1304,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FALLEN_CA_ROSARIA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FALLEN_CA_ROSARIA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1305,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FALLEN_CA_ROSARIA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FALLEN_CA_ROSARIA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1300,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FALLEN_CA_ROSARIA_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FALLEN_CA_ROSARIA_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1311,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_ARTILLERY_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_ARTILLERY_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1312,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_ARTILLERY_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_ARTILLERY_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1313,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_ARTILLERY_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_ARTILLERY_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1314,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_ARTILLERY_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_ARTILLERY_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1315,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_ARTILLERY_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_ARTILLERY_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1310,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_ARTILLERY_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_ARTILLERY_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1321,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_KYLE_AP_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_KYLE_AP_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1322,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_KYLE_AP_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_KYLE_AP_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1323,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_KYLE_AP_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_KYLE_AP_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1324,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_KYLE_AP_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_KYLE_AP_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1325,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_KYLE_AP_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_KYLE_AP_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1320,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_KYLE_AP_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DELTA_CA_KYLE_AP_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1331,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GUILTY_CA_JACKO_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GUILTY_CA_JACKO_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1332,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GUILTY_CA_JACKO_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GUILTY_CA_JACKO_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1333,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GUILTY_CA_JACKO_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GUILTY_CA_JACKO_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1334,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GUILTY_CA_JACKO_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GUILTY_CA_JACKO_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1335,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GUILTY_CA_JACKO_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GUILTY_CA_JACKO_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1330,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GUILTY_CA_JACKO_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_GUILTY_CA_JACKO_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1341,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SECURITY_CA_SERGEANT_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SECURITY_CA_SERGEANT_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1342,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SECURITY_CA_SERGEANT_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SECURITY_CA_SERGEANT_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1343,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SECURITY_CA_SERGEANT_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SECURITY_CA_SERGEANT_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1344,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SECURITY_CA_SERGEANT_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SECURITY_CA_SERGEANT_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1345,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SECURITY_CA_SERGEANT_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SECURITY_CA_SERGEANT_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1340,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SECURITY_CA_SERGEANT_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SECURITY_CA_SERGEANT_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1351,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HARMONY_CA_ARMOR_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HARMONY_CA_ARMOR_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1352,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HARMONY_CA_ARMOR_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HARMONY_CA_ARMOR_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1353,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HARMONY_CA_ARMOR_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HARMONY_CA_ARMOR_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1354,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HARMONY_CA_ARMOR_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HARMONY_CA_ARMOR_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1355,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HARMONY_CA_ARMOR_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HARMONY_CA_ARMOR_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1350,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HARMONY_CA_ARMOR_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_HARMONY_CA_ARMOR_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1361,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_SHADOW_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_SHADOW_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1362,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_SHADOW_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_SHADOW_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1363,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_SHADOW_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_SHADOW_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1364,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_SHADOW_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_SHADOW_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1365,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_SHADOW_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_SHADOW_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1360,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_SHADOW_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_SHADOW_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1371,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_RAS_MA_DINO_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_RAS_MA_DINO_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1372,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_RAS_MA_DINO_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_RAS_MA_DINO_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1373,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_RAS_MA_DINO_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_RAS_MA_DINO_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1374,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_RAS_MA_DINO_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_RAS_MA_DINO_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1375,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_RAS_MA_DINO_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_RAS_MA_DINO_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1370,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_RAS_MA_DINO_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_RAS_MA_DINO_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1381,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_CAT_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_CAT_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1382,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_CAT_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_CAT_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1383,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_CAT_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_CAT_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1384,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_CAT_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_CAT_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1385,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_CAT_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_CAT_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1380,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_CAT_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_CAT_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1391,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SABOTAGE_CA_SWORD_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SABOTAGE_CA_SWORD_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1392,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SABOTAGE_CA_SWORD_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SABOTAGE_CA_SWORD_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1393,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SABOTAGE_CA_SWORD_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SABOTAGE_CA_SWORD_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1394,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SABOTAGE_CA_SWORD_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SABOTAGE_CA_SWORD_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1395,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SABOTAGE_CA_SWORD_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SABOTAGE_CA_SWORD_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1390,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SABOTAGE_CA_SWORD_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SABOTAGE_CA_SWORD_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1401,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ROOT_CA_HUNTRESS_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ROOT_CA_HUNTRESS_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1402,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ROOT_CA_HUNTRESS_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ROOT_CA_HUNTRESS_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1403,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ROOT_CA_HUNTRESS_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ROOT_CA_HUNTRESS_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1404,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ROOT_CA_HUNTRESS_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ROOT_CA_HUNTRESS_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1405,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ROOT_CA_HUNTRESS_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ROOT_CA_HUNTRESS_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1400,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ROOT_CA_HUNTRESS_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ROOT_CA_HUNTRESS_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1411,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SIXWING_CA_ACTOR_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SIXWING_CA_ACTOR_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1412,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SIXWING_CA_ACTOR_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SIXWING_CA_ACTOR_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1413,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SIXWING_CA_ACTOR_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SIXWING_CA_ACTOR_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1414,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SIXWING_CA_ACTOR_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SIXWING_CA_ACTOR_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1415,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SIXWING_CA_ACTOR_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SIXWING_CA_ACTOR_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1410,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SIXWING_CA_ACTOR_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_SIXWING_CA_ACTOR_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1421,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_VARUNA_CA_CHAKRAM_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_VARUNA_CA_CHAKRAM_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1422,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_VARUNA_CA_CHAKRAM_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_VARUNA_CA_CHAKRAM_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1423,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_VARUNA_CA_CHAKRAM_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_VARUNA_CA_CHAKRAM_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1424,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_VARUNA_CA_CHAKRAM_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_VARUNA_CA_CHAKRAM_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1425,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_VARUNA_CA_CHAKRAM_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_VARUNA_CA_CHAKRAM_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1420,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_VARUNA_CA_CHAKRAM_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_VARUNA_CA_CHAKRAM_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1431,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAPER_SA_COMMANDER_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAPER_SA_COMMANDER_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1432,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAPER_SA_COMMANDER_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAPER_SA_COMMANDER_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1433,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAPER_SA_COMMANDER_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAPER_SA_COMMANDER_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1434,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAPER_SA_COMMANDER_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAPER_SA_COMMANDER_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1435,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAPER_SA_COMMANDER_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAPER_SA_COMMANDER_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1430,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAPER_SA_COMMANDER_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_REAPER_SA_COMMANDER_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1441,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ACADEMY_CA_TWINTAIL_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ACADEMY_CA_TWINTAIL_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1442,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ACADEMY_CA_TWINTAIL_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ACADEMY_CA_TWINTAIL_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1443,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ACADEMY_CA_TWINTAIL_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ACADEMY_CA_TWINTAIL_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1444,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ACADEMY_CA_TWINTAIL_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ACADEMY_CA_TWINTAIL_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1445,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ACADEMY_CA_TWINTAIL_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ACADEMY_CA_TWINTAIL_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1440,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ACADEMY_CA_TWINTAIL_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ACADEMY_CA_TWINTAIL_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1451,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DANMACHI_CA_AIS_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DANMACHI_CA_AIS_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1452,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DANMACHI_CA_AIS_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DANMACHI_CA_AIS_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1453,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DANMACHI_CA_AIS_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DANMACHI_CA_AIS_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1454,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DANMACHI_CA_AIS_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DANMACHI_CA_AIS_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1455,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DANMACHI_CA_AIS_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DANMACHI_CA_AIS_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1450,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DANMACHI_CA_AIS_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_DANMACHI_CA_AIS_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1461,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_BIRDCAGE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_BIRDCAGE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1462,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_BIRDCAGE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_BIRDCAGE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1463,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_BIRDCAGE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_BIRDCAGE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1464,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_BIRDCAGE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_BIRDCAGE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1465,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_BIRDCAGE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_BIRDCAGE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1460,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_BIRDCAGE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_BIRDCAGE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1471,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_BLUE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_BLUE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1472,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_BLUE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_BLUE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1473,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_BLUE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_BLUE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1474,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_BLUE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_BLUE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1475,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_BLUE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_BLUE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1470,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_BLUE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_BLUE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1481,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FENRIR_CA_INTERN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FENRIR_CA_INTERN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1482,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FENRIR_CA_INTERN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FENRIR_CA_INTERN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1483,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FENRIR_CA_INTERN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FENRIR_CA_INTERN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1484,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FENRIR_CA_INTERN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FENRIR_CA_INTERN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1485,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FENRIR_CA_INTERN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FENRIR_CA_INTERN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1480,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FENRIR_CA_INTERN_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FENRIR_CA_INTERN_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1491,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ZODIAC_CA_CHARLOTTE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ZODIAC_CA_CHARLOTTE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1492,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ZODIAC_CA_CHARLOTTE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ZODIAC_CA_CHARLOTTE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1493,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ZODIAC_CA_CHARLOTTE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ZODIAC_CA_CHARLOTTE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1494,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ZODIAC_CA_CHARLOTTE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ZODIAC_CA_CHARLOTTE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1495,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ZODIAC_CA_CHARLOTTE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ZODIAC_CA_CHARLOTTE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1490,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ZODIAC_CA_CHARLOTTE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ZODIAC_CA_CHARLOTTE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1501,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_CLOUD_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_CLOUD_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1502,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_CLOUD_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_CLOUD_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1503,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_CLOUD_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_CLOUD_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1504,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_CLOUD_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_CLOUD_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1505,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_CLOUD_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_CLOUD_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1500,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_CLOUD_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ADMIN_CA_CLOUD_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1511,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_KNIGHT_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_KNIGHT_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1512,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_KNIGHT_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_KNIGHT_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1513,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_KNIGHT_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_KNIGHT_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1514,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_KNIGHT_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_KNIGHT_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1515,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_KNIGHT_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_KNIGHT_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1510,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_KNIGHT_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ESPR_CA_KNIGHT_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1521,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FENRIR_CA_HILDE_PR_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FENRIR_CA_HILDE_PR_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1522,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FENRIR_CA_HILDE_PR_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FENRIR_CA_HILDE_PR_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1523,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FENRIR_CA_HILDE_PR_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FENRIR_CA_HILDE_PR_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1524,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FENRIR_CA_HILDE_PR_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FENRIR_CA_HILDE_PR_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1525,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FENRIR_CA_HILDE_PR_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FENRIR_CA_HILDE_PR_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1520,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FENRIR_CA_HILDE_PR_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_FENRIR_CA_HILDE_PR_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1531,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ANAPILIS_CA_SCYTHE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ANAPILIS_CA_SCYTHE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1532,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ANAPILIS_CA_SCYTHE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ANAPILIS_CA_SCYTHE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1533,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ANAPILIS_CA_SCYTHE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ANAPILIS_CA_SCYTHE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1534,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ANAPILIS_CA_SCYTHE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ANAPILIS_CA_SCYTHE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1535,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ANAPILIS_CA_SCYTHE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ANAPILIS_CA_SCYTHE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 1530,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ANAPILIS_CA_SCYTHE_ENGAGE"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_ANAPILIS_CA_SCYTHE_ENGAGE",
+      "m_Visible": false
     },
     {
       "m_TabID": 4001,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE"
+      "m_OpenTag": "TAG_COMMON_MISSION_NO_USE",
+      "m_Visible": false
     },
     {
       "m_TabID": 4002,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_KOR_EVENT_RACE_SPORTS_V2"
+      "m_OpenTag": "TAG_KOR_EVENT_RACE_SPORTS_V2",
+      "m_Visible": false
     },
     {
       "m_TabID": 6001,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_PVP_CHAMPIONSHIP_2"
+      "m_OpenTag": "TAG_COMMON_PVP_CHAMPIONSHIP_2",
+      "m_Visible": false
     },
     {
       "m_TabID": 6002,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_PVP_UNLIMITED_2"
+      "m_OpenTag": "TAG_COMMON_PVP_UNLIMITED_2",
+      "m_Visible": false
     },
     {
       "m_TabID": 6003,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_PVP_CHAMPIONSHIP_3"
+      "m_OpenTag": "TAG_COMMON_PVP_CHAMPIONSHIP_3",
+      "m_Visible": false
     },
     {
       "m_TabID": 6004,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_PVP_UNLIMITED_3"
+      "m_OpenTag": "TAG_COMMON_PVP_UNLIMITED_3",
+      "m_Visible": false
     },
     {
       "m_TabID": 6005,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_PVP_UNLIMITED_4"
+      "m_OpenTag": "TAG_COMMON_PVP_UNLIMITED_4",
+      "m_Visible": false
     },
     {
       "m_TabID": 6006,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_PVP_UNLIMITED_5"
+      "m_OpenTag": "TAG_COMMON_PVP_UNLIMITED_5",
+      "m_Visible": false
     },
     {
       "m_TabID": 6007,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_PVP_UNLIMITED_6"
+      "m_OpenTag": "TAG_COMMON_PVP_UNLIMITED_6",
+      "m_Visible": false
     },
     {
       "m_TabID": 6008,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_PVP_CHAMPIONSHIP_4"
+      "m_OpenTag": "TAG_COMMON_PVP_CHAMPIONSHIP_4",
+      "m_Visible": false
     },
     {
       "m_TabID": 6009,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_PVP_UNLIMITED_7"
+      "m_OpenTag": "TAG_COMMON_PVP_UNLIMITED_7",
+      "m_Visible": false
     },
     {
       "m_TabID": 6010,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_PVP_CHAMPIONSHIP_5"
+      "m_OpenTag": "TAG_COMMON_PVP_CHAMPIONSHIP_5",
+      "m_Visible": false
     },
     {
       "m_TabID": 8001,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_001"
+      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_001",
+      "m_Visible": false
     },
     {
       "m_TabID": 8002,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_002"
+      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_002",
+      "m_Visible": false
     },
     {
       "m_TabID": 8003,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_002"
+      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_002",
+      "m_Visible": false
     },
     {
       "m_TabID": 8004,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_003"
+      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_003",
+      "m_Visible": false
     },
     {
       "m_TabID": 8005,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_003"
+      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_003",
+      "m_Visible": false
     },
     {
       "m_TabID": 8006,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_004"
+      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_004",
+      "m_Visible": false
     },
     {
       "m_TabID": 8007,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_004"
+      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_004",
+      "m_Visible": false
     },
     {
       "m_TabID": 8008,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_005"
+      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_005",
+      "m_Visible": false
     },
     {
       "m_TabID": 8009,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_005"
+      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_005",
+      "m_Visible": false
     },
     {
       "m_TabID": 8010,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_006"
+      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_006",
+      "m_Visible": false
     },
     {
       "m_TabID": 8011,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_006"
+      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_006",
+      "m_Visible": false
     },
     {
       "m_TabID": 8012,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_007"
+      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_007",
+      "m_Visible": false
     },
     {
       "m_TabID": 8013,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_007"
+      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_007",
+      "m_Visible": false
     },
     {
       "m_TabID": 8014,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_008"
+      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_008",
+      "m_Visible": false
     },
     {
       "m_TabID": 8015,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_008"
+      "m_OpenTag": "TAG_COMMON_EVENT_PAYBACK_008",
+      "m_Visible": false
     },
     {
       "m_TabID": 9001,
       "m_MissionTab": "POINT_EXCHANGE",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_POINT_EXCHANGE_2022_SUMMER"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_POINT_EXCHANGE_2022_SUMMER",
+      "m_Visible": false
     },
     {
       "m_TabID": 9002,
       "m_MissionTab": "POINT_EXCHANGE",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_POINT_EXCHANGE_2022_GLOBAL"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_POINT_EXCHANGE_2022_GLOBAL",
+      "m_Visible": false
     },
     {
       "m_TabID": 9003,
       "m_MissionTab": "POINT_EXCHANGE",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_POINT_EXCHANGE_2023_NEWYEAR"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_POINT_EXCHANGE_2023_NEWYEAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 9004,
       "m_MissionTab": "POINT_EXCHANGE",
-      "m_OpenTag": "TAG_COMMON_EVENT_POINT_EXCHANGE_2023_APOCALYPSE_001"
+      "m_OpenTag": "TAG_COMMON_EVENT_POINT_EXCHANGE_2023_APOCALYPSE_001",
+      "m_Visible": false
     },
     {
       "m_TabID": 9005,
       "m_MissionTab": "POINT_EXCHANGE",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_POINT_EXCHANGE_2023_SUMMER"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_POINT_EXCHANGE_2023_SUMMER",
+      "m_Visible": false
     },
     {
       "m_TabID": 9006,
       "m_MissionTab": "POINT_EXCHANGE",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_POINT_EXCHANGE_2023_GLOBAL"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_POINT_EXCHANGE_2023_GLOBAL",
+      "m_Visible": false
     },
     {
       "m_TabID": 9007,
       "m_MissionTab": "POINT_EXCHANGE",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_POINT_EXCHANGE_2023_WINTER"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_POINT_EXCHANGE_2023_WINTER",
+      "m_Visible": false
     },
     {
       "m_TabID": 9008,
       "m_MissionTab": "POINT_EXCHANGE",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_POINT_EXCHANGE_2024_APOCALYPSE_001"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_POINT_EXCHANGE_2024_APOCALYPSE_001",
+      "m_Visible": false
     },
     {
       "m_TabID": 9009,
       "m_MissionTab": "POINT_EXCHANGE",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_POINT_EXCHANGE_2024_APOCALYPSE_002"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_POINT_EXCHANGE_2024_APOCALYPSE_002",
+      "m_Visible": false
     },
     {
       "m_TabID": 9010,
       "m_MissionTab": "POINT_EXCHANGE",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_POINT_EXCHANGE_2024_WINTER"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_POINT_EXCHANGE_2024_WINTER",
+      "m_Visible": false
     },
     {
       "m_TabID": 9011,
       "m_MissionTab": "POINT_EXCHANGE",
-      "m_OpenTag": "TAG_COMMON_EVENT_POINT_EXCHANGE_2025_APOCALYPSE_001"
+      "m_OpenTag": "TAG_COMMON_EVENT_POINT_EXCHANGE_2025_APOCALYPSE_001",
+      "m_Visible": false
     },
     {
       "m_TabID": 9012,
       "m_MissionTab": "POINT_EXCHANGE",
-      "m_OpenTag": "TAG_COMMON_EVENT_POINT_EXCHANGE_2025_COMMON"
+      "m_OpenTag": "TAG_COMMON_EVENT_POINT_EXCHANGE_2025_COMMON",
+      "m_Visible": false
     },
     {
       "m_TabID": 9013,
       "m_MissionTab": "POINT_EXCHANGE",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_POINT_EXCHANGE_2025_APOCALYPSE_002"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_POINT_EXCHANGE_2025_APOCALYPSE_002",
+      "m_Visible": false
     },
     {
       "m_TabID": 9014,
       "m_MissionTab": "POINT_EXCHANGE",
-      "m_OpenTag": "TAG_COMMON_EVENT_POINT_EXCHANGE_2025_WINTER"
+      "m_OpenTag": "TAG_COMMON_EVENT_POINT_EXCHANGE_2025_WINTER",
+      "m_Visible": false
     },
     {
       "m_TabID": 9015,
       "m_MissionTab": "POINT_EXCHANGE",
-      "m_OpenTag": "TAG_COMMON_EVENT_POINT_EXCHANGE_2026_COMMON"
+      "m_OpenTag": "TAG_COMMON_EVENT_POINT_EXCHANGE_2026_COMMON",
+      "m_Visible": false
     },
     {
       "m_TabID": 9101,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_EVENT_COLLECTION_CLB_003"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_EVENT_COLLECTION_CLB_003",
+      "m_Visible": false
     },
     {
       "m_TabID": 9102,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_EVENT_COLLECTION_CLB_003"
+      "m_OpenTag": "TAG_COMMON_MISSION_EVENT_EVENT_COLLECTION_CLB_003",
+      "m_Visible": false
     },
     {
       "m_TabID": 9992,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_GLOBAL_EVENT_CAFE_STREGA"
+      "m_OpenTag": "TAG_GLOBAL_EVENT_CAFE_STREGA",
+      "m_Visible": false
     },
     {
       "m_TabID": 9993,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_GLOBAL_EVENT_CAFE_STREGA"
+      "m_OpenTag": "TAG_GLOBAL_EVENT_CAFE_STREGA",
+      "m_Visible": false
     },
     {
       "m_TabID": 9994,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_GLOBAL_EVENT_GREMORY_BAR"
+      "m_OpenTag": "TAG_GLOBAL_EVENT_GREMORY_BAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 9995,
       "m_MissionTab": "EVENT",
-      "m_OpenTag": "TAG_GLOBAL_EVENT_GREMORY_BAR"
+      "m_OpenTag": "TAG_GLOBAL_EVENT_GREMORY_BAR",
+      "m_Visible": false
     },
     {
       "m_TabID": 20001,
       "m_MissionTab": "COMBINE_GUIDE_MISSION",
-      "m_OpenTag": "TAG_COMMON_MISSION_COMBINE_GUIDE_MISSION"
+      "m_OpenTag": "TAG_COMMON_MISSION_COMBINE_GUIDE_MISSION",
+      "m_Visible": true
     },
     {
       "m_TabID": 20002,
       "m_MissionTab": "COMBINE_GUIDE_MISSION",
-      "m_OpenTag": "TAG_COMMON_MISSION_COMBINE_GUIDE_MISSION"
+      "m_OpenTag": "TAG_COMMON_MISSION_COMBINE_GUIDE_MISSION",
+      "m_Visible": true
     },
     {
       "m_TabID": 20003,
       "m_MissionTab": "COMBINE_GUIDE_MISSION",
-      "m_OpenTag": "TAG_COMMON_MISSION_COMBINE_GUIDE_MISSION"
+      "m_OpenTag": "TAG_COMMON_MISSION_COMBINE_GUIDE_MISSION",
+      "m_Visible": true
     },
     {
       "m_TabID": 20004,
       "m_MissionTab": "COMBINE_GUIDE_MISSION",
-      "m_OpenTag": "TAG_COMMON_MISSION_COMBINE_GUIDE_MISSION"
+      "m_OpenTag": "TAG_COMMON_MISSION_COMBINE_GUIDE_MISSION",
+      "m_Visible": true
     },
     {
       "m_TabID": 20005,
       "m_MissionTab": "COMBINE_GUIDE_MISSION",
-      "m_OpenTag": "TAG_COMMON_MISSION_COMBINE_GUIDE_MISSION"
+      "m_OpenTag": "TAG_COMMON_MISSION_COMBINE_GUIDE_MISSION",
+      "m_Visible": true
     },
     {
       "m_TabID": 20006,
       "m_MissionTab": "COMBINE_GUIDE_MISSION",
-      "m_OpenTag": "TAG_COMMON_MISSION_COMBINE_GUIDE_MISSION"
+      "m_OpenTag": "TAG_COMMON_MISSION_COMBINE_GUIDE_MISSION",
+      "m_Visible": true
     },
     {
       "m_TabID": 20007,
       "m_MissionTab": "COMBINE_GUIDE_MISSION",
-      "m_OpenTag": "TAG_COMMON_MISSION_COMBINE_GUIDE_MISSION"
+      "m_OpenTag": "TAG_COMMON_MISSION_COMBINE_GUIDE_MISSION",
+      "m_Visible": true
     },
     {
       "m_TabID": 20008,
       "m_MissionTab": "COMBINE_GUIDE_MISSION",
-      "m_OpenTag": "TAG_COMMON_MISSION_COMBINE_GUIDE_MISSION_SQUARD"
+      "m_OpenTag": "TAG_COMMON_MISSION_COMBINE_GUIDE_MISSION_SQUARD",
+      "m_Visible": true
     },
     {
       "m_TabID": 20009,
       "m_MissionTab": "COMBINE_GUIDE_MISSION",
-      "m_OpenTag": "TAG_COMMON_MISSION_COMBINE_GUIDE_MISSION_LIMITBREAK"
+      "m_OpenTag": "TAG_COMMON_MISSION_COMBINE_GUIDE_MISSION_LIMITBREAK",
+      "m_Visible": true
     },
     {
       "m_TabID": 20010,
@@ -3233,17 +3921,20 @@
     {
       "m_TabID": 20011,
       "m_MissionTab": "COMBINE_GUIDE_MISSION",
-      "m_OpenTag": "TAG_COMMON_MISSION_COMBINE_GUIDE_MISSION_1"
+      "m_OpenTag": "TAG_COMMON_MISSION_COMBINE_GUIDE_MISSION_1",
+      "m_Visible": true
     },
     {
       "m_TabID": 20012,
       "m_MissionTab": "COMBINE_GUIDE_MISSION",
-      "m_OpenTag": "TAG_COMMON_MISSION_COMBINE_GUIDE_MISSION_2"
+      "m_OpenTag": "TAG_COMMON_MISSION_COMBINE_GUIDE_MISSION_2",
+      "m_Visible": true
     },
     {
       "m_TabID": 20013,
       "m_MissionTab": "COMBINE_GUIDE_MISSION",
-      "m_OpenTag": "TAG_COMMON_MISSION_COMBINE_GUIDE_MISSION_3"
+      "m_OpenTag": "TAG_COMMON_MISSION_COMBINE_GUIDE_MISSION_3",
+      "m_Visible": true
     }
   ]
 }

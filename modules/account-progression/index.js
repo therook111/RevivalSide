@@ -1082,10 +1082,23 @@ function countClaimedMissions(user, options = {}) {
 function isTutorialMissionComplete(user, row) {
   const forceStage = Number(row && row.m_ForceClearStage);
   if (forceStage > 0) {
-    const play = user && user.stagePlayData && user.stagePlayData[String(forceStage)];
-    if (play) return true;
+    return isMissionStageCleared(user, forceStage);
   }
-  return Boolean(user && user.tutorial && user.tutorial.completed === true);
+  return false;
+}
+
+function isMissionStageCleared(user, stageId) {
+  const numericStageId = Number(stageId || 0);
+  if (!numericStageId || !user || typeof user !== "object") return false;
+  const stagePlayData = user.stagePlayData && typeof user.stagePlayData === "object" ? user.stagePlayData : {};
+  if (stagePlayData[String(numericStageId)]) return true;
+  for (const containerName of ["mainStory", "episode1"]) {
+    const container = user[containerName];
+    const state = container && container.stages && typeof container.stages === "object" ? container.stages[String(numericStageId)] : null;
+    if (state && state.completed === true) return true;
+  }
+  const phases = user.tutorial && user.tutorial.phases && typeof user.tutorial.phases === "object" ? user.tutorial.phases : {};
+  return Object.values(phases).some((phase) => Number(phase && phase.stageId) === numericStageId && phase.completed === true);
 }
 
 function missionRequirementSatisfied(user, row) {
@@ -1111,7 +1124,8 @@ function shouldSerializeMissionState(state, row) {
   if (Number(state.times || 0) >= missionTargetTimes(row)) return true;
   if (Number(state.times || 0) > 0) return true;
   const condition = normalizeMissionCondition(row && row.m_MissionCond);
-  return condition === "JUST_OPEN" || condition === "ACCOUNT_LEVEL" || condition === "TUTORIAL";
+  if (condition === "TUTORIAL") return false;
+  return condition === "JUST_OPEN" || condition === "ACCOUNT_LEVEL";
 }
 
 function shouldSerializeMissionTab(row) {

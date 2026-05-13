@@ -4413,8 +4413,9 @@ function isTutorialRepairStageCleared(user, stageId) {
   }
   const tutorialStage = TUTORIAL_STAGE_CHAIN.find((stage) => Number(stage.stageId || 0) === numericStageId);
   if (tutorialStage) {
-    const tutorial = ensureTutorialState(user);
-    const phase = tutorial && tutorial.phases && tutorial.phases[tutorialPhaseKey(tutorialStage)];
+    const tutorial = user.tutorial && typeof user.tutorial === "object" ? user.tutorial : {};
+    const phases = tutorial.phases && typeof tutorial.phases === "object" ? tutorial.phases : {};
+    const phase = phases[tutorialPhaseKey(tutorialStage)] || phases[String(tutorialStage.stageId)];
     return Boolean(phase && phase.completed === true);
   }
   return false;

@@ -2,13 +2,17 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT_DIR = path.resolve(__dirname, "..", "..");
-const TABLE_ROOTS = [
+const EXTRACTED_TABLE_ROOTS = [
   path.join(ROOT_DIR, "gameplay-tables-json", "Assetbundles"),
   path.join(ROOT_DIR, "gameplay-tables-json", "StreamingAssets"),
+];
+const PREPACKAGED_TABLE_ROOTS = [
   path.join(ROOT_DIR, "gameplay-jsons", "Assetbundles"),
   path.join(ROOT_DIR, "gameplay-jsons", "StreamingAssets"),
 ];
+const TABLE_ROOTS = [...EXTRACTED_TABLE_ROOTS, ...PREPACKAGED_TABLE_ROOTS];
 const ENABLE_EXTRACTED_MISSION_TABLES = process.env.CS_ENABLE_EXTRACTED_MISSION_TABLES === "1";
+const MISSION_TABLE_ROOTS = ENABLE_EXTRACTED_MISSION_TABLES ? TABLE_ROOTS : PREPACKAGED_TABLE_ROOTS;
 
 let cachedData = null;
 
@@ -188,12 +192,8 @@ function loadGameData() {
   const missionsByCounterGroupId = new Map();
   const missionTabs = [];
   const missionTabById = new Map();
-  const missionTabRecords = ENABLE_EXTRACTED_MISSION_TABLES
-    ? readRecords("ab_script", "LUA_MISSION_TAB_TEMPLET.json")
-    : [];
-  const missionRecords = ENABLE_EXTRACTED_MISSION_TABLES
-    ? readRecords("ab_script", "LUA_MISSION_TEMPLET.json")
-    : [];
+  const missionTabRecords = readMissionRecords("ab_script", "LUA_MISSION_TAB_TEMPLET.json");
+  const missionRecords = readMissionRecords("ab_script", "LUA_MISSION_TEMPLET.json");
   for (const record of missionTabRecords) {
     const tabId = Number(record && record.m_TabID);
     if (!Number.isInteger(tabId) || tabId <= 0 || missionTabById.has(tabId)) continue;
@@ -831,7 +831,15 @@ function groupByNumber(records, key) {
 }
 
 function readRecords(directory, fileName) {
-  for (const root of TABLE_ROOTS) {
+  return readRecordsFromRoots(TABLE_ROOTS, directory, fileName);
+}
+
+function readMissionRecords(directory, fileName) {
+  return readRecordsFromRoots(MISSION_TABLE_ROOTS, directory, fileName);
+}
+
+function readRecordsFromRoots(roots, directory, fileName) {
+  for (const root of roots) {
     const filePath = path.join(root, directory, "luac", fileName);
     if (!fs.existsSync(filePath)) continue;
     try {
