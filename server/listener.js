@@ -5293,7 +5293,7 @@ function getEventContentsTagsForContentsVersion() {
 
 function getEffectiveContentsTags(baseTags) {
   const eventTags = getEventContentsTagsForContentsVersion();
-  return mergeTags(stripInactiveEventContentsTags(baseTags, eventTags), REQUIRED_CONTENTS_TAGS, eventTags);
+  return mergeTags(baseTags, REQUIRED_CONTENTS_TAGS, eventTags);
 }
 
 function stripInactiveEventContentsTags(baseTags, activeEventTags) {
