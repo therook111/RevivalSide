@@ -912,7 +912,7 @@ sealed record PatchOptions(
             ApplyEventPassTempletFallback: legacyAll || HasArg(args, "--include-template-fallback"),
             ApplyLobbyEventPassSelfActivation: envDrivenCounterPassPatch || legacyAll || HasArg(args, "--include-lobby-self-activation"),
             ApplyLobbyCounterPassFallbackRegistration: envDrivenCounterPassPatch || legacyAll || HasArg(args, "--include-lobby-fallback"),
-            ApplyLobbyEventPassLayout: (envDrivenCounterPassPatch || legacyAll || HasArg(args, "--include-lobby-layout")) && !HasArg(args, "--no-lobby-layout"));
+            ApplyLobbyEventPassLayout: HasArg(args, "--include-lobby-layout") && !HasArg(args, "--no-lobby-layout"));
     }
 
     private static bool HasArg(string[] args, string name)
