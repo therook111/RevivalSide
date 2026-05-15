@@ -683,6 +683,7 @@ sealed record PatchOptions(
         var envPatchEnabled = ReadEnvFlag("CS_PATCH_COUNTER_PASS_CLIENT", "CS_COUNTER_PASS_CLIENT_PATCH");
         var legacyAll = HasArg(args, "--legacy-all") || HasArg(args, "--all");
         var disabledByEnv = !restore && !status && envSwitch && envPatchEnabled != true;
+        var envDrivenCounterPassPatch = envSwitch && envPatchEnabled == true;
         return new PatchOptions(
             Restore: restore,
             RestoreFirst: !disabledByEnv && !restore && !status && (envSwitch || HasArg(args, "--restore-first") || HasArg(args, "--fresh")),
@@ -691,8 +692,8 @@ sealed record PatchOptions(
             ApplyContentUnlock: !HasArg(args, "--no-content-unlock"),
             ApplyEventPassTimeGate: !HasArg(args, "--no-time-gate"),
             ApplyEventPassTempletFallback: legacyAll || HasArg(args, "--include-template-fallback"),
-            ApplyLobbyEventPassSelfActivation: legacyAll || HasArg(args, "--include-lobby-self-activation"),
-            ApplyLobbyCounterPassFallbackRegistration: legacyAll || HasArg(args, "--include-lobby-fallback"));
+            ApplyLobbyEventPassSelfActivation: envDrivenCounterPassPatch || legacyAll || HasArg(args, "--include-lobby-self-activation"),
+            ApplyLobbyCounterPassFallbackRegistration: envDrivenCounterPassPatch || legacyAll || HasArg(args, "--include-lobby-fallback"));
     }
 
     private static bool HasArg(string[] args, string name)
