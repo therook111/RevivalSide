@@ -7,7 +7,7 @@ const { URL } = require("url");
 const { loadPacketHandlers } = require("./packetHandlerLoader");
 const { createUserManager } = require("./userManager");
 const ROOT_DIR = path.resolve(__dirname, "..");
-const { findGameplayTableFile } = require("../modules/gameplay-jsons");
+const { findGameplayTableFile, readGameplayTableRecords } = require("../modules/gameplay-jsons");
 const {
   createCombatHandler,
   buildCapturedRespawnUnitPools: buildCombatCapturedRespawnUnitPools,
@@ -3211,14 +3211,35 @@ function stageIdForDungeonId(dungeonId) {
 function loadDungeonCatalog() {
   if (cachedDungeonCatalog) return cachedDungeonCatalog;
   cachedDungeonCatalog = { byId: {}, byStrId: {} };
-  try {
-    const parsed = JSON.parse(fs.readFileSync(DUNGEON_TABLE_PATH, "utf8"));
-    cachedDungeonCatalog = parsed && typeof parsed === "object" ? parsed : cachedDungeonCatalog;
-    ensureDungeonCatalogIndexes(cachedDungeonCatalog);
-  } catch (err) {
-    console.log(`[dungeon-table] failed to load ${DUNGEON_TABLE_PATH}: ${summarizeErrorLine(err)}`);
+  if (DUNGEON_TABLE_PATH && fs.existsSync(DUNGEON_TABLE_PATH)) {
+    try {
+      const parsed = JSON.parse(fs.readFileSync(DUNGEON_TABLE_PATH, "utf8"));
+      cachedDungeonCatalog = parsed && typeof parsed === "object" ? parsed : cachedDungeonCatalog;
+      ensureDungeonCatalogIndexes(cachedDungeonCatalog);
+      return cachedDungeonCatalog;
+    } catch (err) {
+      console.log(`[dungeon-table] failed to load ${DUNGEON_TABLE_PATH}: ${summarizeErrorLine(err)}`);
+    }
   }
+  cachedDungeonCatalog = buildDungeonCatalogFromGameplayJsons();
   return cachedDungeonCatalog;
+}
+
+function buildDungeonCatalogFromGameplayJsons() {
+  const catalog = { byId: {}, byStrId: {} };
+  const records = readGameplayTableRecords("ab_script_dungeon_templet", "LUA_DUNGEON_TEMPLET_BASE.json", {
+    rootDir: ROOT_DIR,
+    logLabel: "dungeon-table",
+  });
+  for (const record of records) {
+    if (!record || typeof record !== "object") continue;
+    const dungeonId = Number(record.m_DungeonID || 0);
+    const dungeonStrId = String(record.m_DungeonStrID || "");
+    if (Number.isInteger(dungeonId) && dungeonId > 0) catalog.byId[String(dungeonId)] = record;
+    if (dungeonStrId) catalog.byStrId[dungeonStrId] = record;
+  }
+  if (records.length) catalog.count = Object.keys(catalog.byId).length;
+  return catalog;
 }
 
 function ensureDungeonCatalogIndexes(catalog) {
@@ -6265,7 +6286,7 @@ function loadUserDb(filePath) {
 function loadGameplayUnitStats(filePath) {
   const result = { byId: new Map(), byStrId: new Map(), loaded: false };
   try {
-    if (!filePath || !fs.existsSync(filePath)) return result;
+    if (!filePath || !fs.existsSync(filePath)) return loadGameplayUnitStatsFromGameplayJsons(result);
     const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
     const entries = parsed && parsed.byId && typeof parsed.byId === "object" ? Object.values(parsed.byId) : [];
     for (const entry of entries) {
@@ -6278,6 +6299,41 @@ function loadGameplayUnitStats(filePath) {
   } catch (err) {
     console.log(`[gameplay-jsons] unit stats load failed: ${err.message}`);
   }
+  return result.loaded ? result : loadGameplayUnitStatsFromGameplayJsons(result);
+}
+
+function loadGameplayUnitStatsFromGameplayJsons(result = { byId: new Map(), byStrId: new Map(), loaded: false }) {
+  const unitsByStrId = new Map();
+  for (const fileName of [
+    "LUA_UNIT_TEMPLET_BASE.json",
+    "LUA_UNIT_TEMPLET_BASE2.json",
+    "LUA_UNIT_TEMPLET_BASE_SD.json",
+    "LUA_UNIT_TEMPLET_BASE_OPR.json",
+  ]) {
+    for (const record of readGameplayTableRecords("ab_script_unit_data", fileName, { rootDir: ROOT_DIR, logLabel: "gameplay-jsons" })) {
+      const unitStrId = String(record && record.m_UnitStrID ? record.m_UnitStrID : "");
+      if (unitStrId && !unitsByStrId.has(unitStrId)) unitsByStrId.set(unitStrId, record);
+    }
+  }
+
+  for (const fileName of [
+    "LUA_UNIT_STAT_TEMPLET.json",
+    "LUA_UNIT_STAT_TEMPLET2.json",
+    "LUA_UNIT_STAT_TEMPLET_SD.json",
+    "LUA_UNIT_STAT_TEMPLET_OPR.json",
+  ]) {
+    for (const statRecord of readGameplayTableRecords("ab_script_unit_data", fileName, { rootDir: ROOT_DIR, logLabel: "gameplay-jsons" })) {
+      const unitStrId = String(statRecord && statRecord.m_UnitStrID ? statRecord.m_UnitStrID : "");
+      if (!unitStrId || result.byStrId.has(unitStrId)) continue;
+      const unitRecord = unitsByStrId.get(unitStrId) || {};
+      const stats = extractGameplayUnitStats({ ...unitRecord, _stat: statRecord });
+      if (!stats) continue;
+      if (stats.unitID != null) result.byId.set(String(stats.unitID), stats);
+      if (stats.unitStrID) result.byStrId.set(stats.unitStrID, stats);
+    }
+  }
+
+  result.loaded = result.byId.size > 0 || result.byStrId.size > 0;
   return result;
 }
 
