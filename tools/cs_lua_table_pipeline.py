@@ -126,8 +126,8 @@ def root_records(root: Any) -> list[Any]:
 
 
 def parse_lua_table(path: Path) -> dict[str, Any]:
-    env: dict[str, Any] = {}
     globals_: dict[str, Any] = {}
+    env: dict[str, Any] = {"_ENV": globals_}
     unsupported: list[str] = []
 
     for raw_line in path.read_text(encoding="utf-8", errors="replace").splitlines():
@@ -155,11 +155,14 @@ def parse_lua_table(path: Path) -> dict[str, Any]:
         root_name = "L0_1"
         root = env.get(root_name, {})
 
+    normalized_globals = {name: normalize(value) for name, value in globals_.items()}
     normalized_root = normalize(root)
     records = root_records(root)
     return {
         "source": str(path),
         "rootName": root_name,
+        "globalCount": len(normalized_globals),
+        "globals": normalized_globals,
         "recordCount": len(records),
         "records": records,
         "root": normalized_root,

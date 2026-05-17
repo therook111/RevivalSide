@@ -1,4 +1,6 @@
 using System.Reflection;
+using System.Text;
+using System.Text.Json;
 
 namespace RevivalSide.CombatHost;
 
@@ -72,8 +74,14 @@ public static class ManagedLuaFileLoader
             return false;
         }
 
-        var bytes = File.ReadAllBytes(candidate);
         var chunkName = Path.GetFileNameWithoutExtension(candidate);
+        if (Path.GetExtension(candidate).Equals(".json", StringComparison.OrdinalIgnoreCase))
+        {
+            luaDoTextString?.Invoke(luaServer, new object?[] { BuildLuaTextFromJson(File.ReadAllText(candidate), fileName), chunkName });
+            return true;
+        }
+
+        var bytes = File.ReadAllBytes(candidate);
         if (IsLuaBytecode(bytes))
         {
             luaDoByteString?.Invoke(luaServer, new object?[] { bytes, chunkName, "b" });
@@ -121,11 +129,11 @@ public static class ManagedLuaFileLoader
 
         var bundle = bundleName.ToLowerInvariant();
         var file = Path.GetFileName(fileName);
-        foreach (var source in new[] { "StreamingAssets", "Assetbundles" })
+        foreach (var sourceRoot in GetTableSourceRoots())
         {
-            foreach (var extension in new[] { ".luac", ".lua", ".bytes" })
+            foreach (var extension in new[] { ".luac", ".lua", ".bytes", ".json" })
             {
-                var candidate = Path.Combine(gameplayTablesDir, source, bundle, "luac", file + extension);
+                var candidate = Path.Combine(sourceRoot, bundle, "luac", file + extension);
                 if (File.Exists(candidate))
                 {
                     return candidate;
@@ -134,6 +142,205 @@ public static class ManagedLuaFileLoader
         }
 
         return null;
+    }
+
+    private static IEnumerable<string> GetTableSourceRoots()
+    {
+        var rootName = Path.GetFileName(gameplayTablesDir.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (rootName.Equals("StreamingAssets", StringComparison.OrdinalIgnoreCase)
+            || rootName.Equals("Assetbundles", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return gameplayTablesDir;
+            yield break;
+        }
+
+        yield return Path.Combine(gameplayTablesDir, "StreamingAssets");
+        yield return Path.Combine(gameplayTablesDir, "Assetbundles");
+    }
+
+    private static string BuildLuaTextFromJson(string json, string fileName)
+    {
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        var rootName = Path.GetFileNameWithoutExtension(fileName);
+        if (root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("rootName", out var rootNameElement)
+            && rootNameElement.ValueKind == JsonValueKind.String
+            && !string.IsNullOrWhiteSpace(rootNameElement.GetString()))
+        {
+            rootName = rootNameElement.GetString()!;
+        }
+
+        if (root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("globals", out var globalsElement)
+            && globalsElement.ValueKind == JsonValueKind.Object)
+        {
+            var globalsBuilder = new StringBuilder(json.Length + 64);
+            foreach (var property in globalsElement.EnumerateObject())
+            {
+                AppendLuaGlobal(globalsBuilder, property.Name);
+                globalsBuilder.Append(" = ");
+                AppendLuaValue(globalsBuilder, property.Value);
+                globalsBuilder.AppendLine();
+            }
+            return globalsBuilder.ToString();
+        }
+
+        var tableElement = root;
+        if (root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("root", out var tableRootElement)
+            && (tableRootElement.ValueKind == JsonValueKind.Object || tableRootElement.ValueKind == JsonValueKind.Array))
+        {
+            tableElement = tableRootElement;
+        }
+        else if (root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("records", out var recordsElement)
+            && recordsElement.ValueKind == JsonValueKind.Array)
+        {
+            tableElement = recordsElement;
+        }
+
+        var builder = new StringBuilder(json.Length + 64);
+        AppendLuaGlobal(builder, rootName);
+        builder.Append(" = ");
+        AppendLuaValue(builder, tableElement);
+        return builder.ToString();
+    }
+
+    private static void AppendLuaGlobal(StringBuilder builder, string name)
+    {
+        if (IsLuaIdentifier(name))
+        {
+            builder.Append(name);
+            return;
+        }
+
+        builder.Append("_G[");
+        AppendLuaString(builder, name);
+        builder.Append(']');
+    }
+
+    private static void AppendLuaValue(StringBuilder builder, JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                AppendLuaObject(builder, element);
+                break;
+            case JsonValueKind.Array:
+                AppendLuaArray(builder, element);
+                break;
+            case JsonValueKind.String:
+                AppendLuaString(builder, element.GetString() ?? "");
+                break;
+            case JsonValueKind.Number:
+                builder.Append(element.GetRawText());
+                break;
+            case JsonValueKind.True:
+                builder.Append("true");
+                break;
+            case JsonValueKind.False:
+                builder.Append("false");
+                break;
+            default:
+                builder.Append("nil");
+                break;
+        }
+    }
+
+    private static void AppendLuaObject(StringBuilder builder, JsonElement element)
+    {
+        builder.Append('{');
+        var first = true;
+        foreach (var property in element.EnumerateObject())
+        {
+            if (!first) builder.Append(',');
+            first = false;
+            AppendLuaKey(builder, property.Name);
+            builder.Append('=');
+            AppendLuaValue(builder, property.Value);
+        }
+        builder.Append('}');
+    }
+
+    private static void AppendLuaArray(StringBuilder builder, JsonElement element)
+    {
+        builder.Append('{');
+        var first = true;
+        foreach (var item in element.EnumerateArray())
+        {
+            if (!first) builder.Append(',');
+            first = false;
+            AppendLuaValue(builder, item);
+        }
+        builder.Append('}');
+    }
+
+    private static void AppendLuaKey(StringBuilder builder, string key)
+    {
+        if (IsLuaIdentifier(key))
+        {
+            builder.Append(key);
+            return;
+        }
+
+        builder.Append('[');
+        AppendLuaString(builder, key);
+        builder.Append(']');
+    }
+
+    private static void AppendLuaString(StringBuilder builder, string value)
+    {
+        builder.Append('"');
+        foreach (var ch in value)
+        {
+            switch (ch)
+            {
+                case '\\':
+                    builder.Append(@"\\");
+                    break;
+                case '"':
+                    builder.Append("\\\"");
+                    break;
+                case '\n':
+                    builder.Append(@"\n");
+                    break;
+                case '\r':
+                    builder.Append(@"\r");
+                    break;
+                case '\t':
+                    builder.Append(@"\t");
+                    break;
+                default:
+                    if (char.IsControl(ch))
+                    {
+                        builder.Append('\\');
+                        builder.Append(((int)ch).ToString("D3"));
+                    }
+                    else
+                    {
+                        builder.Append(ch);
+                    }
+                    break;
+            }
+        }
+        builder.Append('"');
+    }
+
+    private static bool IsLuaIdentifier(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return false;
+        if (!(IsAsciiLetter(value[0]) || value[0] == '_')) return false;
+        for (var i = 1; i < value.Length; i++)
+        {
+            if (!(IsAsciiLetter(value[i]) || char.IsDigit(value[i]) || value[i] == '_')) return false;
+        }
+        return true;
+    }
+
+    private static bool IsAsciiLetter(char value)
+    {
+        return value is >= 'A' and <= 'Z' or >= 'a' and <= 'z';
     }
 
     private static bool IsLuaBytecode(byte[] bytes)

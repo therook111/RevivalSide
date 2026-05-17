@@ -273,7 +273,7 @@ const CSHARP_COMBAT_HOST_DLL = process.env.CS_CSHARP_COMBAT_HOST_DLL || "";
 const CSHARP_COMBAT_HOST_TIMEOUT_MS = Number(process.env.CS_CSHARP_COMBAT_HOST_TIMEOUT_MS || 20000);
 const CSHARP_COMBAT_HOST_DOTNET = process.env.CS_DOTNET_PATH || findDefaultDotnetRuntime();
 const COUNTERSIDE_MANAGED_DIR = process.env.CS_COUNTERSIDE_MANAGED_DIR || findDefaultCounterSideManagedDir();
-const GAMEPLAY_TABLES_DIR = process.env.CS_GAMEPLAY_TABLES_DIR || "";
+const GAMEPLAY_TABLES_DIR = process.env.CS_GAMEPLAY_TABLES_DIR || findDefaultGameplayTablesDir();
 const OFFICIAL_COMBAT_REPLAY = process.env.CS_OFFICIAL_COMBAT_REPLAY === "1";
 const OFFICIAL_COMBAT_REPLAY_START_INDEX = Number(process.env.CS_OFFICIAL_COMBAT_REPLAY_START_INDEX || 64);
 const OFFICIAL_COMBAT_REPLAY_INTERVAL_MS = Number(process.env.CS_OFFICIAL_COMBAT_REPLAY_INTERVAL_MS || 33);
@@ -7205,6 +7205,18 @@ function findDefaultDotnetRuntime() {
     if (fs.existsSync(x64Dotnet)) return x64Dotnet;
   }
   return "dotnet";
+}
+
+function findDefaultGameplayTablesDir() {
+  const candidates = [
+    path.join(ROOT_DIR, "gameplay-tables"),
+    path.join(ROOT_DIR, "gameplay-tables-decompiled"),
+    path.join(ROOT_DIR, "gameplay-jsons"),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(path.join(candidate, "StreamingAssets"))) return candidate;
+  }
+  return path.join(ROOT_DIR, "gameplay-jsons");
 }
 
 function nonEmpty(value) {

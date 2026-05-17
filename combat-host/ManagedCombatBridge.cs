@@ -755,7 +755,7 @@ internal static class ManagedCombatBridge
             }
             runtime.SuppressPlayerDynamicRespawns(server, gameData);
             runtime.ApplyPlayerIdentityTeamA(gameData, data.Stage?.PlayerDeck);
-            runtime.ClearTeamAUnitOwnersForGameLoadAck(gameData);
+            runtime.ClearTeamAUnitOwnersForGameLoadAck(gameData, data.Stage?.PlayerDeck);
             runtime.ApplyTutorialGameType(gameData, dynamicGame.DungeonID);
             // The Unity client builds its unit pool from GAME_LOAD_ACK. Send the
             // same gameData that NKCGameServerLocal just mutated so runtime
@@ -1830,25 +1830,48 @@ internal static class ManagedCombatBridge
             SetField(runtimeTeamA, "m_NKM_GAME_AUTO_SKILL_TYPE", 1);
         }
 
-        public void ClearTeamAUnitOwnersForGameLoadAck(object gameData)
+        public void ClearTeamAUnitOwnersForGameLoadAck(object gameData, PlayerDeckData? playerDeck)
         {
             var teamA = GetField(gameData, "m_NKMGameTeamDataA");
             if (teamA == null) return;
 
-            ClearUnitOwner(GetField(teamA, "m_MainShip"));
+            var playerUnitUids = GetPlayerDeckUnitUids(playerDeck);
+            ClearUnitOwner(GetField(teamA, "m_MainShip"), playerUnitUids);
             foreach (var listField in new[] { "m_listUnitData", "m_listAssistUnitData", "m_listEvevtUnitData", "m_listEnvUnitData", "m_listOperatorUnitData" })
             {
                 if (GetField(teamA, listField) is not IEnumerable units) continue;
                 foreach (var unit in units)
                 {
-                    ClearUnitOwner(unit);
+                    ClearUnitOwner(unit, playerUnitUids);
                 }
             }
         }
 
-        private void ClearUnitOwner(object? unitData)
+        private static HashSet<long> GetPlayerDeckUnitUids(PlayerDeckData? playerDeck)
+        {
+            var unitUids = new HashSet<long>();
+            if (playerDeck == null) return unitUids;
+
+            foreach (var unit in playerDeck.Units)
+            {
+                var unitUid = ParseLong(unit.UnitUid);
+                if (unitUid > 0) unitUids.Add(unitUid);
+            }
+
+            var shipUid = ParseLong(playerDeck.ShipUid);
+            if (shipUid > 0) unitUids.Add(shipUid);
+
+            var operatorUid = ParseLong(playerDeck.OperatorUid);
+            if (operatorUid > 0) unitUids.Add(operatorUid);
+
+            return unitUids;
+        }
+
+        private void ClearUnitOwner(object? unitData, HashSet<long> preservedUnitUids)
         {
             if (unitData == null) return;
+            var unitUid = Convert.ToInt64(GetField(unitData, "m_UnitUID") ?? 0, CultureInfo.InvariantCulture);
+            if (unitUid > 0 && preservedUnitUids.Contains(unitUid)) return;
             SetField(unitData, "m_UserUID", 0L);
         }
 

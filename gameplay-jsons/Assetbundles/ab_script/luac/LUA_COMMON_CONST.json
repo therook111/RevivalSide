@@ -1,6 +1,634 @@
 {
   "source": "<project-root>\\gameplay-tables-decompiled\\Assetbundles\\ab_script\\luac\\LUA_COMMON_CONST.lua",
   "rootName": "m_SystemData",
+  "globalCount": 46,
+  "globals": {
+    "m_SystemData": {
+      "m_fConstEvade": 800,
+      "m_fConstHit": 1500,
+      "m_fConstCritical": 2000,
+      "m_fConstDef": 1000,
+      "m_fConstEvadeDamage": 0.9,
+      "m_fLONG_RANGE": 500,
+      "m_fPercentPerBanLevel": 0.4,
+      "m_fMaxPercentPerBanLevel": 0.8,
+      "m_fDEFENDER_PROTECT_RATE": 0.07,
+      "m_fDEFENDER_PROTECT_RATE_MAX": 0.35,
+      "ROLE_TYPE_BONUS_FACTOR": 0.3,
+      "ROLE_TYPE_REDUCE_FACTOR": 0.3,
+      "MAX_LEVEL": 120,
+      "MAX_TRANSCENDENCE_COUNT": 13
+    },
+    "UNIT_ENHANCE_DATA": {
+      "ENHANCE_CREDIT_COST_PER_UNIT": 300,
+      "ENHANCE_CREDIT_COST_FACTOR": 0.05,
+      "ENHANCE_EXP_BONUS_FACTOR": 0.05
+    },
+    "Warfare": {
+      "RecoverCost": 50
+    },
+    "Dive": {
+      "ArtifactReturnItemId": 1,
+      "DiveStormCostMiscId": 3,
+      "DiveStormCostMultiply": 50,
+      "DiveStormRewardMiscId": 1,
+      "DiveStormRewardMultiply": 5000,
+      "DiveRepairHP_RATE": 20,
+      "DiveStormHP_RATE": -20
+    },
+    "Negotiation": {
+      "MaxMaterialUsageLimit": 1000,
+      "Materials": [
+        {
+          "ItemId": 1031,
+          "Exp": 150,
+          "Loyalty": 1,
+          "Credit": 1000
+        },
+        {
+          "ItemId": 1032,
+          "Exp": 750,
+          "Loyalty": 5,
+          "Credit": 5000
+        },
+        {
+          "ItemId": 1033,
+          "Exp": 2100,
+          "Loyalty": 14,
+          "Credit": 14000
+        }
+      ],
+      "Selections": {
+        "Passion": {
+          "CreditDecreasePercent": 10
+        },
+        "Normal": {
+          "ResultSuccessPercent": 20
+        },
+        "Bonus": {
+          "CreditIncreasePercent": 30,
+          "LoyaltyIncreasePercent": 50,
+          "ResultSuccessPercent": 60
+        }
+      },
+      "ResultOptions": {
+        "SuccessAdditionalExpPercent": 20,
+        "PermanentDealExpBonusPercent": 20
+      }
+    },
+    "REWARD_MULTIPLY": {
+      "General": {
+        "MiscItemId": 3,
+        "MiscItemCount": 0
+      },
+      "ShadowPalace": {
+        "MiscItemId": 3,
+        "MiscItemCount": 0
+      }
+    },
+    "SUBSCRIPTION_DATA": {
+      "BUY_CRITERIA_DATE": 99
+    },
+    "Guild": {
+      "Creation": {
+        "UserMinLevel": 15,
+        "ReqMiscItems": [
+          {
+            "ItemId": 101,
+            "ItemCount": 1000
+          }
+        ]
+      },
+      "ClosingDelayHour": 48,
+      "AttendanceExp": 50,
+      "ExitPenaltyHour": 24,
+      "MaxJoinRequestCount": 3,
+      "MaxInviteCount": 30,
+      "MaxStaffCount": 5,
+      "DailyDonationCount": 8,
+      "WelfarePointBuyAmount": 5,
+      "WelfarePointBuyLimit": 100000,
+      "WelfarePointPrice": 30,
+      "ChatComplainCountToBlock": 5,
+      "ChatAutoBlockHour": 24,
+      "ConsortiumNameChangeFree": 1,
+      "ConsortiumNameChangeLimitDay": 30,
+      "ConsortiumNameChangeResourceItemID": 24,
+      "ConsortiumNameChangeResourceValue": 300000,
+      "MasterMigration": {
+        "ReceiverPrecondition_LoginDays": 15,
+        "AutoMigrationDuration_LoginDays": 15
+      },
+      "NotifyMailText": {
+        "PromotionTitle": "SI_DP_CONSORTIUM_MEMBER_CHANGE_PERMISSION_TOAST_MESSAGE_TITLE_DESC",
+        "PromotionMessage": "SI_DP_CONSORTIUM_MEMBER_GRADE_UP_INFORMATION_POPUP_BODY_DESC",
+        "DemotionTitle": "SI_DP_CONSORTIUM_MEMBER_CHANGE_PERMISSION_TOAST_MESSAGE_TITLE_DESC",
+        "DemotionMessage": "SI_DP_CONSORTIUM_MEMBER_FRADE_DOWN_INFORMATION_POPUP_BODY_DESC",
+        "MasterMigrationTitle": "SI_DP_CONSORTIUM_MEMBER_CHANGE_MASTER_TOAST_MESSAGE_TITLE_DESC",
+        "MasterMigrationMessage": "SI_DP_CONSORTIUM_MEMBER_GRADE_HANDOVER_INFORMATION_POPUP_BODY_DESC",
+        "BanTitle": "SI_DP_CONSORTIUM_MEMBER_FORCE_EXIT_TOAST_MESSAGE_TITLE_DESC",
+        "BanMessage": "SI_DP_CONSORTIUM_MEMBER_FORCE_EXIT_INFORMATION_POPUP_BODY_DESC",
+        "AutoMigrationNewMasterTitle": "SI_PF_CONSORTIUM_MEMBER_AUTO_MIGRATION_NEW_MASTER_TITLE_DESC",
+        "AutoMigrationNewMasterMessage": "SI_PF_CONSORTIUM_MEMBER_AUTO_MIGRATION_NEW_MASTER_BODY_DESC",
+        "AutoMigrationOldMasterTitle": "SI_PF_CONSORTIUM_MEMBER_AUTO_MIGRATION_OLD_MASTER_TITLE_DESC",
+        "AutoMigrationOldMasterMessage": "SI_PF_CONSORTIUM_MEMBER_AUTO_MIGRATION_OLD_MASTER_BODY_DESC"
+      },
+      "NotifyChatText": {
+        "MessageJoin": "SI_DP_CONSORTIUM_CHAT_INFORMATION_JOIN",
+        "MessageExit": "SI_DP_CONSORTIUM_CHAT_INFORMATION_EXIT",
+        "MessageBan": "SI_DP_CONSORTIUM_CHAT_INFORMATION_FORCE_EXIT",
+        "MessagePromotion": "SI_DP_CONSORTIUM_CHAT_INFORATION_GRADE_UP",
+        "MessageLevelUp": "SI_PF_CONSORTIUM_CHAT_INFORMATION_LEVEL_UP",
+        "MessageMasterMigration": "SI_DP_CONSORTIUM_CHAT_IFORMATION_MASTER_MIGRATION",
+        "MessageModifyNotification": "SI_PF_CONSORTIUM_FOUNDATION_CHAT_NOTIFICATION_CHANGE",
+        "MessageModifyNotificationMain": "SI_PF_CONSORTIUM_FOUNDATION_CHAT_NOTIFICATION_CHANGE_MAIN",
+        "MessageModifyNotificationDungeon": "SI_PF_CONSORTIUM_FOUNDATION_CHAT_NOTIFICATION_CHANGE_DUNGEON",
+        "MessageModifyNotificationRename": "SI_PF_CONSORTIUM_FOUNDATION_CHAT_NAME_CHANGE_MAIN"
+      },
+      "FirstJoinReward": {
+        "MiscItemId": 101,
+        "MiscItemCount": 100,
+        "PostTitle": "SI_PF_CONSORTIUM_FIRST_JOIN_REWARD_POST_TITLE_TEXT",
+        "PostContent": "SI_PF_CONSORTIUM_FIRST_JOIN_REWARD_POST_CONTENTS_TEXT",
+        "PostExpireDay": 30
+      }
+    },
+    "MENTORING_DATA": {
+      "MENTEE_ADD_LIMIT_LEVEL": 5,
+      "MENTOR_ADD_LIMIT_LEVEL": 25,
+      "MENTEE_INVITE_LIMIT_COUNT": 99,
+      "MENTEE_DELETION_AFTER_DAYS": 3,
+      "MENTEE_LIMIT_BELONG_COUNT": 30,
+      "MENTORING_SEASON_INIT_MINUTES": 10,
+      "INVITATION_EXPIRE_DAYS": 3,
+      "MENTORING_ADD_LIMIT_ACTIVE_DAYS": 4
+    },
+    "FIERCE_DATA": {
+      "MAX_BOSS_RANKING_COUNT": 100,
+      "MAX_TOTAL_RANKING_COUNT": 100,
+      "RANKING_INTERVAL_MINUTES": 1,
+      "PROFILE_INTERVAL_MINUTES": 3
+    },
+    "EventDeck": {
+      "IgnoreCollaboUnitID": [
+        1182,
+        1183,
+        1184,
+        1185,
+        1186,
+        1228,
+        1249,
+        1281,
+        1283,
+        1284,
+        2229,
+        2230,
+        2281,
+        2284
+      ]
+    },
+    "EVENT_PASS_DATA": {
+      "FREE_MISSION_REROLL_COUNT": 3,
+      "PAY_MISSION_REROLL_COUNT": 5
+    },
+    "Operater": {
+      "OPERATOR_SKILL_STOP_TIME": 1.35,
+      "OPERATOR_SKILL_DELAY_START_TIME": 0.6,
+      "Const": {
+        "MaximumLevel": 100
+      },
+      "MaterialUnit": [
+        {
+          "m_NKM_UNIT_GRADE": "NUG_SSR",
+          "CommandLevelUpPercent": 100,
+          "LevelUpSuccessRatePercent": 100,
+          "TransportSuccessRatePercent": 50
+        },
+        {
+          "m_NKM_UNIT_GRADE": "NUG_SR",
+          "CommandLevelUpPercent": 100,
+          "LevelUpSuccessRatePercent": 75,
+          "TransportSuccessRatePercent": 38
+        },
+        {
+          "m_NKM_UNIT_GRADE": "NUG_R",
+          "CommandLevelUpPercent": 100,
+          "LevelUpSuccessRatePercent": 15,
+          "TransportSuccessRatePercent": 15
+        },
+        {
+          "m_NKM_UNIT_GRADE": "NUG_N",
+          "CommandLevelUpPercent": 100,
+          "LevelUpSuccessRatePercent": 8,
+          "TransportSuccessRatePercent": 8
+        }
+      ],
+      "HostUnit": [
+        {
+          "m_NKM_UNIT_GRADE": "NUG_SSR",
+          "ItemId": 3,
+          "ItemCount": 2000,
+          "m_ExtractPriceItemID": 3,
+          "m_ExtractPrice": 500
+        },
+        {
+          "m_NKM_UNIT_GRADE": "NUG_SR",
+          "ItemId": 3,
+          "ItemCount": 1000,
+          "m_ExtractPriceItemID": 3,
+          "m_ExtractPrice": 300
+        },
+        {
+          "m_NKM_UNIT_GRADE": "NUG_R",
+          "ItemId": 3,
+          "ItemCount": 500,
+          "m_ExtractPriceItemID": 3,
+          "m_ExtractPrice": 200
+        },
+        {
+          "m_NKM_UNIT_GRADE": "NUG_N",
+          "ItemId": 3,
+          "ItemCount": 250,
+          "m_ExtractPriceItemID": 3,
+          "m_ExtractPrice": 100
+        }
+      ],
+      "Negotiation": {
+        "MaxMaterialUsageLimit": 500,
+        "Materials": [
+          {
+            "ItemId": 1044,
+            "Exp": 200,
+            "Credit": 1500
+          },
+          {
+            "ItemId": 1045,
+            "Exp": 500,
+            "Credit": 3750
+          },
+          {
+            "ItemId": 1046,
+            "Exp": 1200,
+            "Credit": 9000
+          }
+        ]
+      },
+      "PassiveToken": {
+        "Materials": [
+          {
+            "m_NKM_ITEM_GRADE": "NIG_SSR",
+            "ItemID": [
+              100101,
+              100201,
+              100301,
+              100401,
+              100501,
+              100701,
+              101001,
+              101101,
+              101201,
+              101301,
+              101401,
+              101501
+            ],
+            "LevelUpSuccessRatePercent": 100,
+            "TransportSuccessRatePercent": 50
+          },
+          {
+            "m_NKM_ITEM_GRADE": "NIG_SR",
+            "ItemID": [
+              100102,
+              100202,
+              100302,
+              100402,
+              100502,
+              100702,
+              101002,
+              101102,
+              101202,
+              101302,
+              101402,
+              101502
+            ],
+            "LevelUpSuccessRatePercent": 75,
+            "TransportSuccessRatePercent": 38
+          },
+          {
+            "m_NKM_ITEM_GRADE": "NIG_R",
+            "ItemID": [
+              100103,
+              100203,
+              100303,
+              100403,
+              100503,
+              100703,
+              101003,
+              101103,
+              101203,
+              101303,
+              101403,
+              101503
+            ],
+            "LevelUpSuccessRatePercent": 15,
+            "TransportSuccessRatePercent": 15
+          },
+          {
+            "m_NKM_ITEM_GRADE": "NIG_N",
+            "ItemID": [
+              100104,
+              100204,
+              100304,
+              100404,
+              100504,
+              100704,
+              101004,
+              101104,
+              101204,
+              101304,
+              101404,
+              101504
+            ],
+            "LevelUpSuccessRatePercent": 8,
+            "TransportSuccessRatePercent": 8
+          }
+        ]
+      }
+    },
+    "GUILD_DUNGEON": {
+      "BASIC_CONST": {
+        "ARENA_TICKET_BUY_COUNT": 1,
+        "ARENA_PLAY_COUNT_BASIC": 5,
+        "BOSS_PLAY_COUNT_BASIC": 5,
+        "ARTIFACT_FULIFICATION_COUNT": 10,
+        "TICKET_COST": 200
+      },
+      "SESSION_REWARD_LIMIT": [
+        {
+          "ITEM_ID": 3,
+          "ITEM_LIMIT_VALUE": 1000
+        }
+      ]
+    },
+    "ITEM_CONVERT": {
+      "NotifyMailText": {
+        "ConvertTitle": "SI_DP_CONVERT_ITEM_MAIL_TITLE",
+        "ConvertMessage": "SI_DP_CONVERT_ITEM_MAIL_DESC",
+        "DeleteTitle": "SI_DP_DELETE_ITEM_MAIL_TITLE",
+        "DeleteMessage": "SI_DP_DELETE_ITEM_MAIL_DESC"
+      }
+    },
+    "Eternium_Recharge": {
+      "Recharge_Time": 300
+    },
+    "EQUIP_PRESET": {
+      "EQUIP_PRESET_BASIC_COUNT": 20,
+      "EQUIP_PRESET_MAX_COUNT": 100,
+      "EQUIP_PRESET_EXPAND_COST_ITEM_ID": 101,
+      "EQUIP_PRESET_EXPAND_COST_VALUE": 50,
+      "EQUIP_PRESET_NAME_MAX_LENGTH": 15
+    },
+    "SHOP": {
+      "FeaturedListExhibitCount": 4,
+      "FeaturedListTotalPaymentThreshold": 119000
+    },
+    "EVENT_RACE": {
+      "RACE_PLAY_COUNT": 3
+    },
+    "Skip": {
+      "MiscItemId": 3,
+      "MiscItemCount": 0
+    },
+    "Office": {
+      "OfficeDefaultBackground": 800101,
+      "OfficeDefaultWall": 800102,
+      "OfficeDefaultFloor": 800103,
+      "OfficeNamingLimit": 8,
+      "OfficeHostNameCard": {
+        "ItemId": 8,
+        "ItemValue": 10,
+        "DayLimit": 50
+      },
+      "OfficeInteraction": {
+        "ActInteriorRatePercent": 25,
+        "ActInteriorCoolTime": 30,
+        "ActUnitRatePercent": 80,
+        "ActUnitCoolTime": 20,
+        "ActSoloUnitRatePercent": 10,
+        "ActSoloUnitCoolTime": 60,
+        "RoomEnterActRatePercent": 10
+      },
+      "OfficeParty": {
+        "UseResourceId": 37,
+        "MaxCount": 3,
+        "GetPieceValue": 1,
+        "EndAniEvent": [
+          "OFFICE_PARTY_END_01"
+        ]
+      },
+      "OfficeUserPreset": {
+        "FREE_PRESET": 3,
+        "MAX_PRESET": 20,
+        "PRESET_PRICE_QUARTZ": 200
+      }
+    },
+    "EXTRACT_BONUS": {
+      "ExtractBonusRatePercent_Awaken": 80,
+      "ExtractBonusRatePercent_SSR": 20,
+      "ExtractBonusRatePercent_SR": 5,
+      "MaxExtractUnitSelect": 5
+    },
+    "IMPRINT_STAT": {
+      "IEP_WEAPON_MAIN_OPTION_MAIN_STAT": 1.5,
+      "IEP_WEAPON_MAIN_OPTION_SUB_STAT": 1.2,
+      "IEP_DEFENCE_MAIN_OPTION_MAIN_STAT": 1.5,
+      "IEP_DEFENCE_MAIN_OPTION_SUB_STAT": 1.2,
+      "IEP_ACC_MAIN_OPTION_MAIN_STAT": 1.5,
+      "IEP_ACC_MAIN_OPTION_SUB_STAT": 1.2,
+      "IEP_IMPRINT_COST_ITEM_ID": 1,
+      "IEP_IMPRINT_COST_ITEM_COUNT": 300000,
+      "IEP_RE_IMPRINT_COST_ITEM_ID": 1,
+      "IEP_RE_IMPRINT_COST_ITEM_COUNT": 500000
+    },
+    "Dungeon": {
+      "PaybackRatio": 0.9
+    },
+    "Raid": {
+      "Raid_Point_ReqItemDecline": 70000
+    },
+    "ITEM_DROP_INFO_MAX_COUNT": {
+      "SHOP_CASH_TEMPLET": 30,
+      "WORLDMAP_MISSION_TEMPLET": 1,
+      "RAID_TEMPLET": 1,
+      "SHADOW_PALACE": 1,
+      "DIVE_TEMPLET": 1,
+      "FIERCE_POINT_REWARD": 1,
+      "RANDOM_MOLD_BOX": 1,
+      "UNIT_DISMISS": 1,
+      "UNIT_EXTRACT": 1,
+      "TRIM_DUNGEON": 20,
+      "SUBSTREAM_SHOP": 50
+    },
+    "ITEM_DROP_INFO_EPISODE_MAX_COUNT": {
+      "EC_MAINSTREAM": 25,
+      "EC_SUPPLY": 20,
+      "EC_DAILY": 10,
+      "EC_SIDESTORY": 25,
+      "EC_CHALLENGE": 20,
+      "EC_COUNTERCASE": 1,
+      "EC_FIELD": 40,
+      "EC_EVENT": 10
+    },
+    "INVENTORY_AD_EXPAND": {
+      "INVENTORY_UNIT_EXPAND_COUNT": 1,
+      "INVENTORY_EQUIP_EXPAND_COUNT": 1,
+      "INVENTORY_SHIP_EXPAND_COUNT": 0,
+      "INVENTORY_OPERATOR_EXPAND_COUNT": 0
+    },
+    "GAME": {
+      "VALID_LAND_PVE": [
+        0.4,
+        0.6,
+        0.8
+      ],
+      "VALID_LAND_PVP": [
+        0.4,
+        0.6,
+        0.8
+      ],
+      "PVE_SUMMON_MIN_POS": 0,
+      "PVP_SUMMON_MIN_POS": 160,
+      "PVP_AFK_WARNING_TIME": 10,
+      "PVP_AFK_AUTO_TIME": 14,
+      "PVP_AFK_APPLY_MODE": [
+        "NGT_PVP_RANK",
+        "NGT_PVP_EVENT",
+        "NGT_PVP_LEAGUE",
+        "NGT_PVP_UNLIMITED"
+      ],
+      "FIND_TARGET_USE_UNITSIZE": false
+    },
+    "RECALL": {
+      "RECALL_REWARD_UNIT_PIECE_TO_POINT": 16.67
+    },
+    "TACTIC_UPDATE": {
+      "TACTIC_UPDATE_RETURN_COUNT": 50,
+      "TACTIC_UPDATE_RETURN_DATE": "DATE_TACTIC_UPDATE_RETURN"
+    },
+    "SHIP_LIMITBREAK": {
+      "ShipLimitBreakItemCount": 3,
+      "ModuleReqItemCount": 4
+    },
+    "STAGE_FAVORITE": {
+      "MAX_STAGE_FAVORITE_COUNT": 30
+    },
+    "NKMBackgroundUnitInfo": {
+      "UnitSlot1": {
+        "unitPosX": -227,
+        "unitPosY": 15,
+        "unitSize": 0.8
+      },
+      "UnitSlot2": {
+        "unitPosX": 0,
+        "unitPosY": 15,
+        "unitSize": 1
+      },
+      "UnitSlot3": {
+        "unitPosX": 925,
+        "unitPosY": -20,
+        "unitSize": 1
+      }
+    },
+    "LobbyDefaultBackground": {
+      "DefaultBackgroundItem": 9042
+    },
+    "EquipEnchantModule": {
+      "MaxMaterialUsageLimit": 1000,
+      "Materials": [
+        {
+          "ItemId": 1066,
+          "Exp": 175
+        },
+        {
+          "ItemId": 1067,
+          "Exp": 219
+        },
+        {
+          "ItemId": 1068,
+          "Exp": 274
+        },
+        {
+          "ItemId": 1069,
+          "Exp": 27250
+        }
+      ]
+    },
+    "Reactor": {
+      "MaxReactorLevel": 5,
+      "MaxReactorReqItemCount": 3
+    },
+    "RelicReroll": {
+      "RelicRerollCountFactor": 1.2,
+      "RelicRerollLimitCount": 100
+    },
+    "Tournament": {
+      "EmptyUserSlot": -1,
+      "TournamentUndecidedSlot": 0,
+      "TournamentPredictionCoolTime": 60,
+      "TournamentQualifyCoolTime": 60,
+      "PredictionJoinRewardItemID": 2,
+      "PredictionJoinRewardItemValue": 2500,
+      "TournamentDefaultBotCount": 1024,
+      "TournamentUseBot": false,
+      "TournamentMinimumDeckCP": 100000,
+      "TournamentBanHighUnitCount": 8,
+      "TournamentBanHighShipCount": 3
+    },
+    "BinaryBonus": {
+      "TuningBonusResetGroupID": 1013,
+      "TuningBonusCount": 500,
+      "SetBonusResetGroupID": 1035,
+      "SetBonusCount": 500
+    },
+    "CastingBan": {
+      "MaxBanCount": 3,
+      "MaxBanLevel": 1
+    },
+    "SupportUnit": {
+      "ApplyGameTypeList": [
+        "NGT_RAID",
+        "NGT_DUNGEON",
+        "NGT_PHASE"
+      ],
+      "SuportingRewardCount": 1,
+      "SupportingRewardMiscItemId": 52,
+      "SupportingRewardMiscItemCount": 1
+    },
+    "EXPLORE": {
+      "FirstSquadOprPassiveSkill": [
+        1013,
+        1014
+      ],
+      "KillPoint": 100
+    },
+    "IngameSkip": {
+      "SkipableGameTypeList": [
+        "NGT_ASYNC_PVP",
+        "NGT_PVP_STRATEGY",
+        "NGT_PVP_STRATEGY_REVENGE",
+        "NGT_PVP_STRATEGY_NPC"
+      ]
+    },
+    "EQUIP_ENCHANT": {
+      "EQUIP_MULTIPLE_ENCHANT": 10
+    },
+    "RemainReward": {
+      "m_RemainEventPassID": 575,
+      "m_RemainPaybackID": [
+        8014,
+        8015
+      ]
+    }
+  },
   "recordCount": 14,
   "records": [
     {

@@ -16,6 +16,7 @@
     "patch:counter-pass-client:status": "dotnet run --project tools/CounterPassClientPatcher/CounterPassClientPatcher.csproj -- --status",
     "diag:event": "node tools/event-manager-diagnostics.js",
     "generate:packet-schema": "node tools/generate-packet-schema.js",
+    "coverage:join-lobby-ack": "node tools/report-join-lobby-ack-coverage.js",
     "wiki:build": "node tools/build-revivalside-wiki.js",
     "wiki:serve": "node tools/serve-revivalside-wiki.js"
   }
