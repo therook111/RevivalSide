@@ -461,7 +461,14 @@ internal sealed class InstallerWindow : Window
         Directory.CreateDirectory(cacheRoot);
         var archivePath = Path.Combine(cacheRoot, manifest.ArchiveName);
         await DownloadPayloadChunksAsync(client, new Uri(manifestUrl), manifest, cacheRoot);
-        await CombinePayloadArchiveAsync(manifest, cacheRoot, archivePath);
+        if (ManifestUsesSingleArchiveAsset(manifest))
+        {
+            AppendLog($"Payload archive cached: {manifest.ArchiveName}");
+        }
+        else
+        {
+            await CombinePayloadArchiveAsync(manifest, cacheRoot, archivePath);
+        }
         VerifyFileHash(archivePath, manifest.ArchiveSha256, "payload archive");
 
         SetStatus("Extracting payload");
@@ -515,6 +522,12 @@ internal sealed class InstallerWindow : Window
             destination.Close();
             VerifyFileHash(chunkPath, chunk.Sha256, chunk.Name);
         }
+    }
+
+    private static bool ManifestUsesSingleArchiveAsset(ReleasePayloadManifest manifest)
+    {
+        return manifest.Chunks.Count == 1
+            && manifest.Chunks[0].Name.Equals(manifest.ArchiveName, StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task CombinePayloadArchiveAsync(ReleasePayloadManifest manifest, string cacheRoot, string archivePath)
