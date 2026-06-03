@@ -58,6 +58,22 @@ function Get-FileSha256([string]$Path) {
   return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 
+function Get-CompatibleRelativePath([string]$BasePath, [string]$TargetPath) {
+  $baseFull = [System.IO.Path]::GetFullPath($BasePath)
+  $targetFull = [System.IO.Path]::GetFullPath($TargetPath)
+  $separator = [System.IO.Path]::DirectorySeparatorChar
+  if (-not $baseFull.EndsWith($separator)) {
+    $baseFull = $baseFull + $separator
+  }
+  $baseUri = New-Object System.Uri($baseFull)
+  $targetUri = New-Object System.Uri($targetFull)
+  if ($baseUri.Scheme -ne $targetUri.Scheme) {
+    throw "Cannot create relative path across URI schemes: $baseFull -> $targetFull"
+  }
+  $relativeUri = $baseUri.MakeRelativeUri($targetUri)
+  return [System.Uri]::UnescapeDataString($relativeUri.ToString()).Replace("/", $separator)
+}
+
 function New-PayloadZip([string]$PayloadDir, [string]$ZipPath) {
   Add-Type -AssemblyName System.IO.Compression
   Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -68,7 +84,7 @@ function New-PayloadZip([string]$PayloadDir, [string]$ZipPath) {
     $files = Get-ChildItem -LiteralPath $PayloadDir -Recurse -File
     $count = 0
     foreach ($file in $files) {
-      $relative = [System.IO.Path]::GetRelativePath($PayloadDir, $file.FullName).Replace("\", "/")
+      $relative = (Get-CompatibleRelativePath $PayloadDir $file.FullName).Replace("\", "/")
       $entryName = "payload/$relative"
       [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $file.FullName, $entryName, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
       $count++
