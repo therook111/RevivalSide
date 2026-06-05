@@ -2,6 +2,7 @@ using System.Collections;
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 
 namespace RevivalSide.CombatHost;
 
@@ -40,6 +41,7 @@ internal static class ManagedCombatBridge
         "utcOffset",
         "lastCreditSupplyTakeTime",
         "lastEterniumSupplyTakeTime",
+        "totalPaidAmount",
         "pvpPointChargeTime",
         "contractState",
         "contractBonusState",
@@ -222,6 +224,9 @@ internal static class ManagedCombatBridge
             key.StartsWith("DATE_COMMON_SHOP_EVENT_", StringComparison.OrdinalIgnoreCase) ||
             key.StartsWith("DATE_GLOBAL_EVENT_", StringComparison.OrdinalIgnoreCase) ||
             key.StartsWith("DATE_GLBOAL_EVENT_", StringComparison.OrdinalIgnoreCase) ||
+            key.StartsWith("DATE_GLOBAL_CLASSIFIED_", StringComparison.OrdinalIgnoreCase) ||
+            key.StartsWith("DATE_KOR_CLASSIFIED_", StringComparison.OrdinalIgnoreCase) ||
+            key.Equals("DATE_KOR_CONTRACT_OLD_VERSION", StringComparison.OrdinalIgnoreCase) ||
             key.StartsWith("DATE_GLOBAL_FIRST_CONTRACT_", StringComparison.OrdinalIgnoreCase) ||
             key.StartsWith("DATE_GLOBAL_CUSTOM_PICKUP_", StringComparison.OrdinalIgnoreCase) ||
             key.StartsWith("DATE_GLOBAL_PICUP_", StringComparison.OrdinalIgnoreCase) ||
@@ -335,6 +340,42 @@ internal static class ManagedCombatBridge
         try
         {
             runtime.InitializeClientTables();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.ToString();
+            return false;
+        }
+    }
+
+    public static bool TryExportLuaTable(
+        HostOptions options,
+        GameplayTableExportData data,
+        out HostResponse? response,
+        out string? error)
+    {
+        response = null;
+        error = null;
+        if (string.IsNullOrWhiteSpace(options.ManagedDir))
+        {
+            error = "managed dir required";
+            return false;
+        }
+
+        var runtime = ManagedRuntime.TryLoad(options.ManagedDir, options.GameplayTablesDir, out error);
+        if (runtime == null)
+        {
+            return false;
+        }
+
+        try
+        {
+            response = new HostResponse
+            {
+                Ok = true,
+                TableJson = runtime.ExportLuaTableJson(data)
+            };
             return true;
         }
         catch (Exception ex)
@@ -845,10 +886,12 @@ internal static class ManagedCombatBridge
             runtime.RefreshTutorialTeamADeck(gameData, dynamicGame.StageID, dynamicGame.DungeonID);
             runtime.ApplyPlayerIdentityTeamA(gameData, data.Stage?.PlayerDeck);
             runtime.ApplyGameType(gameData, dynamicGame);
+            runtime.ApplyTeamAStartingRespawnCost(gameData, runtimeData);
             runtime.Invoke(server, "SetGameData", gameData);
             if (runtimeData != null)
             {
                 runtime.ApplyPlayerIdentityRuntimeData(runtimeData, data.Stage?.PlayerDeck);
+                runtime.ApplyTeamAStartingRespawnCost(gameData, runtimeData);
                 runtime.Invoke(server, "SetGameRuntimeData", runtimeData);
             }
             if (!usesTutorialEventDeck)
@@ -1685,6 +1728,11 @@ internal static class ManagedCombatBridge
         private static readonly object Gate = new();
         private static ManagedRuntime? current;
         private static string currentRuntimeKey = "";
+        private static readonly JsonSerializerOptions LuaTableJsonOptions = new(Json.Options)
+        {
+            PropertyNamingPolicy = null,
+            DictionaryKeyPolicy = null
+        };
 
         private readonly Assembly assembly;
         private readonly string managedDir;
@@ -1782,6 +1830,77 @@ internal static class ManagedCombatBridge
 
         public object Create(string typeName) => Activator.CreateInstance(GetType(typeName))!;
 
+        public string ExportLuaTableJson(GameplayTableExportData data)
+        {
+            var directory = NormalizeLuaBundleDirectory(data.Directory);
+            var fileBaseName = NormalizeLuaFileBaseName(data.FileName);
+            if (string.IsNullOrWhiteSpace(directory)) throw new ArgumentException("table directory is required", nameof(data));
+            if (string.IsNullOrWhiteSpace(fileBaseName)) throw new ArgumentException("table file name is required", nameof(data));
+
+            var nkmlua = Create("NKM.NKMLua");
+            try
+            {
+                var luaType = nkmlua.GetType();
+                var loadCommonPathBase = luaType.GetMethod(
+                    "LoadCommonPathBase",
+                    BindingFlags.Public | BindingFlags.Instance,
+                    null,
+                    [typeof(string), typeof(string), typeof(bool), typeof(bool), typeof(string).MakeByRefType()],
+                    null)
+                    ?? throw new MissingMethodException(luaType.FullName, "LoadCommonPathBase");
+                var luaServerField = FindField(luaType, "m_LuaSvr")
+                    ?? throw new MissingFieldException(luaType.FullName, "m_LuaSvr");
+                var luaServer = luaServerField.GetValue(nkmlua)
+                    ?? throw new InvalidOperationException("NKMLua.m_LuaSvr was not available");
+                var beforeKeys = GetLuaGlobalKeySet(luaServer);
+                var errorMessage = "";
+                object?[] loadArgs = [directory.ToUpperInvariant(), fileBaseName, false, false, errorMessage];
+                var loaded = Convert.ToBoolean(loadCommonPathBase.Invoke(nkmlua, loadArgs), CultureInfo.InvariantCulture);
+                if (!loaded)
+                {
+                    throw new InvalidOperationException(Convert.ToString(loadArgs[4], CultureInfo.InvariantCulture) ?? "Lua table load failed");
+                }
+
+                var globals = GetLuaGlobalDictionary(luaServer);
+                var selected = SelectExportLuaRoot(luaServer, globals, beforeKeys, data.RootName, fileBaseName);
+                var root = ConvertLuaValue(luaServer, selected.Table, new HashSet<int>(), 0);
+                var records = BuildLuaTableRecords(root);
+                var exportedGlobals = BuildExportedLuaGlobals(luaServer, globals, beforeKeys);
+                var envelope = new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    ["source"] = "managed-luac",
+                    ["directory"] = directory.ToLowerInvariant(),
+                    ["fileName"] = data.FileName,
+                    ["rootName"] = selected.RootName,
+                    ["globalCount"] = exportedGlobals.Count,
+                    ["globals"] = exportedGlobals,
+                    ["recordCount"] = records.Count,
+                    ["records"] = records,
+                    ["root"] = root
+                };
+                return JsonSerializer.Serialize(envelope, LuaTableJsonOptions);
+            }
+            finally
+            {
+                if (nkmlua is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+            }
+        }
+
+        private static Dictionary<string, object?> BuildExportedLuaGlobals(object luaServer, IDictionary globals, HashSet<string> beforeKeys)
+        {
+            var exported = new Dictionary<string, object?>(StringComparer.Ordinal);
+            foreach (var entry in EnumerateLuaDictionaryEntries(globals))
+            {
+                var key = LuaKeyToString(entry.Key);
+                if (string.IsNullOrWhiteSpace(key) || beforeKeys.Contains(key)) continue;
+                exported[key] = ConvertLuaValue(luaServer, entry.Value, new HashSet<int>(), 0);
+            }
+            return exported;
+        }
+
         public void InitializeClientTables()
         {
             if (clientTablesInitialized) return;
@@ -1804,6 +1923,334 @@ internal static class ManagedCombatBridge
                 // Optional combat support tables should not block startup; the
                 // managed bridge can still fall back if a table is unavailable.
             }
+        }
+
+        private static string NormalizeLuaBundleDirectory(string value)
+        {
+            var normalized = (value ?? "").Replace('\\', '/').Trim('/');
+            if (string.IsNullOrWhiteSpace(normalized)) return "";
+            var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0) return "";
+            if (parts[^1].Equals("luac", StringComparison.OrdinalIgnoreCase) && parts.Length > 1)
+            {
+                return parts[^2];
+            }
+            return parts[^1];
+        }
+
+        private static string NormalizeLuaFileBaseName(string value)
+        {
+            var normalized = (value ?? "").Replace('\\', '/').Trim();
+            var fileName = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault() ?? "";
+            while (true)
+            {
+                var extension = Path.GetExtension(fileName);
+                if (!extension.Equals(".json", StringComparison.OrdinalIgnoreCase)
+                    && !extension.Equals(".luac", StringComparison.OrdinalIgnoreCase)
+                    && !extension.Equals(".lua", StringComparison.OrdinalIgnoreCase)
+                    && !extension.Equals(".bytes", StringComparison.OrdinalIgnoreCase))
+                {
+                    return fileName;
+                }
+                fileName = Path.GetFileNameWithoutExtension(fileName);
+            }
+        }
+
+        private static HashSet<string> GetLuaGlobalKeySet(object luaServer)
+        {
+            return EnumerateLuaDictionaryEntries(GetLuaGlobalDictionary(luaServer))
+                .Select(entry => LuaKeyToString(entry.Key))
+                .Where(key => !string.IsNullOrWhiteSpace(key))
+                .ToHashSet(StringComparer.Ordinal);
+        }
+
+        private static IDictionary GetLuaGlobalDictionary(object luaServer)
+        {
+            var globalTable = TryGetLuaTableByName(luaServer, "_G")
+                ?? throw new InvalidOperationException("Lua global table was not available");
+            return GetLuaTableDictionary(luaServer, globalTable);
+        }
+
+        private static object? TryGetLuaTableByName(object luaServer, string rootName)
+        {
+            if (string.IsNullOrWhiteSpace(rootName)) return null;
+            try
+            {
+                var method = luaServer.GetType().GetMethod(
+                    "GetTable",
+                    BindingFlags.Public | BindingFlags.Instance,
+                    null,
+                    [typeof(string)],
+                    null)
+                    ?? throw new MissingMethodException(luaServer.GetType().FullName, "GetTable");
+                var value = method.Invoke(luaServer, [rootName]);
+                return IsLuaTable(value) ? value : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static IDictionary GetLuaTableDictionary(object luaServer, object table)
+        {
+            var method = luaServer.GetType().GetMethod(
+                "GetTableDict",
+                BindingFlags.Public | BindingFlags.Instance,
+                null,
+                [table.GetType()],
+                null)
+                ?? throw new MissingMethodException(luaServer.GetType().FullName, "GetTableDict");
+            var value = method.Invoke(luaServer, [table]);
+            return value as IDictionary ?? throw new InvalidOperationException("Lua table dictionary was not available");
+        }
+
+        private static IEnumerable<(object? Key, object? Value)> EnumerateLuaDictionaryEntries(IDictionary dictionary)
+        {
+            foreach (var item in dictionary)
+            {
+                if (item is DictionaryEntry entry)
+                {
+                    yield return (entry.Key, entry.Value);
+                    continue;
+                }
+
+                var itemType = item?.GetType();
+                var keyProperty = itemType?.GetProperty("Key", BindingFlags.Public | BindingFlags.Instance);
+                var valueProperty = itemType?.GetProperty("Value", BindingFlags.Public | BindingFlags.Instance);
+                if (keyProperty != null && valueProperty != null)
+                {
+                    yield return (keyProperty.GetValue(item), valueProperty.GetValue(item));
+                }
+            }
+        }
+
+        private static (string RootName, object Table) SelectExportLuaRoot(
+            object luaServer,
+            IDictionary globals,
+            HashSet<string> beforeKeys,
+            string explicitRootName,
+            string fileBaseName)
+        {
+            if (!string.IsNullOrWhiteSpace(explicitRootName))
+            {
+                var explicitRoot = TryGetLuaTableByName(luaServer, explicitRootName.Trim());
+                if (explicitRoot != null) return (explicitRootName.Trim(), explicitRoot);
+            }
+
+            var candidates = new List<(string RootName, object Table, int Count, int Score)>();
+            foreach (var entry in EnumerateLuaDictionaryEntries(globals))
+            {
+                var key = LuaKeyToString(entry.Key);
+                if (string.IsNullOrWhiteSpace(key) || !IsLuaTable(entry.Value)) continue;
+                var isNew = !beforeKeys.Contains(key);
+                if (!isNew && !IsLikelyRootName(key, fileBaseName)) continue;
+                var count = SafeLuaTableCount(luaServer, entry.Value!);
+                var score = count + (isNew ? 1_000_000 : 0) + (IsLikelyRootName(key, fileBaseName) ? 100_000 : 0);
+                candidates.Add((key, entry.Value!, count, score));
+            }
+
+            if (candidates.Count > 0)
+            {
+                var selected = candidates
+                    .OrderByDescending(candidate => candidate.Score)
+                    .ThenByDescending(candidate => candidate.Count)
+                    .ThenBy(candidate => candidate.RootName, StringComparer.Ordinal)
+                    .First();
+                return (selected.RootName, selected.Table);
+            }
+
+            foreach (var name in BuildDerivedRootNameCandidates(fileBaseName))
+            {
+                var table = TryGetLuaTableByName(luaServer, name);
+                if (table != null) return (name, table);
+            }
+
+            throw new InvalidOperationException($"Lua table root could not be determined for {fileBaseName}");
+        }
+
+        private static IEnumerable<string> BuildDerivedRootNameCandidates(string fileBaseName)
+        {
+            var names = new[]
+            {
+                fileBaseName,
+                StripLuaPrefix(fileBaseName)
+            };
+            return names
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.Ordinal);
+        }
+
+        private static bool IsLikelyRootName(string rootName, string fileBaseName)
+        {
+            var normalizedRoot = NormalizeRootNameToken(rootName);
+            var normalizedFile = NormalizeRootNameToken(fileBaseName);
+            var normalizedFileWithoutPrefix = NormalizeRootNameToken(StripLuaPrefix(fileBaseName));
+            return normalizedRoot == normalizedFile || normalizedRoot == normalizedFileWithoutPrefix;
+        }
+
+        private static string StripLuaPrefix(string value)
+        {
+            return value.StartsWith("LUA_", StringComparison.OrdinalIgnoreCase) ? value[4..] : value;
+        }
+
+        private static string NormalizeRootNameToken(string value)
+        {
+            return new string((value ?? "")
+                .Where(char.IsLetterOrDigit)
+                .Select(char.ToUpperInvariant)
+                .ToArray());
+        }
+
+        private static int SafeLuaTableCount(object luaServer, object table)
+        {
+            try
+            {
+                return GetLuaTableDictionary(luaServer, table).Count;
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private static object? ConvertLuaValue(object luaServer, object? value, HashSet<int> visitedTables, int depth)
+        {
+            if (value == null || depth > 64) return null;
+            if (IsLuaTable(value)) return ConvertLuaTable(luaServer, value, visitedTables, depth + 1);
+            if (value is string or bool) return value;
+            if (value is byte or sbyte or short or ushort or int or uint or long or ulong) return value;
+            if (value is float single) return float.IsFinite(single) ? single : null;
+            if (value is double number) return double.IsFinite(number) ? number : null;
+            if (value is decimal decimalValue) return decimalValue;
+            if (value.GetType().IsEnum) return value.ToString();
+            return Convert.ToString(value, CultureInfo.InvariantCulture);
+        }
+
+        private static object? ConvertLuaTable(object luaServer, object table, HashSet<int> visitedTables, int depth)
+        {
+            var tableReference = table.GetHashCode();
+            if (!visitedTables.Add(tableReference)) return null;
+            try
+            {
+                var entries = EnumerateLuaDictionaryEntries(GetLuaTableDictionary(luaServer, table))
+                    .Select(entry => (
+                        KeyText: LuaKeyToString(entry.Key),
+                        Index: TryGetPositiveIntegerKey(entry.Key),
+                        Value: entry.Value))
+                    .Where(entry => !string.IsNullOrWhiteSpace(entry.KeyText))
+                    .ToList();
+                if (entries.Count == 0) return new Dictionary<string, object?>(StringComparer.Ordinal);
+
+                var indexedEntries = entries.Where(entry => entry.Index.HasValue).ToList();
+                if (indexedEntries.Count == entries.Count)
+                {
+                    var ordered = indexedEntries.OrderBy(entry => entry.Index!.Value).ToList();
+                    var contiguous = ordered[0].Index == 1 && ordered.Select((entry, index) => entry.Index == index + 1).All(match => match);
+                    if (contiguous)
+                    {
+                        return ordered
+                            .Select(entry => ConvertLuaValue(luaServer, entry.Value, visitedTables, depth + 1))
+                            .ToList();
+                    }
+                }
+
+                var output = new Dictionary<string, object?>(StringComparer.Ordinal);
+                foreach (var entry in entries
+                    .OrderBy(entry => entry.Index.HasValue ? 0 : 1)
+                    .ThenBy(entry => entry.Index ?? int.MaxValue)
+                    .ThenBy(entry => entry.KeyText, StringComparer.Ordinal))
+                {
+                    output[entry.KeyText] = ConvertLuaValue(luaServer, entry.Value, visitedTables, depth + 1);
+                }
+                return output;
+            }
+            finally
+            {
+                visitedTables.Remove(tableReference);
+            }
+        }
+
+        private static List<object?> BuildLuaTableRecords(object? root)
+        {
+            if (root is List<object?> list) return list;
+            if (root is Dictionary<string, object?> dictionary)
+            {
+                var records = new List<object?>();
+                foreach (var entry in dictionary)
+                {
+                    if (entry.Value is Dictionary<string, object?> row)
+                    {
+                        if (row.ContainsKey("__key"))
+                        {
+                            records.Add(new Dictionary<string, object?>(row, StringComparer.Ordinal));
+                        }
+                        else
+                        {
+                            var withKey = new Dictionary<string, object?>(StringComparer.Ordinal)
+                            {
+                                ["__key"] = entry.Key
+                            };
+                            foreach (var field in row)
+                            {
+                                withKey[field.Key] = field.Value;
+                            }
+                            records.Add(withKey);
+                        }
+                    }
+                    else if (entry.Value is List<object?> values)
+                    {
+                        records.Add(new Dictionary<string, object?>(StringComparer.Ordinal)
+                        {
+                            ["__key"] = entry.Key,
+                            ["values"] = values
+                        });
+                    }
+                    else
+                    {
+                        records.Add(new Dictionary<string, object?>(StringComparer.Ordinal)
+                        {
+                            ["__key"] = entry.Key,
+                            ["value"] = entry.Value
+                        });
+                    }
+                }
+                return records;
+            }
+            return [];
+        }
+
+        private static int? TryGetPositiveIntegerKey(object? key)
+        {
+            if (key == null || key is string) return null;
+            try
+            {
+                var value = Convert.ToDouble(key, CultureInfo.InvariantCulture);
+                if (!double.IsFinite(value)) return null;
+                var rounded = Math.Round(value);
+                if (Math.Abs(value - rounded) > 0.0000001 || rounded < 1 || rounded > int.MaxValue) return null;
+                return (int)rounded;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static string LuaKeyToString(object? key)
+        {
+            if (key == null) return "";
+            var positiveInteger = TryGetPositiveIntegerKey(key);
+            if (positiveInteger.HasValue) return positiveInteger.Value.ToString(CultureInfo.InvariantCulture);
+            return Convert.ToString(key, CultureInfo.InvariantCulture) ?? "";
+        }
+
+        private static bool IsLuaTable(object? value)
+        {
+            if (value == null) return false;
+            var type = value.GetType();
+            return string.Equals(type.FullName, "NLua.LuaTable", StringComparison.Ordinal)
+                || string.Equals(type.Name, "LuaTable", StringComparison.Ordinal);
         }
 
         public void PrepareGameDataForLocalServer(object gameData)
@@ -1923,8 +2370,8 @@ internal static class ManagedCombatBridge
                     shipUid,
                     Math.Max(1, playerDeck.ShipLevel),
                     playerDeck.ShipSkinId,
-                    0,
-                    0,
+                    playerDeck.ShipTacticLevel,
+                    playerDeck.ShipLimitBreakLevel,
                     userUid,
                     null,
                     null));
@@ -1996,8 +2443,8 @@ internal static class ManagedCombatBridge
                     shipUid,
                     Math.Max(1, playerDeck.ShipLevel),
                     playerDeck.ShipSkinId,
-                    0,
-                    0,
+                    playerDeck.ShipTacticLevel,
+                    playerDeck.ShipLimitBreakLevel,
                     userUid,
                     null,
                     null));
@@ -2182,6 +2629,77 @@ internal static class ManagedCombatBridge
             SetField(runtimeTeamA, "m_UserUID", userUid);
             SetField(runtimeTeamA, "m_bAutoRespawn", false);
             SetField(runtimeTeamA, "m_NKM_GAME_AUTO_SKILL_TYPE", 1);
+        }
+
+        public void ApplyTeamAStartingRespawnCost(object gameData, object? runtimeData)
+        {
+            if (runtimeData == null) return;
+            var runtimeTeamA = GetField(runtimeData, "m_NKMGameRuntimeTeamDataA");
+            if (runtimeTeamA == null) return;
+
+            var startCost = CalculateTeamAStartingRespawnCost(gameData);
+            if (startCost.HasValue)
+            {
+                SetField(runtimeTeamA, "m_fRespawnCost", startCost.Value);
+            }
+        }
+
+        private float? CalculateTeamAStartingRespawnCost(object gameData)
+        {
+            var teamSupply = Convert.ToInt32(GetField(gameData, "m_TeamASupply") ?? 0, CultureInfo.InvariantCulture);
+            if (teamSupply <= 0) return 0f;
+
+            var teamA = GetField(gameData, "m_NKMGameTeamDataA");
+            if (teamA == null) return null;
+
+            var ship = GetField(teamA, "m_MainShip");
+            if (ship == null) return 4f;
+
+            var starGrade = ReadShipStarGrade(ship);
+            return Math.Clamp(4f + Math.Max(0, starGrade), 0f, 10f);
+        }
+
+        private static int ReadShipStarGrade(object ship)
+        {
+            try
+            {
+                var getStarGrade = ship.GetType().GetMethod(
+                    "GetStarGrade",
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
+                    null,
+                    Type.EmptyTypes,
+                    null);
+                if (getStarGrade != null)
+                {
+                    return Convert.ToInt32(getStarGrade.Invoke(ship, null), CultureInfo.InvariantCulture);
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                var getUnitTemplet = ship.GetType().GetMethod(
+                    "GetUnitTemplet",
+                    BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
+                    null,
+                    Type.EmptyTypes,
+                    null);
+                var unitTemplet = getUnitTemplet?.Invoke(ship, null);
+                var templetBase = unitTemplet == null ? null : GetFieldValue(unitTemplet, "m_UnitTempletBase");
+                return Convert.ToInt32(GetFieldValue(templetBase, "m_StarGradeMax") ?? 0, CultureInfo.InvariantCulture);
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
+        private static object? GetFieldValue(object? target, string fieldName)
+        {
+            if (target == null) return null;
+            return FindField(target.GetType(), fieldName)?.GetValue(target);
         }
 
         public void ClearTeamAUnitOwnersForGameLoadAck(object gameData, PlayerDeckData? playerDeck)

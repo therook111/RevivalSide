@@ -6,6 +6,7 @@ const { execFileSync } = require("child_process");
 const HEAD_FENCE = 0xaabbccdd;
 const TAIL_FENCE = 0x11223344;
 const TSHARK_PATH = process.env.CS_TSHARK_PATH || "C:\\Program Files\\Wireshark\\tshark.exe";
+const KNOWN_GAME_SERVER_PORTS = new Set(["20001", "20002", "20003", "20004", "22000"]);
 
 function usage() {
   console.error(
@@ -25,26 +26,28 @@ const clientHost = clientHostArg || "";
 const rows = readStreamRows(pcap, stream);
 if (rows.length === 0) throw new Error(`no tcp payload rows for stream ${stream}`);
 
-const endpoints = inferEndpoints(rows, clientHost);
-const clientSegments = buildSegments(rows.filter((row) => row.src === endpoints.client));
-const serverSegments = buildSegments(rows.filter((row) => row.src === endpoints.server));
-const clientBytes = Buffer.concat(clientSegments.map((row) => row.payload));
-const serverBytes = Buffer.concat(serverSegments.map((row) => row.payload));
-const clientPackets = parsePackets(clientBytes, clientSegments);
-const serverPackets = parsePackets(serverBytes, serverSegments);
+let endpoints = inferEndpoints(rows, clientHost);
+let flow = buildPacketFlow(rows, endpoints);
+if (mode === "game") {
+  const reversed = buildPacketFlow(rows, { client: endpoints.server, server: endpoints.client });
+  if (shouldPreferFlow(reversed, flow)) {
+    endpoints = { client: endpoints.server, server: endpoints.client };
+    flow = reversed;
+  }
+}
 
 fs.mkdirSync(outDir, { recursive: true });
 
 if (mode === "tcp") {
-  writeTcpFixtures(outDir, pcap, stream, serverPackets);
+  writeTcpFixtures(outDir, pcap, stream, flow.serverPackets);
 } else if (mode === "game") {
-  writeGameFixtures(outDir, pcap, stream, clientPackets, serverPackets);
+  writeGameFixtures(outDir, pcap, stream, flow.clientPackets, flow.serverPackets);
 } else {
   usage();
 }
 
 console.log(
-  `[extract] mode=${mode} stream=${stream} client=${endpoints.client} server=${endpoints.server} clientPackets=${clientPackets.length} serverPackets=${serverPackets.length} out=${outDir}`
+  `[extract] mode=${mode} stream=${stream} client=${endpoints.client} server=${endpoints.server} clientPackets=${flow.clientPackets.length} serverPackets=${flow.serverPackets.length} out=${outDir}`
 );
 
 function readStreamRows(file, tcpStream) {
@@ -66,9 +69,13 @@ function readStreamRows(file, tcpStream) {
       "-e",
       "ip.src",
       "-e",
+      "ipv6.src",
+      "-e",
       "tcp.srcport",
       "-e",
       "ip.dst",
+      "-e",
+      "ipv6.dst",
       "-e",
       "tcp.dstport",
       "-e",
@@ -81,7 +88,9 @@ function readStreamRows(file, tcpStream) {
     .split(/\r?\n/)
     .filter(Boolean)
     .map((line) => {
-      const [frame, time, src, srcPort, dst, dstPort, payloadHex] = line.split("\t");
+      const [frame, time, ipSrc, ipv6Src, srcPort, ipDst, ipv6Dst, dstPort, payloadHex] = line.split("\t");
+      const src = ipSrc || ipv6Src || "";
+      const dst = ipDst || ipv6Dst || "";
       return {
         frame: Number(frame),
         time: Number(time),
@@ -107,8 +116,73 @@ function inferEndpoints(rows, preferredClientHost) {
     return { client: preferred, server: endpoints.find((endpoint) => endpoint !== preferred) };
   }
 
-  const nonServerPort = endpoints.find((endpoint) => !endpoint.match(/:(20001|20002|20004|22000)$/));
-  return { client: nonServerPort, server: endpoints.find((endpoint) => endpoint !== nonServerPort) };
+  const knownServer = endpoints.find((endpoint) => KNOWN_GAME_SERVER_PORTS.has(endpointPort(endpoint)));
+  if (knownServer) return { client: endpoints.find((endpoint) => endpoint !== knownServer), server: knownServer };
+
+  const localEndpoints = endpoints.filter((endpoint) => isLocalHost(endpointHost(endpoint)));
+  if (localEndpoints.length === 1) return { client: localEndpoints[0], server: endpoints.find((endpoint) => endpoint !== localEndpoints[0]) };
+
+  const sortedByPort = endpoints.slice().sort((left, right) => endpointPortNumber(right) - endpointPortNumber(left));
+  return { client: sortedByPort[0], server: sortedByPort[1] };
+}
+
+function buildPacketFlow(rows, endpoints) {
+  const clientSegments = buildSegments(rows.filter((row) => row.src === endpoints.client));
+  const serverSegments = buildSegments(rows.filter((row) => row.src === endpoints.server));
+  const clientBytes = Buffer.concat(clientSegments.map((row) => row.payload));
+  const serverBytes = Buffer.concat(serverSegments.map((row) => row.payload));
+  return {
+    clientPackets: parsePackets(clientBytes, clientSegments),
+    serverPackets: parsePackets(serverBytes, serverSegments),
+  };
+}
+
+function shouldPreferFlow(candidate, current) {
+  const candidateJoinLobby = countPackets(candidate.serverPackets, 205);
+  const currentJoinLobby = countPackets(current.serverPackets, 205);
+  if (candidateJoinLobby !== currentJoinLobby) return candidateJoinLobby > currentJoinLobby;
+  return scoreServerPackets(candidate.serverPackets) > scoreServerPackets(current.serverPackets);
+}
+
+function countPackets(packets, packetId) {
+  return packets.filter((packet) => packet.packetId === packetId).length;
+}
+
+function scoreServerPackets(packets) {
+  return packets.reduce((score, packet) => {
+    if (packet.packetId === 205) return score + 1000;
+    if (packet.packetId > 0 && packet.packetId % 2 === 1) return score + 1;
+    return score;
+  }, 0);
+}
+
+function endpointPort(endpoint) {
+  const text = String(endpoint || "");
+  const index = text.lastIndexOf(":");
+  return index >= 0 ? text.slice(index + 1) : "";
+}
+
+function endpointPortNumber(endpoint) {
+  const port = Number(endpointPort(endpoint));
+  return Number.isInteger(port) ? port : 0;
+}
+
+function endpointHost(endpoint) {
+  const text = String(endpoint || "");
+  const index = text.lastIndexOf(":");
+  return index >= 0 ? text.slice(0, index) : text;
+}
+
+function isLocalHost(host) {
+  const text = String(host || "").toLowerCase();
+  if (!text) return false;
+  if (text === "::1" || text === "localhost") return true;
+  if (text.startsWith("127.")) return true;
+  if (text.startsWith("10.")) return true;
+  if (text.startsWith("192.168.")) return true;
+  const ipv4 = text.match(/^172\.(\d+)\./);
+  if (ipv4 && Number(ipv4[1]) >= 16 && Number(ipv4[1]) <= 31) return true;
+  return text.startsWith("fc") || text.startsWith("fd") || text.startsWith("fe80:");
 }
 
 function buildSegments(rows) {

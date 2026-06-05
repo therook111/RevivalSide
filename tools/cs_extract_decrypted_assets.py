@@ -285,6 +285,7 @@ def extract_bundle(
     tree_types: set[str],
     overwrite_manifest: bool,
     object_index_only: bool = False,
+    cutscene_backgrounds_only: bool = False,
 ) -> dict[str, Any]:
     bundle_dir = bundle_output_dir(path, root, out_root)
     bundle_dir.mkdir(parents=True, exist_ok=True)
@@ -325,7 +326,8 @@ def extract_bundle(
                     )
             elif type_name == "Sprite":
                 try:
-                    entry["files"].extend(write_texture(asset, bundle_dir, type_name))
+                    if not cutscene_backgrounds_only:
+                        entry["files"].extend(write_texture(asset, bundle_dir, type_name))
                     entry["files"].extend(write_cutscene_background_16x9(asset, bundle_dir))
                 except Exception as exc:
                     entry["files"].extend(
@@ -395,6 +397,11 @@ def main() -> int:
         action="store_true",
         help="Write a lightweight object index for each selected bundle instead of exporting full assets",
     )
+    parser.add_argument(
+        "--cutscene-backgrounds-only",
+        action="store_true",
+        help="For Sprite exports, write only resized CutsceneBG16x9 images.",
+    )
     parser.add_argument("--overwrite-manifest", action="store_true")
     args = parser.parse_args()
 
@@ -429,6 +436,7 @@ def main() -> int:
             tree_types,
             args.overwrite_manifest,
             args.object_index_only,
+            args.cutscene_backgrounds_only,
         )
         manifest_entries.append(entry)
         print(

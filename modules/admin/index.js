@@ -15,7 +15,7 @@ const {
   statTypeValue,
   toBigInt,
 } = require("../packet-codec");
-const { RESOURCE_ITEM_IDS } = require("../inventory");
+const { COMMON_RESOURCE_ITEM_IDS, RESOURCE_ITEM_IDS, ensureInventory } = require("../inventory");
 const { createEmptyReward, mergeReward, grantRewardByType } = require("../reward");
 const {
   getMiscItemTemplet,
@@ -94,6 +94,42 @@ const CURRENCY_ALIASES = Object.freeze({
   coin: RESOURCE_ITEM_IDS.ADMIN_COIN,
   coins: RESOURCE_ITEM_IDS.ADMIN_COIN,
 });
+
+const CLEAR_INVENTORY_IGNORED_FILTERS = new Set(["", "item", "items", "misc", "inventory", "only"]);
+const CLEAR_INVENTORY_TYPE_FILTERS = Object.freeze({
+  selector: ["IMT_CHOICE_"],
+  selectors: ["IMT_CHOICE_"],
+  selectable: ["IMT_CHOICE_"],
+  choice: ["IMT_CHOICE_"],
+  choices: ["IMT_CHOICE_"],
+  box: ["IMT_RANDOMBOX"],
+  boxes: ["IMT_RANDOMBOX"],
+  random: ["IMT_RANDOMBOX"],
+  randombox: ["IMT_RANDOMBOX"],
+  randomboxes: ["IMT_RANDOMBOX"],
+  package: ["IMT_PACKAGE", "IMT_CUSTOM_PACKAGE"],
+  packages: ["IMT_PACKAGE", "IMT_CUSTOM_PACKAGE"],
+  pack: ["IMT_PACKAGE", "IMT_CUSTOM_PACKAGE"],
+  packs: ["IMT_PACKAGE", "IMT_CUSTOM_PACKAGE"],
+  resource: ["IMT_RESOURCE"],
+  resources: ["IMT_RESOURCE"],
+  currency: ["IMT_RESOURCE"],
+  currencies: ["IMT_RESOURCE"],
+  consumable: ["IMT_PACKAGE", "IMT_CUSTOM_PACKAGE", "IMT_RANDOMBOX", "IMT_CHOICE_"],
+  consumables: ["IMT_PACKAGE", "IMT_CUSTOM_PACKAGE", "IMT_RANDOMBOX", "IMT_CHOICE_"],
+  piece: ["IMT_PIECE"],
+  pieces: ["IMT_PIECE"],
+  title: ["IMT_TITLE"],
+  titles: ["IMT_TITLE"],
+  background: ["IMT_BACKGROUND"],
+  backgrounds: ["IMT_BACKGROUND"],
+  emblem: ["IMT_EMBLEM", "IMT_EMBLEM_RANK"],
+  emblems: ["IMT_EMBLEM", "IMT_EMBLEM_RANK"],
+  contract: ["IMT_CONTRACT"],
+  contracts: ["IMT_CONTRACT"],
+  normal: ["IMT_MISC"],
+});
+const CLEAR_INVENTORY_RESOURCE_IDS = new Set([...COMMON_RESOURCE_ITEM_IDS, ...Object.values(RESOURCE_ITEM_IDS)].map(Number));
 
 const DEFAULT_NEWBIE_REWARDS = Object.freeze([
   { rewardType: "RT_MISC", id: RESOURCE_ITEM_IDS.CREDIT, count: envRewardCount("CS_NEWBIE_CREDIT_REWARD", 100000) },
@@ -303,6 +339,11 @@ function handleAdminCommand(ctx, user, messageText) {
     return { reply: topic === "gear" ? gearHelpText() : adminHelpText(), createdPosts: 0 };
   }
   if (command === "clear") {
+    const subcommand = String(tokens[0] || "").trim().toLowerCase();
+    if (subcommand === "inventory" || subcommand === "invent" || subcommand === "items" || subcommand === "item") {
+      tokens.shift();
+      return handleClearInventoryCommand(user, tokens);
+    }
     return clearAdminInbox(user);
   }
   if (command === "time" || command === "clock" || command === "servertime" || command === "server-time") {
@@ -1058,6 +1099,248 @@ function clearAdminInbox(user) {
     clearedPosts,
     clearedRewardLines,
   };
+}
+
+function handleClearInventoryCommand(user, tokens) {
+  const parsed = parseClearInventoryCommand(tokens);
+  if (!parsed.ok) return { reply: parsed.error, createdPosts: 0 };
+
+  const result = clearInventoryItems(user, parsed);
+  const filterText = describeClearInventoryFilters(parsed);
+  const untouchedText = "Gear, skins, units, ships, and operators were not touched.";
+  console.log(
+    `[admin:clear-inventory] filter=${filterText} itemStacks=${result.removedItemStacks} totalCount=${result.removedItemCount}`
+  );
+
+  if (!result.removedItemStacks) {
+    return {
+      reply: `No inventory items matched ${filterText}. ${untouchedText}`,
+      createdPosts: 0,
+    };
+  }
+
+  return {
+    reply: `Cleared ${result.removedItemStacks} inventory item stack${result.removedItemStacks === 1 ? "" : "s"} (${result.removedItemCount} total item${result.removedItemCount === "1" ? "" : "s"}). ${untouchedText}`,
+    createdPosts: 0,
+  };
+}
+
+function parseClearInventoryCommand(tokens) {
+  const input = Array.isArray(tokens) ? tokens : [];
+  const filters = [];
+  const itemIds = new Set();
+  const labels = [];
+
+  for (let index = 0; index < input.length; index += 1) {
+    const raw = String(input[index] || "").trim();
+    const normalized = normalizeClearInventoryFilterToken(raw);
+    if (normalized === "help" || normalized === "?") return { ok: false, error: clearInventoryHelpText() };
+    if (CLEAR_INVENTORY_IGNORED_FILTERS.has(normalized) || normalized === "all" || normalized === "everything") continue;
+
+    const keyValue = splitCommandKeyValue(raw);
+    if (keyValue && ["id", "ids", "itemid", "itemids"].includes(normalizeClearInventoryFilterToken(keyValue.key))) {
+      const ids = parseClearInventoryIds(keyValue.value);
+      if (!ids.length) return { ok: false, error: `No valid item IDs found in "${raw}".\n${clearInventoryHelpText()}` };
+      for (const id of ids) itemIds.add(id);
+      labels.push(`IDs ${ids.join(", ")}`);
+      continue;
+    }
+    if (["id", "ids", "itemid", "itemids"].includes(normalized)) {
+      const ids = parseClearInventoryIds(input[index + 1]);
+      if (!ids.length) return { ok: false, error: `No valid item IDs found after "${raw}".\n${clearInventoryHelpText()}` };
+      index += 1;
+      for (const id of ids) itemIds.add(id);
+      labels.push(`IDs ${ids.join(", ")}`);
+      continue;
+    }
+
+    if (keyValue && ["type", "itemtype", "misctype"].includes(normalizeClearInventoryFilterToken(keyValue.key))) {
+      const type = normalizeMiscItemTypeFilter(keyValue.value);
+      if (!type) return { ok: false, error: `No valid item type found in "${raw}".\n${clearInventoryHelpText()}` };
+      filters.push({ kind: "type", types: [type] });
+      labels.push(type);
+      continue;
+    }
+    if (["type", "itemtype", "misctype"].includes(normalized)) {
+      const type = normalizeMiscItemTypeFilter(input[index + 1]);
+      if (!type) return { ok: false, error: `No valid item type found after "${raw}".\n${clearInventoryHelpText()}` };
+      index += 1;
+      filters.push({ kind: "type", types: [type] });
+      labels.push(type);
+      continue;
+    }
+
+    const inlineIds = parseClearInventoryIds(raw);
+    if (inlineIds.length) {
+      for (const id of inlineIds) itemIds.add(id);
+      labels.push(`IDs ${inlineIds.join(", ")}`);
+      continue;
+    }
+
+    if (normalized === "timed" || normalized === "time" || normalized === "temporary" || normalized === "temp") {
+      filters.push({ kind: "timed" });
+      labels.push("timed items");
+      continue;
+    }
+
+    const typeFilter = CLEAR_INVENTORY_TYPE_FILTERS[normalized];
+    if (typeFilter) {
+      filters.push({ kind: "type", types: typeFilter });
+      labels.push(typeFilterLabel(normalized));
+      continue;
+    }
+
+    if (/^imt[a-z0-9_]*$/i.test(normalized)) {
+      const type = normalizeMiscItemTypeFilter(raw);
+      filters.push({ kind: "type", types: [type] });
+      labels.push(type);
+      continue;
+    }
+
+    return { ok: false, error: `Unknown inventory clear filter: ${raw}\n${clearInventoryHelpText()}` };
+  }
+
+  return {
+    ok: true,
+    filters,
+    itemIds,
+    labels,
+    clearAll: filters.length === 0 && itemIds.size === 0,
+  };
+}
+
+function clearInventoryItems(user, options = {}) {
+  const inventory = ensureInventory(user);
+  let removedItemStacks = 0;
+  let removedItemCount = 0n;
+  const removedItemIds = [];
+
+  for (const [key, item] of Object.entries(inventory.misc || {})) {
+    const itemId = Number((item && item.itemId) || key);
+    if (!Number.isInteger(itemId) || itemId <= 0) continue;
+    if (!matchesClearInventoryFilter(item, itemId, options)) continue;
+    removedItemStacks += 1;
+    removedItemCount += inventoryItemTotalCount(item);
+    removedItemIds.push(itemId);
+    delete inventory.misc[key];
+  }
+
+  if (removedItemStacks) inventory.localTouchedAt = new Date().toISOString();
+  return {
+    removedItemStacks,
+    removedItemCount: removedItemCount.toString(),
+    removedItemIds,
+  };
+}
+
+function matchesClearInventoryFilter(item, itemId, options = {}) {
+  if (options.clearAll) return true;
+  if (options.itemIds && options.itemIds.has(Number(itemId))) return true;
+  const templet = getMiscItemTemplet(itemId) || {};
+  for (const filter of options.filters || []) {
+    if (!filter || typeof filter !== "object") continue;
+    if (filter.kind === "timed" && isTimedInventoryItem(item)) return true;
+    if (filter.kind === "type" && miscItemTypeMatches(templet, filter.types, itemId)) return true;
+  }
+  return false;
+}
+
+function miscItemTypeMatches(templet, types, itemId) {
+  const itemType = String(templet && templet.m_ItemMiscType || "").toUpperCase();
+  const normalizedTypes = Array.isArray(types) ? types.map((type) => String(type || "").toUpperCase()).filter(Boolean) : [];
+  if (normalizedTypes.includes("IMT_RESOURCE") && CLEAR_INVENTORY_RESOURCE_IDS.has(Number(itemId))) return true;
+  return normalizedTypes.some((type) => (type.endsWith("_") ? itemType.startsWith(type) : itemType === type));
+}
+
+function isTimedInventoryItem(item) {
+  if (!item || typeof item !== "object") return false;
+  for (const [key, value] of Object.entries(item)) {
+    if (!/expire|expiration|validuntil|enddate|endtime|duration|period/i.test(String(key || ""))) continue;
+    if (hasMeaningfulInventoryTimingValue(value)) return true;
+  }
+  return false;
+}
+
+function hasMeaningfulInventoryTimingValue(value) {
+  if (value == null || value === false) return false;
+  if (typeof value === "bigint") return value > 0n;
+  if (typeof value === "number") return Number.isFinite(value) && value > 0;
+  if (typeof value === "string") {
+    const text = value.trim();
+    return text !== "" && text !== "0" && text.toLowerCase() !== "false";
+  }
+  if (Array.isArray(value)) return value.some(hasMeaningfulInventoryTimingValue);
+  if (typeof value === "object") return Object.values(value).some(hasMeaningfulInventoryTimingValue);
+  return Boolean(value);
+}
+
+function inventoryItemTotalCount(item) {
+  const total = toBigInt(item && item.countFree) + toBigInt(item && item.countPaid);
+  return total > 0n ? total : 0n;
+}
+
+function describeClearInventoryFilters(parsed) {
+  if (parsed.clearAll) return "all misc inventory items";
+  const labels = [];
+  for (const label of parsed.labels || []) {
+    if (label && !labels.includes(label)) labels.push(label);
+  }
+  return labels.length ? labels.join(", ") : "matching misc inventory items";
+}
+
+function typeFilterLabel(token) {
+  switch (normalizeClearInventoryFilterToken(token)) {
+    case "selector":
+    case "selectors":
+    case "selectable":
+    case "choice":
+    case "choices":
+      return "selectors";
+    case "box":
+    case "boxes":
+    case "random":
+    case "randombox":
+    case "randomboxes":
+      return "random boxes";
+    case "pack":
+    case "packs":
+    case "package":
+    case "packages":
+      return "packages";
+    case "resource":
+    case "resources":
+    case "currency":
+    case "currencies":
+      return "resources";
+    default:
+      return normalizeClearInventoryFilterToken(token);
+  }
+}
+
+function splitCommandKeyValue(value) {
+  const text = String(value || "");
+  const match = text.match(/^([^=:]+)[:=](.+)$/);
+  return match ? { key: match[1], value: match[2] } : null;
+}
+
+function parseClearInventoryIds(value) {
+  return Array.from(
+    new Set(
+      String(value || "")
+        .split(/[,\s]+/g)
+        .map((part) => Number(part.trim()))
+        .filter((id) => Number.isInteger(id) && id > 0)
+    )
+  );
+}
+
+function normalizeMiscItemTypeFilter(value) {
+  const text = String(value || "").trim().toUpperCase().replace(/[\s-]+/g, "_");
+  return /^IMT_[A-Z0-9_]+$/.test(text) ? text : "";
+}
+
+function normalizeClearInventoryFilterToken(value) {
+  return String(value || "").trim().toLowerCase().replace(/^--?/, "").replace(/[\s_-]+/g, "");
 }
 
 function handleServerTimeCommand(ctx, user, tokens) {
@@ -1907,8 +2190,24 @@ function adminHelpText() {
     "/time",
     "/time set <YYYY-MM-DD [HH:mm[:ss]]>",
     "/time reset",
+    "/clear inventory [timed|selectors|boxes|packages|resources|pieces|titles|id=<id>]",
     "/clear",
     "Rewards are delivered to Mail and granted when claimed.",
+  ].join("\n");
+}
+
+function clearInventoryHelpText() {
+  return [
+    "Clear inventory command:",
+    "/clear inventory",
+    "/clear inventory timed",
+    "/clear inventory selectors",
+    "/clear inventory boxes",
+    "/clear inventory packages",
+    "/clear inventory resources",
+    "/clear inventory pieces",
+    "/clear inventory id=1060,10317",
+    "This only clears misc inventory items. Gear, skins, units, ships, and operators are untouched.",
   ].join("\n");
 }
 

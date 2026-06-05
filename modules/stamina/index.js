@@ -1,6 +1,5 @@
-const fs = require("fs");
 const path = require("path");
-const { findGameplayTableFile } = require("../gameplay-jsons");
+const { readGameplayTable, readGameplayTableRecords } = require("../gameplay-jsons");
 const {
   buildItemMiscData,
   dateTimeBinaryNow,
@@ -13,8 +12,6 @@ const {
 const { getMiscItem, setMiscItemBalance } = require("../inventory");
 
 const ROOT_DIR = path.resolve(__dirname, "..", "..");
-const PLAYER_EXP_TABLE_PATH = findGameplayTableFile("ab_script", "LUA_PLAYER_EXP_TABLE.json", { rootDir: ROOT_DIR });
-const PVP_CONST_TABLE_PATH = findGameplayTableFile("ab_script", "LUA_PVP_CONST.json", { rootDir: ROOT_DIR });
 
 const TICKS_AT_UNIX_EPOCH = 621355968000000000n;
 const DATE_TIME_LOCAL_MASK = 0x4000000000000000n;
@@ -419,7 +416,7 @@ function getPlayerExpRow(level) {
 
 function getPlayerExpRows() {
   if (cachedPlayerExpRows) return cachedPlayerExpRows;
-  cachedPlayerExpRows = readRecords(PLAYER_EXP_TABLE_PATH)
+  cachedPlayerExpRows = readGameplayTableRecords("ab_script", "LUA_PLAYER_EXP_TABLE.json", { rootDir: ROOT_DIR, logLabel: "stamina" })
     .filter((row) => Number.isInteger(Number(row && row.m_iLevel)))
     .sort((left, right) => Number(left.m_iLevel || 0) - Number(right.m_iLevel || 0));
   return cachedPlayerExpRows;
@@ -427,22 +424,9 @@ function getPlayerExpRows() {
 
 function getPvpConst() {
   if (cachedPvpConst) return cachedPvpConst;
-  const parsed = readJson(PVP_CONST_TABLE_PATH);
+  const parsed = readGameplayTable("ab_script", "LUA_PVP_CONST.json", { rootDir: ROOT_DIR, logLabel: "stamina" });
   cachedPvpConst = (parsed && parsed.root) || {};
   return cachedPvpConst;
-}
-
-function readRecords(filePath) {
-  const parsed = readJson(filePath);
-  return parsed && Array.isArray(parsed.records) ? parsed.records : [];
-}
-
-function readJson(filePath) {
-  try {
-    return JSON.parse(fs.readFileSync(filePath, "utf8"));
-  } catch (_) {
-    return null;
-  }
 }
 
 function latestDailyBoundaryMs(nowMs, refreshHourUtc) {

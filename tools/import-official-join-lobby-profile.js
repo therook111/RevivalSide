@@ -1,8 +1,9 @@
 const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
-const { execFileSync } = require("child_process");
 const { createCombatHandler } = require("../combat-handler");
+const counterSideInstall = require("../modules/counterside-install");
+const gameplayJsons = require("../modules/gameplay-jsons");
 const { createOfficialProfileImporter } = require("../modules/official-profile-import");
 const { rebuildUserDbIndexes } = require("../server/userManager");
 
@@ -23,7 +24,7 @@ function usage() {
       "  --source-id <id>                  import a specific source from manifest",
       "  --combat-host <path>              prebuilt CombatHost.exe or CombatHost.dll",
       "  --managed-dir <path>              CounterSide Data/Managed directory",
-      "  --gameplay-tables-dir <path>      gameplay table directory",
+      "  --gameplay-tables-dir <path>      override resolved gameplay table directory",
     ].join("\n")
   );
   process.exit(2);
@@ -36,8 +37,21 @@ const captureDir = path.resolve(args.captureDir);
 const userDbPath = path.resolve(args.userDb || path.join(ROOT_DIR, "server-data", "users.json"));
 const copyToPath = args.copyTo ? path.resolve(args.copyTo) : "";
 const combatHostPath = resolveOptionalPath(args.combatHost || process.env.CS_COMBAT_HOST_PATH || findDefaultCombatHostPath());
-const managedDir = normalizeManagedDir(args.managedDir || process.env.CS_COUNTERSIDE_MANAGED_DIR || process.env.COUNTERSIDE_MANAGED_DIR || process.env.CS_COUNTERSIDE_DIR || findDefaultCounterSideManagedDir());
-const gameplayTablesDir = path.resolve(args.gameplayTablesDir || process.env.CS_GAMEPLAY_TABLES_DIR || findDefaultGameplayTablesDir());
+const managedDir = counterSideInstall.normalizeManagedDir(
+  args.managedDir ||
+    process.env.CS_COUNTERSIDE_MANAGED_DIR ||
+    process.env.COUNTERSIDE_MANAGED_DIR ||
+    process.env.CS_COUNTERSIDE_DIR ||
+    counterSideInstall.findCounterSideManagedDir({ env: process.env })
+);
+const gameplayTablesDir = path.resolve(
+  args.gameplayTablesDir ||
+    gameplayJsons.getDefaultGameplayTablesDir({
+      rootDir: ROOT_DIR,
+      env: process.env,
+      managedDir,
+    })
+);
 
 if (combatHostPath && !fs.existsSync(combatHostPath)) throw new Error(`Combat host was not found: ${combatHostPath}`);
 if (!managedDir || !fs.existsSync(path.join(managedDir, "Assembly-CSharp.dll"))) {
@@ -177,138 +191,6 @@ function backupUserDb(filePath) {
   const backupPath = path.join(backupDir, `users-${stamp}-import-official-profile.json`);
   fs.copyFileSync(filePath, backupPath);
   return backupPath;
-}
-
-function findDefaultCounterSideManagedDir() {
-  for (const candidate of findCounterSideManagedDirCandidates()) {
-    const managed = normalizeManagedDir(candidate);
-    if (managed && fs.existsSync(path.join(managed, "Assembly-CSharp.dll"))) return managed;
-  }
-  return "";
-}
-
-function normalizeManagedDir(value) {
-  if (!value) return "";
-  let fullPath;
-  try {
-    fullPath = path.resolve(String(value).trim().replace(/^"|"$/g, ""));
-  } catch (_) {
-    return "";
-  }
-  if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
-    fullPath = path.basename(fullPath).toLowerCase() === "assembly-csharp.dll" ? path.dirname(fullPath) : path.dirname(fullPath);
-  }
-  for (const candidate of buildManagedDirCandidates(fullPath)) {
-    if (fs.existsSync(path.join(candidate, "Assembly-CSharp.dll"))) return candidate;
-  }
-  return fullPath;
-}
-
-function buildManagedDirCandidates(root) {
-  const candidates = [root, path.join(root, "Data", "Managed"), path.join(root, "Managed")];
-  if (path.basename(root).toLowerCase() === "data") candidates.push(path.join(root, "Managed"));
-  return Array.from(new Set(candidates));
-}
-
-function findCounterSideManagedDirCandidates() {
-  const candidates = [
-    process.env.CS_COUNTERSIDE_MANAGED_DIR,
-    process.env.COUNTERSIDE_MANAGED_DIR,
-    process.env.CS_COUNTERSIDE_DIR,
-    path.join("C:", "Main", "Gaming", "Steam", "steamapps", "common", "CounterSide"),
-    path.join(process.env.ProgramFiles || "C:\\Program Files", "Steam", "steamapps", "common", "CounterSide"),
-    path.join(process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)", "Steam", "steamapps", "common", "CounterSide"),
-  ].filter(Boolean);
-
-  for (const libraryRoot of findSteamLibraryRoots()) {
-    const commonDir = path.join(libraryRoot, "steamapps", "common");
-    for (const knownName of ["CounterSide", "CounterSide Global", "COUNTER SIDE"]) {
-      candidates.push(path.join(commonDir, knownName));
-    }
-    if (!fs.existsSync(commonDir)) continue;
-    try {
-      for (const name of fs.readdirSync(commonDir)) {
-        const gameDir = path.join(commonDir, name);
-        if (!fs.statSync(gameDir).isDirectory()) continue;
-        if (name.replace(/\s+/g, "").toLowerCase().includes("counterside")) candidates.push(gameDir);
-      }
-    } catch (_) {
-      // Ignore inaccessible Steam libraries.
-    }
-  }
-
-  return Array.from(new Set(candidates));
-}
-
-function findSteamLibraryRoots() {
-  const roots = new Set();
-  for (const steamRoot of findSteamInstallRoots()) {
-    addExistingDirectory(roots, steamRoot);
-    const libraryFile = path.join(steamRoot, "steamapps", "libraryfolders.vdf");
-    if (!fs.existsSync(libraryFile)) continue;
-    let text = "";
-    try {
-      text = fs.readFileSync(libraryFile, "utf8");
-    } catch (_) {
-      continue;
-    }
-    for (const match of text.matchAll(/"path"\s+"([^"]+)"/gi)) {
-      addExistingDirectory(roots, unescapeSteamPath(match[1]));
-    }
-  }
-  return Array.from(roots);
-}
-
-function findSteamInstallRoots() {
-  return [
-    readRegistryString("HKCU\\Software\\Valve\\Steam", "SteamPath"),
-    readRegistryString("HKLM\\SOFTWARE\\WOW6432Node\\Valve\\Steam", "InstallPath"),
-    readRegistryString("HKLM\\SOFTWARE\\Valve\\Steam", "InstallPath"),
-    path.join(process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)", "Steam"),
-    path.join(process.env.ProgramFiles || "C:\\Program Files", "Steam"),
-    "C:\\Steam",
-    "D:\\Steam",
-    "E:\\Steam",
-  ].filter(Boolean).map(unescapeSteamPath);
-}
-
-function readRegistryString(key, valueName) {
-  if (process.platform !== "win32") return "";
-  try {
-    const output = execFileSync("reg", ["query", key, "/v", valueName], { encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "ignore"] });
-    const line = output.split(/\r?\n/).find((item) => new RegExp(`\\s${escapeRegExp(valueName)}\\s+REG_\\w+\\s+`, "i").test(item));
-    if (!line) return "";
-    return line.replace(new RegExp(`^.*?\\s${escapeRegExp(valueName)}\\s+REG_\\w+\\s+`, "i"), "").trim();
-  } catch (_) {
-    return "";
-  }
-}
-
-function addExistingDirectory(set, value) {
-  if (!value) return;
-  try {
-    const fullPath = path.resolve(unescapeSteamPath(value));
-    if (fs.existsSync(fullPath) && fs.statSync(fullPath).isDirectory()) set.add(fullPath);
-  } catch (_) {
-    // Ignore malformed paths.
-  }
-}
-
-function unescapeSteamPath(value) {
-  return String(value || "").trim().replace(/^"|"$/g, "").replace(/\\\\/g, "\\").replace(/\//g, path.sep);
-}
-
-function escapeRegExp(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function findDefaultGameplayTablesDir() {
-  const candidates = [
-    path.join(ROOT_DIR, "gameplay-tables"),
-    path.join(ROOT_DIR, "gameplay-tables-decompiled"),
-    path.join(ROOT_DIR, "gameplay-jsons"),
-  ];
-  return candidates.find((candidate) => fs.existsSync(candidate)) || path.join(ROOT_DIR, "gameplay-jsons");
 }
 
 function findDefaultDotnetRuntime() {

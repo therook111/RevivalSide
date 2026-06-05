@@ -7,7 +7,11 @@ const { URL } = require("url");
 const { loadPacketHandlers } = require("./packetHandlerLoader");
 const { createUserManager } = require("./userManager");
 const ROOT_DIR = path.resolve(__dirname, "..");
-const { findGameplayTableFile, readGameplayTableRecords } = require("../modules/gameplay-jsons");
+const { findCounterSideManagedDir } = require("../modules/counterside-install");
+const {
+  getDefaultGameplayTablesDir,
+  readGameplayTableRecords,
+} = require("../modules/gameplay-jsons");
 const {
   createCombatHandler,
   buildCapturedRespawnUnitPools: buildCombatCapturedRespawnUnitPools,
@@ -96,7 +100,7 @@ const {
   buildAttendanceIntervalDataList: buildSerializedAttendanceIntervalDataList,
 } = require("../modules/attendance");
 const { loadShopCatalog, buildSerializedRandomShopData, ensureActiveEventShopCurrencies } = require("../modules/shop");
-const { getShopPurchaseHistories } = require("../modules/resource");
+const { getShopPurchaseHistories, getShopTotalPaidAmount } = require("../modules/resource");
 const {
   getContentUnlocksForDungeon,
   getEventDeckTemplet,
@@ -110,6 +114,8 @@ const {
   getAllContractBonusStates,
   getSelectableContractState,
   getAllCustomPickupContracts,
+  filterDuplicateContractOpenTags,
+  filterDuplicateContractIntervalData,
   buildCustomPickupContractData: buildSerializedCustomPickupContractData,
 } = require("../modules/contract");
 const lobbyCustomization = require("../modules/lobby");
@@ -264,12 +270,8 @@ const PACKET_HANDLER_DIR = process.env.CS_PACKET_HANDLER_DIR || path.join(ROOT_D
 const MODULE_HANDLER_ROOT = path.join(ROOT_DIR, "modules");
 const UNIT_TABLE_PATH = process.env.CS_UNIT_TABLE_PATH || path.join(ROOT_DIR, "server-data", "units.json");
 const DUNGEON_TABLE_PATH = process.env.CS_DUNGEON_TABLE_PATH || path.join(ROOT_DIR, "server-data", "dungeons.json");
-const STAGE_TABLE_PATH =
-  process.env.CS_STAGE_TABLE_PATH ||
-  findGameplayTableFile("ab_script", "LUA_STAGE_TEMPLET.json", { rootDir: ROOT_DIR });
-const MAP_TABLE_PATH =
-  process.env.CS_MAP_TABLE_PATH ||
-  findGameplayTableFile("ab_script", "LUA_MAP_TEMPLET.json", { rootDir: ROOT_DIR });
+const STAGE_TABLE_PATH = process.env.CS_STAGE_TABLE_PATH || "";
+const MAP_TABLE_PATH = process.env.CS_MAP_TABLE_PATH || "";
 const USE_LOCAL_USER_DB = process.env.CS_USE_LOCAL_USER_DB !== "0";
 const REPLAY_CAPTURED_CONTENTS_VERSION = process.env.CS_REPLAY_CAPTURED_CONTENTS_VERSION !== "0";
 const REPLAY_CAPTURED_LOGIN_ACK = process.env.CS_REPLAY_CAPTURED_LOGIN_ACK !== "0";
@@ -288,8 +290,8 @@ const CSHARP_COMBAT_HOST_DLL =
   process.env.CS_CSHARP_COMBAT_HOST_DLL || process.env.CS_COMBAT_HOST_PATH || findDefaultCombatHostExecutable(CSHARP_COMBAT_HOST_PROJECT);
 const CSHARP_COMBAT_HOST_TIMEOUT_MS = Number(process.env.CS_CSHARP_COMBAT_HOST_TIMEOUT_MS || 20000);
 const CSHARP_COMBAT_HOST_DOTNET = process.env.CS_DOTNET_PATH || findDefaultDotnetRuntime();
-const COUNTERSIDE_MANAGED_DIR = process.env.CS_COUNTERSIDE_MANAGED_DIR || findDefaultCounterSideManagedDir();
-const GAMEPLAY_TABLES_DIR = process.env.CS_GAMEPLAY_TABLES_DIR || findDefaultGameplayTablesDir();
+const COUNTERSIDE_MANAGED_DIR = process.env.CS_COUNTERSIDE_MANAGED_DIR || findCounterSideManagedDir({ env: process.env });
+const GAMEPLAY_TABLES_DIR = getDefaultGameplayTablesDir({ rootDir: ROOT_DIR, env: process.env, managedDir: COUNTERSIDE_MANAGED_DIR });
 const OFFICIAL_COMBAT_REPLAY = process.env.CS_OFFICIAL_COMBAT_REPLAY === "1";
 const OFFICIAL_COMBAT_REPLAY_START_INDEX = Number(process.env.CS_OFFICIAL_COMBAT_REPLAY_START_INDEX || 64);
 const OFFICIAL_COMBAT_REPLAY_INTERVAL_MS = Number(process.env.CS_OFFICIAL_COMBAT_REPLAY_INTERVAL_MS || 33);
@@ -1064,6 +1066,7 @@ function createPacketContext() {
     buildDynamicGameEndNotPayload,
     sendRaidStateDataForSocket,
     stopGameSyncTimers,
+    abandonDynamicBattle,
     buildFramedPacket,
     buildEncryptedPacket,
     buildContentsVersionAck,
@@ -2200,8 +2203,10 @@ function sendServerGamePacket(socket, packetId, payload, label) {
   const packet = buildEncryptedPacket(sequence, packetId, payload);
   socket.write(packet);
   const parsed = parsePacket(packet);
+  const labelText = String(label || "");
   const quietSynthetic =
-    (label === "synthetic-game-sync" ||
+    ((packetId === NPT_GAME_SYNC_DATA_PACK_NOT && labelText.toLowerCase().includes("sync")) ||
+      label === "synthetic-game-sync" ||
       label === "battle-sim-sync" ||
       label === "battle-manager-sync") &&
     !DEBUG_HEX;
@@ -2364,6 +2369,26 @@ function stopGameSyncTimers(socket) {
     clearInterval(replay.officialCombatReplayTimer);
     replay.officialCombatReplayTimer = null;
   }
+}
+
+function abandonDynamicBattle(socket, label = "abandon") {
+  const replay = socket && socket.session && socket.session.gameReplay;
+  if (!replay || !replay.dynamicGame) return false;
+  const dynamicGame = replay.dynamicGame;
+  const hadActiveTimer = Boolean(replay.dynamicBattleTimer || replay.syntheticSyncTimer || replay.officialCombatReplayTimer);
+  stopGameSyncTimers(socket);
+  replay.pendingGameStartBootstrap = false;
+  replay.pendingGameStartPackets = [];
+  replay.loadCompleteReceived = false;
+  replay.dynamicBattlePaused = false;
+  replay.dynamicBattleResultSent = true;
+  replay.battleState = null;
+  replay.dynamicGame = null;
+  replay.tutorialReplayPhase = "";
+  console.log(
+    `[battle-manager:${label}] abandoned stageID=${dynamicGame.stageID || 0} dungeonID=${dynamicGame.dungeonID || 0} timer=${hadActiveTimer ? 1 : 0}`
+  );
+  return true;
 }
 
 function startDynamicBattleManager(socket, label) {
@@ -3958,12 +3983,23 @@ function getDungeonTableEntry(dungeonId) {
   return byId[String(Number(dungeonId || 0))] || null;
 }
 
+function readGameplayRecordsFromJsonPath(filePath, label) {
+  const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+  if (Array.isArray(parsed)) return parsed;
+  if (parsed && Array.isArray(parsed.records)) return parsed.records;
+  if (parsed && Array.isArray(parsed.root)) return parsed.root;
+  if (parsed && parsed.root && typeof parsed.root === "object") return Object.values(parsed.root).filter((entry) => entry && typeof entry === "object");
+  console.log(`[${label}] ${filePath} did not contain gameplay table records`);
+  return [];
+}
+
 function loadStageCatalog() {
   if (cachedStageCatalog) return cachedStageCatalog;
   cachedStageCatalog = { byId: {}, byBattleStrId: {} };
   try {
-    const parsed = JSON.parse(fs.readFileSync(STAGE_TABLE_PATH, "utf8"));
-    const records = Array.isArray(parsed && parsed.records) ? parsed.records : Array.isArray(parsed) ? parsed : [];
+    const records = STAGE_TABLE_PATH
+      ? readGameplayRecordsFromJsonPath(STAGE_TABLE_PATH, "stage-table")
+      : readGameplayTableRecords("ab_script", "LUA_STAGE_TEMPLET.json", { rootDir: ROOT_DIR, logLabel: "stage-table" });
     const byId = {};
     const byBattleStrId = {};
     for (const record of records) {
@@ -3977,7 +4013,7 @@ function loadStageCatalog() {
     }
     cachedStageCatalog = { byId, byBattleStrId };
   } catch (err) {
-    console.log(`[stage-table] failed to load ${STAGE_TABLE_PATH}: ${summarizeErrorLine(err)}`);
+    console.log(`[stage-table] failed to load stage table: ${summarizeErrorLine(err)}`);
   }
   return cachedStageCatalog;
 }
@@ -4512,15 +4548,16 @@ function loadMapIdByStrId() {
   if (cachedMapIdByStrId) return cachedMapIdByStrId;
   cachedMapIdByStrId = new Map();
   try {
-    const parsed = JSON.parse(fs.readFileSync(MAP_TABLE_PATH, "utf8"));
-    const records = Array.isArray(parsed && parsed.records) ? parsed.records : Array.isArray(parsed) ? parsed : [];
+    const records = MAP_TABLE_PATH
+      ? readGameplayRecordsFromJsonPath(MAP_TABLE_PATH, "map-table")
+      : readGameplayTableRecords("ab_script", "LUA_MAP_TEMPLET.json", { rootDir: ROOT_DIR, logLabel: "map-table" });
     for (const record of records) {
       const mapStrId = String(record && record.m_MapStrID ? record.m_MapStrID : "");
       const mapId = Number(record && record.m_MapID);
       if (mapStrId && Number.isInteger(mapId) && mapId > 0) cachedMapIdByStrId.set(mapStrId, mapId);
     }
   } catch (err) {
-    console.log(`[map-table] failed to load ${MAP_TABLE_PATH}: ${summarizeErrorLine(err)}`);
+    console.log(`[map-table] failed to load map table: ${summarizeErrorLine(err)}`);
   }
   return cachedMapIdByStrId;
 }
@@ -5243,6 +5280,11 @@ function mainStoryStageMedalValue(stage, state = null) {
   return 3;
 }
 
+function mainStoryEpisodeMedalValue(stage, state = null) {
+  if (!stage || stage.cutsceneOnly) return 0;
+  return mainStoryStageMedalValue(stage, state);
+}
+
 function getMainStoryCompletedStageStates(user, extraStageIds = [], options = {}) {
   if (!user || typeof user !== "object") return [];
   const mainStory = ensureMainStoryState(user);
@@ -5271,10 +5313,11 @@ function getMainStoryCompletedStageStates(user, extraStageIds = [], options = {}
 }
 
 function getMainStoryEpisodeCompleteMedalCount(user, episodeId, extraStageIds = []) {
-  const options = extraStageIds && typeof extraStageIds === "object" && !Array.isArray(extraStageIds) ? extraStageIds : {};
+  const options = extraStageIds && typeof extraStageIds === "object" && !Array.isArray(extraStageIds) ? { ...extraStageIds } : {};
+  if (!Object.prototype.hasOwnProperty.call(options, "difficulty")) options.difficulty = 0;
   const forcedIds = options.extraStageIds || extraStageIds;
   return getMainStoryCompletedStageStates(user, forcedIds, options).reduce(
-    (total, stage) => (Number(stage.episodeId || 0) === Number(episodeId || 0) ? total + mainStoryStageMedalValue(stage, stage) : total),
+    (total, stage) => (Number(stage.episodeId || 0) === Number(episodeId || 0) ? total + mainStoryEpisodeMedalValue(stage, stage) : total),
     0
   );
 }
@@ -5331,6 +5374,7 @@ function recordPersistentCutsceneView(socket, dungeonId, stageId = 0) {
 
 function recordTutorialCutsceneClear(socket, dungeonId) {
   const replay = socket && socket.session && socket.session.gameReplay;
+  const user = socket && socket.session && socket.session.user;
   const battleFinished =
     replay &&
     (replay.tutorialClearRecorded ||
@@ -5341,13 +5385,9 @@ function recordTutorialCutsceneClear(socket, dungeonId) {
   const resolvedDungeonId = isTutorialDungeonId(activeDungeonId) ? activeDungeonId : decodedDungeonId;
   const stageId = stageIdForDungeonId(resolvedDungeonId);
   if (!isTutorialDungeonId(resolvedDungeonId) || !isTutorialStageId(stageId)) return false;
+  if (shouldSuppressPostTutorialProgressArtifact(user, resolvedDungeonId, stageId)) return false;
   if (!battleFinished && !isTutorialDungeonId(activeDungeonId)) return false;
-  return recordTutorialDungeonClearForUser(
-    socket && socket.session && socket.session.user,
-    resolvedDungeonId,
-    stageId,
-    replay && replay.battleState
-  );
+  return recordTutorialDungeonClearForUser(user, resolvedDungeonId, stageId, replay && replay.battleState);
 }
 
 function tutorialPhaseKey(stage) {
@@ -5717,6 +5757,12 @@ function recordTutorialDungeonClearForUser(user, dungeonId, stageId, battleState
   if (!user) return false;
   const stageMeta = TUTORIAL_STAGE_CHAIN.find((stage) => stage.dungeonID === Number(dungeonId) || stage.stageId === Number(stageId));
   if (!stageMeta) return false;
+  if (!options.force && shouldSuppressPostTutorialProgressArtifact(user, stageMeta.dungeonID, stageMeta.stageId)) {
+    const changed = scrubTutorialEpisodeClearProgress(user);
+    ensureMainStoryState(user);
+    if (USE_LOCAL_USER_DB && options.save !== false && changed) saveUserDb();
+    return false;
+  }
   const tutorial = ensureTutorialState(user);
   let changed = scrubTutorialEpisodeClearProgress(user);
   const expectedStage = nextTutorialStageForUser(user);
@@ -5802,6 +5848,7 @@ function recordGameplayUnlockClearForUser(user, dungeonId, stageId = 0, options 
   const resolvedDungeonId = Number(dungeonId || 0);
   const resolvedStageId = Number(stageId || stageIdForDungeonId(resolvedDungeonId) || 0);
   if (!resolvedDungeonId && !resolvedStageId) return false;
+  if (shouldSuppressPostTutorialProgressArtifact(user, resolvedDungeonId, resolvedStageId)) return false;
   let changed = false;
   const now = new Date().toISOString();
   user.clearConditions = user.clearConditions && typeof user.clearConditions === "object" ? user.clearConditions : {};
@@ -5880,6 +5927,7 @@ function recordPersistentCutsceneViewForUser(user, dungeonId, stageId = 0, optio
   if (!user || typeof user !== "object") return false;
   const resolvedDungeonId = Number(dungeonId || 0);
   const resolvedStageId = Number(stageId || stageIdForDungeonId(resolvedDungeonId) || 0);
+  if (shouldSuppressPostTutorialProgressArtifact(user, resolvedDungeonId, resolvedStageId)) return false;
   if (!shouldPersistCutsceneView(resolvedDungeonId, resolvedStageId)) return false;
   user.persistentCutsceneViews =
     user.persistentCutsceneViews && typeof user.persistentCutsceneViews === "object" ? user.persistentCutsceneViews : {};
@@ -5913,6 +5961,7 @@ function repairDungeonClearDataFromProgress(user) {
     const resolvedStageId = Number(
       source.stageId || source.stageID || source.m_StageID || stageIdForDungeonId(resolvedDungeonId) || 0
     );
+    if (shouldSuppressPostTutorialProgressArtifact(user, resolvedDungeonId, resolvedStageId)) return;
     const key = String(resolvedDungeonId);
     const existing = user.dungeonClear[key] && typeof user.dungeonClear[key] === "object" ? user.dungeonClear[key] : {};
     const nextStageId = resolvedStageId || Number(existing.stageId || 0);
@@ -5994,6 +6043,13 @@ function repairDungeonClearDataFromProgress(user) {
   return repaired;
 }
 
+function shouldSuppressPostTutorialProgressArtifact(user, dungeonId, stageId = 0) {
+  if (!hasPersistedTutorialCompletion(user)) return false;
+  const resolvedDungeonId = Number(dungeonId || 0);
+  const resolvedStageId = Number(stageId || stageIdForDungeonId(resolvedDungeonId) || 0);
+  return isTutorialDungeonId(resolvedDungeonId) || isTutorialStageId(resolvedStageId);
+}
+
 function resolveDungeonIdForStageProgress(stageId, source = {}) {
   const explicit = Number(source && (source.dungeonId || source.dungeonID || source.m_DungeonID));
   if (Number.isInteger(explicit) && explicit > 0) return explicit;
@@ -6041,7 +6097,6 @@ function ensureTutorialCompletionProgress(user, battleState = {}, options = {}) 
     phase.completed = true;
     phase.completedAt = phase.completedAt || new Date().toISOString();
     phase.bestClearTimeSec = nextBestClearTimeSec;
-    if (recordGameplayUnlockClearForUser(user, stage.dungeonID, stage.stageId, { save: false })) changed = true;
   }
   if (!tutorial.completed || !tutorial.completedAt || tutorial.nextStageId !== 0 || tutorial.nextDungeonId !== 0) {
     tutorial.completed = true;
@@ -6835,31 +6890,45 @@ function getActiveEventState() {
 
 function getEventContentsTagsForContentsVersion() {
   const state = getActiveEventState();
-  return mergeTags(
+  return suppressObsoleteContractContentsTags(mergeTags(
     EVENT_CONTENTS_TAGS_ENABLED ? state.contentsTags : [],
     EVENT_COUNTER_PASS_CONTENTS_TAGS_ENABLED ? state.counterPassContentsTags : []
-  );
+  ));
 }
 
 function getEffectiveContentsTags(baseTags) {
   const eventTags = getEventContentsTagsForContentsVersion();
-  return mergeTags(baseTags, REQUIRED_CONTENTS_TAGS, eventTags);
+  const activeBaseTags = stripInactiveEventContentsTags(baseTags, eventTags);
+  return mergeTags(activeBaseTags, REQUIRED_CONTENTS_TAGS, eventTags);
 }
 
 function stripInactiveEventContentsTags(baseTags, activeEventTags) {
-  if (!eventManager || !eventManager.config || !eventManager.config.enabled) return Array.isArray(baseTags) ? baseTags : [];
   if (!eventManager.getKnownContentsTags) return Array.isArray(baseTags) ? baseTags : [];
   const knownTags = new Set(eventManager.getKnownContentsTags().map((tag) => String(tag || "").toUpperCase()));
   if (!knownTags.size) return Array.isArray(baseTags) ? baseTags : [];
   const activeTags = new Set((Array.isArray(activeEventTags) ? activeEventTags : []).map((tag) => String(tag || "").toUpperCase()));
-  return (Array.isArray(baseTags) ? baseTags : []).filter((tag) => {
+  return suppressObsoleteContractContentsTags((Array.isArray(baseTags) ? baseTags : []).filter((tag) => {
     const key = String(tag || "").toUpperCase();
     return !knownTags.has(key) || activeTags.has(key);
+  }));
+}
+
+function suppressObsoleteContractContentsTags(tags) {
+  return (Array.isArray(tags) ? tags : []).filter((tag) => {
+    const key = String(tag || "").toUpperCase();
+    return (
+      key !== "TAG_GLOBAL_CONTRACT_BASIC" &&
+      key !== "TAG_GLOBAL_CONTRACT_OPERATOR_TUTORIAL" &&
+      key !== "TAG_GLOBAL_CONTRACT_CBT" &&
+      key !== "TAG_GLOBAL_CONTRACT_OBT"
+    );
   });
 }
 
 function getEffectiveOpenTags(baseTags) {
-  return filterSuppressedOpenTags(mergeTags(baseTags, EXPLICIT_OPEN_TAGS, REQUIRED_STORY_OPEN_TAGS, getActiveEventState().openTags));
+  return filterDuplicateContractOpenTags(
+    filterSuppressedOpenTags(mergeTags(baseTags, EXPLICIT_OPEN_TAGS, REQUIRED_STORY_OPEN_TAGS, getActiveEventState().openTags))
+  );
 }
 
 function filterSuppressedOpenTags(tags) {
@@ -6875,7 +6944,7 @@ function getRequiredContentsTags() {
 
 function buildEventIntervalDataList() {
   const state = getActiveEventState();
-  return state.enabled ? state.intervalData : [];
+  return state.enabled ? filterDuplicateContractIntervalData(state.intervalData) : [];
 }
 
 function buildRequiredIntervalDataList() {
@@ -7020,7 +7089,7 @@ function buildMinimalJoinLobbyPayload(user) {
     writeInt64LE(0n), // utcOffset
     now, // lastCreditSupplyTakeTime
     lastEterniumSupplyTakeTime,
-    writeDoubleLE(0),
+    writeDoubleLE(getShopTotalPaidAmount(user)),
     writeObjectList([]), // shopChainTabNestResetList
     writeNullableObject(buildPvpBanResultData()), // pvpBanResult
     writeNullableObject(buildPvpStateData()), // asyncPvpState
@@ -7273,6 +7342,7 @@ function buildDungeonClearEntries(user) {
   for (const [key, clear] of Object.entries(dungeonClear)) {
     const dungeonId = Number((clear && clear.dungeonId) || key);
     const stageId = Number(clear && clear.stageId || stageIdForDungeonId(dungeonId) || 0);
+    if (shouldSuppressPostTutorialProgressArtifact(user, dungeonId, stageId)) continue;
     const cutsceneOnly = isCutsceneOnlyDungeon(dungeonId, stageId);
     addDungeonClearEntry(dungeonId, {
       stageId,
@@ -7999,6 +8069,7 @@ function getMissionClockOptions() {
 function getServerClockContext() {
   return {
     eventManager: runtimeEventManager,
+    contentsTags: getEffectiveContentsTags(CONTENTS_TAGS),
     dateTimeBinaryNow,
     dateTimeTicksNow,
     getServerNowDate,
@@ -8306,7 +8377,9 @@ function ensureUserDefaults(user) {
     REQUIRED_CONTENTS_TAGS
   );
   user.openTags = filterSuppressedOpenTags(
-    mergeTags(Array.isArray(user.openTags) && user.openTags.length ? user.openTags : OPEN_TAGS, EXPLICIT_OPEN_TAGS, REQUIRED_STORY_OPEN_TAGS)
+    filterDuplicateContractOpenTags(
+      mergeTags(Array.isArray(user.openTags) && user.openTags.length ? user.openTags : OPEN_TAGS, EXPLICIT_OPEN_TAGS, REQUIRED_STORY_OPEN_TAGS)
+    )
   );
   user.dungeonClear = user.dungeonClear && typeof user.dungeonClear === "object" ? user.dungeonClear : {};
   user.completedMissions =
@@ -8919,18 +8992,6 @@ function loadDotEnv(filePath) {
   }
 }
 
-function findDefaultCounterSideManagedDir() {
-  const candidates = [
-    path.join("C:", "Main", "Gaming", "Steam", "steamapps", "common", "CounterSide", "Data", "Managed"),
-    path.join(process.env.ProgramFiles || "C:\\Program Files", "Steam", "steamapps", "common", "CounterSide", "Data", "Managed"),
-    path.join(process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)", "Steam", "steamapps", "common", "CounterSide", "Data", "Managed"),
-  ];
-  for (const candidate of candidates) {
-    if (fs.existsSync(path.join(candidate, "Assembly-CSharp.dll"))) return candidate;
-  }
-  return "";
-}
-
 function findDefaultDotnetRuntime() {
   if (process.platform === "win32") {
     const x64Dotnet = path.join(process.env.ProgramFiles || "C:\\Program Files", "dotnet", "x64", "dotnet.exe");
@@ -8945,18 +9006,6 @@ function findDefaultCombatHostExecutable(projectPath) {
   const packagedHost = path.join(ROOT_DIR, "combat-host", process.platform === "win32" ? "CombatHost.exe" : "CombatHost");
   if (fs.existsSync(packagedHost) && !fs.existsSync(projectPath)) return packagedHost;
   return "";
-}
-
-function findDefaultGameplayTablesDir() {
-  const candidates = [
-    path.join(ROOT_DIR, "gameplay-tables"),
-    path.join(ROOT_DIR, "gameplay-tables-decompiled"),
-    path.join(ROOT_DIR, "gameplay-jsons"),
-  ];
-  for (const candidate of candidates) {
-    if (fs.existsSync(path.join(candidate, "StreamingAssets"))) return candidate;
-  }
-  return path.join(ROOT_DIR, "gameplay-jsons");
 }
 
 function nonEmpty(value) {

@@ -4,6 +4,7 @@ param(
   [string]$NodeVersion = "v22.22.3",
   [string]$WiresharkVersion = "4.6.6",
   [string]$WiresharkWin32Version = "3.6.24",
+  [string]$PythonPath = "",
   [ValidateSet("win-x64", "win-x86", "win-arm64")]
   [string[]]$RuntimeIdentifiers = @("win-arm64", "win-x64", "win-x86"),
   [switch]$SkipWireshark,
@@ -187,6 +188,7 @@ foreach ($rid in $RuntimeIdentifiers) {
     }
   }
   if ($SkipGameplayJsons) { $packageArgs += "-SkipGameplayJsons" }
+  if ($PythonPath) { $packageArgs += @("-PythonPath", $PythonPath) }
   if ($SkipWikiAssets) { $packageArgs += "-SkipWikiAssets" }
   if ($Zip) { $packageArgs += "-Zip" }
   Write-Host "Packaging $rid"

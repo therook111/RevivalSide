@@ -220,7 +220,7 @@ Generated from parsed `ab_script*` Lua table bytecode.
 - `strings.json`: localized string tables by language code.
 - `table_catalog.json`: every parsed table with relative source path and detected ID fields.
 
-The full parsed table JSON remains in `gameplay-tables-json/Assetbundles` when using the beginner setup guide. Older local setups may have the same data under `gameplay-tables-json/StreamingAssets`.
+The full parsed table JSON normally lives in `gameplay-jsons/StreamingAssets`. The installed-client gameplay asset cache is Lua bytecode, not parsed JSON, so it is not a source for this server-data builder.
 """
     (out / "README.md").write_text(readme, encoding="utf-8")
     print(f"wrote {out}")

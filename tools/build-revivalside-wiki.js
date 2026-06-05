@@ -1,14 +1,14 @@
 const fs = require("fs");
 const path = require("path");
 const { statTypeValue } = require("../modules/packet-codec");
-const { getGameplayTableRoots } = require("../modules/gameplay-jsons");
+const { listGameplayTableFiles, readGameplayTableRecords } = require("../modules/gameplay-jsons");
 
 const ROOT_DIR = path.resolve(__dirname, "..");
 const WIKI_DATA_DIR = path.join(ROOT_DIR, "wiki", "data");
 const OUTPUT_PATH = path.join(WIKI_DATA_DIR, "assets.json");
 const EXTRACTED_ASSET_ROOT = path.join(ROOT_DIR, "extracted-assets", "all");
-
-const TABLE_ROOTS = getGameplayTableRoots({ rootDir: ROOT_DIR });
+const WIKI_ASSET_CACHE_ROOT = path.join(ROOT_DIR, ".cache", "wiki-assets", "all");
+const PREBUILT_WIKI_ASSET_ROOT = path.join(ROOT_DIR, "prebuilt", "wiki-assets", "all");
 
 const ID_FIELD_PRIORITY = [
   "ID",
@@ -63,7 +63,7 @@ function main() {
       skins: "LUA_SKIN_TEMPLET.json",
       contracts: "LUA_CONTRACT.json, LUA_CONTRACT_TAB_TABLE.json, LUA_CONTRACT_CUSTOM_PICKUP.json",
       idIndex: "All gameplay table records with a detected primary ID field",
-      images: "extracted-assets/all/**/*.png",
+      images: imageIndex.source,
     },
     counts: {
       units: units.length,
@@ -613,19 +613,12 @@ function buildContracts(strings, imageIndex) {
 
 function buildIdIndex(strings, imageIndex) {
   const rows = [];
-  const root = TABLE_ROOTS[0];
-  for (const filePath of listJsonFiles(root)) {
-    const rel = path.relative(root, filePath).replace(/\\/g, "/");
+  for (const file of listGameplayTableFiles({ rootDir: ROOT_DIR })) {
+    const rel = file.relativePath.replace(/\\/g, "/");
     if (rel.includes("ab_script_string_table/") || rel.includes("ab_script_cutscene/")) continue;
-    let json;
-    try {
-      json = readJson(filePath);
-    } catch {
-      continue;
-    }
-    const records = Array.isArray(json) ? json : Array.isArray(json.records) ? json.records : [];
+    const records = readRecords(file.directory, file.fileName);
     if (!records.length) continue;
-    const table = path.basename(filePath);
+    const table = file.fileName;
     for (let index = 0; index < records.length; index += 1) {
       const record = records[index];
       if (!record || typeof record !== "object" || Array.isArray(record)) continue;
@@ -771,27 +764,25 @@ function loadStrings() {
 }
 
 function readRecords(folderName, fileName) {
-  for (const root of TABLE_ROOTS) {
-    const filePath = path.join(root, folderName, "luac", fileName);
-    if (!fs.existsSync(filePath)) continue;
-    const json = readJson(filePath);
-    if (Array.isArray(json)) return json;
-    if (Array.isArray(json.records)) return json.records;
-    return [];
-  }
-  return [];
+  return readGameplayTableRecords(folderName, fileName, {
+    rootDir: ROOT_DIR,
+    logLabel: "wiki",
+    optional: true,
+    allowLuacWhenPackaged: true,
+  });
 }
 
 function buildImageIndex() {
   const byName = new Map();
   let count = 0;
-  if (!fs.existsSync(EXTRACTED_ASSET_ROOT)) return { byName, count };
-  for (const filePath of listFiles(EXTRACTED_ASSET_ROOT, (file) => file.toLowerCase().endsWith(".png"))) {
+  const root = resolveImageAssetRoot();
+  if (!root) return { byName, count, root: "", source: "installed CounterSide encrypted assets (cache pending)" };
+  for (const filePath of listFiles(root, (file) => file.toLowerCase().endsWith(".png"))) {
     count += 1;
     const name = normalizeAssetKey(path.basename(filePath, ".png"));
-    if (!byName.has(name)) byName.set(name, toAssetUrl(filePath));
+    if (!byName.has(name)) byName.set(name, toAssetUrl(filePath, root));
   }
-  return { byName, count };
+  return { byName, count, root, source: describeImageAssetRoot(root) };
 }
 
 function imageFor(imageIndex, ...candidates) {
@@ -830,9 +821,33 @@ function normalizeAssetKey(value) {
     .toUpperCase();
 }
 
-function toAssetUrl(filePath) {
-  const rel = path.relative(EXTRACTED_ASSET_ROOT, filePath).replace(/\\/g, "/");
+function resolveImageAssetRoot() {
+  const configured = parsePathList(process.env.CS_WIKI_ASSET_ROOT || process.env.CS_WIKI_ASSETS_DIR || "");
+  for (const candidate of [...configured, WIKI_ASSET_CACHE_ROOT, EXTRACTED_ASSET_ROOT, PREBUILT_WIKI_ASSET_ROOT]) {
+    const root = path.resolve(ROOT_DIR, candidate);
+    if (fs.existsSync(root)) return root;
+  }
+  return "";
+}
+
+function describeImageAssetRoot(root) {
+  const relative = path.relative(ROOT_DIR, root).replace(/\\/g, "/");
+  if (path.normalize(root).toLowerCase() === path.normalize(WIKI_ASSET_CACHE_ROOT).toLowerCase()) {
+    return `${relative}/**/*.png (derived from installed CounterSide encrypted assets)`;
+  }
+  return `${relative}/**/*.png`;
+}
+
+function toAssetUrl(filePath, root) {
+  const rel = path.relative(root, filePath).replace(/\\/g, "/");
   return `/asset-png/${rel.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+function parsePathList(value) {
+  return String(value || "")
+    .split(/[;,]/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
 }
 
 function imageCandidates(record) {
@@ -870,10 +885,6 @@ function idTypeSummary(record) {
     .filter(Boolean)
     .slice(0, 3)
     .join(" / ");
-}
-
-function listJsonFiles(root) {
-  return listFiles(root, (filePath) => filePath.toLowerCase().endsWith(".json"));
 }
 
 function listFiles(root, predicate) {

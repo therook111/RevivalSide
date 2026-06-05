@@ -1,10 +1,8 @@
-const fs = require("fs");
 const path = require("path");
 const { TUTORIAL_STAGE_CHAIN } = require("./tutorialStage");
-const { getGameplayTableRoots } = require("../modules/gameplay-jsons");
+const { readGameplayTableRecords } = require("../modules/gameplay-jsons");
 
 const ROOT_DIR = path.resolve(__dirname, "..");
-const TABLE_ROOTS = Object.freeze(getGameplayTableRoots({ rootDir: ROOT_DIR }));
 
 const DEFAULT_MAIN_STORY_RUNTIME = Object.freeze({
   gameUnitUIDIndex: 30,
@@ -56,7 +54,7 @@ const STORY_CATEGORY_SORT = Object.freeze({
 });
 const STORY_DIFFICULTY_NORMAL = 0;
 const STORY_DIFFICULTY_HARD = 1;
-const SUPPRESSED_STORY_OPEN_TAGS = Object.freeze(["TAG_COMMON_EPISODE_SIDE_FAILURE_R_V2"]);
+const SUPPRESSED_STORY_OPEN_TAGS = Object.freeze(["TAG_COMMON_EPISODE_NO_USE", "TAG_COMMON_EPISODE_SIDE_FAILURE_R_V2"]);
 const SUPPRESSED_STORY_OPEN_TAG_SET = new Set(SUPPRESSED_STORY_OPEN_TAGS.map((tag) => tag.toUpperCase()));
 const STORY_STAGE_PROGRESS_ALIASES = Object.freeze([
   Object.freeze({ fromStageId: 3224112, fromDungeonId: 211202, toStageId: 3224111, toDungeonId: 211201 }),
@@ -81,21 +79,11 @@ function isSuppressedStoryOpenTag(value) {
   return tag.length > 0 && SUPPRESSED_STORY_OPEN_TAG_SET.has(tag);
 }
 
-function readTable(relativePath) {
-  for (const root of TABLE_ROOTS) {
-    const fullPath = path.join(root, ...relativePath);
-    try {
-      if (!fs.existsSync(fullPath)) continue;
-      const parsed = JSON.parse(fs.readFileSync(fullPath, "utf8"));
-      if (Array.isArray(parsed)) return parsed;
-      if (parsed && Array.isArray(parsed.records)) return parsed.records;
-      return [];
-    } catch (err) {
-      console.log(`[main-story] failed to load ${fullPath}: ${err.message}`);
-      return [];
-    }
-  }
-  return [];
+function readTable(directory, fileName) {
+  return readGameplayTableRecords(directory, fileName, {
+    rootDir: ROOT_DIR,
+    logLabel: "main-story",
+  });
 }
 
 function parseMainStoryEpisodeNumber(value) {
@@ -115,11 +103,11 @@ function normalizeTagList(...values) {
     .filter(Boolean);
 }
 
-const EPISODE_ROWS = readTable(["ab_script", "luac", "LUA_EPISODE_TEMPLET_V2.json"]);
-const STAGE_ROWS = readTable(["ab_script", "luac", "LUA_STAGE_TEMPLET.json"]);
-const DUNGEON_ROWS = readTable(["ab_script_dungeon_templet", "luac", "LUA_DUNGEON_TEMPLET_BASE.json"]);
-const MAP_ROWS = readTable(["ab_script", "luac", "LUA_MAP_TEMPLET.json"]);
-const EVENT_DECK_ROWS = readTable(["ab_script", "luac", "LUA_EVENTDECK_TEMPLET.json"]);
+const EPISODE_ROWS = readTable("ab_script", "LUA_EPISODE_TEMPLET_V2.json");
+const STAGE_ROWS = readTable("ab_script", "LUA_STAGE_TEMPLET.json");
+const DUNGEON_ROWS = readTable("ab_script_dungeon_templet", "LUA_DUNGEON_TEMPLET_BASE.json");
+const MAP_ROWS = readTable("ab_script", "LUA_MAP_TEMPLET.json");
+const EVENT_DECK_ROWS = readTable("ab_script", "LUA_EVENTDECK_TEMPLET.json");
 
 const MAIN_STORY_EPISODE_BY_ID = new Map();
 const MAIN_STORY_EPISODE_BY_KEY = new Map();

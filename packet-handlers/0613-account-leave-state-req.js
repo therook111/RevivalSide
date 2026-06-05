@@ -16,6 +16,17 @@ module.exports = {
       Buffer.from([leave ? 1 : 0]),
     ]);
     ctx.sendGameResponse(socket, packet, 614, ackPayload, "account-leave-state");
+    if (leave) {
+      const replay = socket.session && socket.session.gameReplay;
+      if (replay && replay.dynamicGame && !replay.dynamicBattleResultSent) {
+        if (typeof ctx.abandonDynamicBattle === "function") {
+          ctx.abandonDynamicBattle(socket, "account-leave-state");
+        } else if (typeof ctx.stopGameSyncTimers === "function") {
+          ctx.stopGameSyncTimers(socket);
+          replay.dynamicBattleResultSent = true;
+        }
+      }
+    }
     return true;
   },
 };

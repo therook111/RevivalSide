@@ -1,6 +1,5 @@
 const path = require("path");
-const fs = require("fs");
-const { findGameplayTableFile, readGameplayTableRecords } = require("../gameplay-jsons");
+const { readGameplayTable, readGameplayTableRecords } = require("../gameplay-jsons");
 
 const ROOT_DIR = path.resolve(__dirname, "..", "..");
 const DEFAULT_COUNTER_PASS_UNLOCK_DUNGEON_IDS = Object.freeze([1001421]);
@@ -475,6 +474,16 @@ function getVisibleContractIds() {
       const bTab = data.contractTabs.get(b) || {};
       return Number(aTab.m_Priority || 0) - Number(bTab.m_Priority || 0) || a - b;
     });
+}
+
+function getAllContractIds() {
+  const data = loadGameData();
+  const ids = new Set([...data.contracts.keys(), ...data.contractTabs.keys()]);
+  return Array.from(ids).sort((a, b) => {
+    const aTab = data.contractTabs.get(a) || {};
+    const bTab = data.contractTabs.get(b) || {};
+    return Number(aTab.m_Priority || 0) - Number(bTab.m_Priority || 0) || a - b;
+  });
 }
 
 function getContractPoolUnitIds(contractIdOrPoolId) {
@@ -1041,14 +1050,7 @@ function readRecords(directory, fileName) {
 }
 
 function readTableObject(directory, fileName) {
-  const filePath = findGameplayTableFile(directory, fileName, { rootDir: ROOT_DIR });
-  if (!filePath || !fs.existsSync(filePath)) return null;
-  try {
-    return JSON.parse(fs.readFileSync(filePath, "utf8"));
-  } catch (err) {
-    console.log(`[game-data] failed to load ${filePath}: ${err.message}`);
-    return null;
-  }
+  return readGameplayTable(directory, fileName, { rootDir: ROOT_DIR, logLabel: "game-data" });
 }
 
 function readMissionRecords(directory, fileName) {
@@ -1076,6 +1078,7 @@ module.exports = {
   getContractTabRecord,
   getSelectableContractRecord,
   getSelectableContractRecords,
+  getAllContractIds,
   getVisibleContractIds,
   getContractPoolUnitIds,
   getContractPoolUnitEntries,

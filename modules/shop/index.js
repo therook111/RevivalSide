@@ -1,6 +1,5 @@
-const fs = require("fs");
 const path = require("path");
-const { getGameplayTableFileCandidates } = require("../gameplay-jsons");
+const { readGameplayTableRecords } = require("../gameplay-jsons");
 const {
   COMMON_RESOURCE_ITEM_IDS,
   DEFAULT_LOCAL_SHOP_BALANCE,
@@ -19,6 +18,7 @@ const {
   grantFallbackResource,
   getPurchaseKey,
   getShopPurchaseHistories,
+  getShopTotalPaidAmount,
   hasCompletedPurchase,
   markCompletedPurchase,
   makeLocalOrderId,
@@ -113,12 +113,8 @@ const PACKETS = Object.freeze({
   SHOP_RANDOM_SHOP_BUY_LIST_ACK: 2429,
 });
 
-const SHOP_TEMPLET_FILES = ["LUA_SHOP_TEMPLET_01.json", "LUA_SHOP_TEMPLET_02.json"].flatMap((fileName) =>
-  getGameplayTableFileCandidates("ab_script", fileName, { rootDir: ROOT_DIR })
-);
-const SHOP_TAB_TEMPLET_FILES = ["LUA_SHOP_TAB_TEMPLET_01.json", "LUA_SHOP_TAB_TEMPLET_02.json"].flatMap((fileName) =>
-  getGameplayTableFileCandidates("ab_script", fileName, { rootDir: ROOT_DIR })
-);
+const SHOP_TEMPLET_FILES = ["LUA_SHOP_TEMPLET_01.json", "LUA_SHOP_TEMPLET_02.json"];
+const SHOP_TAB_TEMPLET_FILES = ["LUA_SHOP_TAB_TEMPLET_01.json", "LUA_SHOP_TAB_TEMPLET_02.json"];
 
 let cachedCatalog = null;
 const INCLUDE_BEGINNER_PACKS = process.env.CS_SHOP_INCLUDE_BEGINNER_PACKS === "1";
@@ -273,7 +269,13 @@ function buildShopFixedListAck(ctx) {
 
 function buildShopFixBuyAck(ctx, request, productId, options = {}) {
   const result = options.skipGrant
-    ? { errorCode: ERROR_CODES.OK, reward: createEmptyReward(), costItem: null, history: null }
+    ? {
+        errorCode: ERROR_CODES.OK,
+        reward: createEmptyReward(),
+        costItem: null,
+        history: null,
+        totalPaidAmount: getShopTotalPaidAmount(getSessionUser(ctx)),
+      }
     : processProductPurchase(ctx, productId, request && request.productCount, {
         source: options.source || "shop-buy",
         request,
@@ -286,7 +288,7 @@ function buildShopFixBuyAck(ctx, request, productId, options = {}) {
     writeNullableObject(buildPurchaseHistory(ctx, productId || 0, request && request.productCount, result.history)),
     writeNullableObjectOrNull(result.costItem ? buildItemMiscData(ctx, result.costItem) : null), // costItemData
     writeNullObject(), // subscriptionData
-    writeDoubleLE(0),
+    writeDoubleLE(result.totalPaidAmount || 0),
   ]);
 }
 
@@ -302,7 +304,7 @@ function buildGamebaseBuyAck(ctx, request, productId) {
     writeNullableObject(buildPurchaseHistory(ctx, productId || 0, request && request.productCount, result.history)),
     writeNullableObjectOrNull(result.costItem ? buildItemMiscData(ctx, result.costItem) : null), // costItemData
     writeNullObject(), // subscriptionData
-    writeDoubleLE(0),
+    writeDoubleLE(result.totalPaidAmount || 0),
   ]);
 }
 
@@ -837,11 +839,9 @@ function loadShopCatalog() {
   const tabRecords = [];
   let suppressedProducts = 0;
 
-  for (const filePath of SHOP_TEMPLET_FILES) {
-    if (!fs.existsSync(filePath)) continue;
+  for (const fileName of SHOP_TEMPLET_FILES) {
     try {
-      const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
-      for (const record of parsed.records || []) {
+      for (const record of readGameplayTableRecords("ab_script", fileName, { rootDir: ROOT_DIR, logLabel: "shop" })) {
         const productId = Number(record && record.m_ProductID);
         if (!Number.isInteger(productId) || productId <= 0) continue;
         recordsByProductId.set(productId, pickPreferredProductRecord(recordsByProductId.get(productId), record));
@@ -857,20 +857,18 @@ function loadShopCatalog() {
         }
       }
     } catch (err) {
-      console.log(`[shop] failed to load ${filePath}: ${err.message}`);
+      console.log(`[shop] failed to load ${fileName}: ${err.message}`);
     }
   }
 
-  for (const filePath of SHOP_TAB_TEMPLET_FILES) {
-    if (!fs.existsSync(filePath)) continue;
+  for (const fileName of SHOP_TAB_TEMPLET_FILES) {
     try {
-      const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
-      for (const record of parsed.records || []) {
+      for (const record of readGameplayTableRecords("ab_script", fileName, { rootDir: ROOT_DIR, logLabel: "shop" })) {
         if (!record || typeof record !== "object") continue;
         tabRecords.push(record);
       }
     } catch (err) {
-      console.log(`[shop] failed to load ${filePath}: ${err.message}`);
+      console.log(`[shop] failed to load ${fileName}: ${err.message}`);
     }
   }
 
@@ -1116,7 +1114,13 @@ function processProductPurchase(ctx, productId, productCount, options = {}) {
   const shouldDedupe = options.dedupe !== false && (source === "steam" || source === "cash" || source === "gamebase");
   const purchaseKey = shouldDedupe ? getPurchaseKey(source, productId, options.request || {}) : "";
   if (shouldDedupe && hasCompletedPurchase(ctx.socket, purchaseKey)) {
-    return { errorCode: ERROR_CODES.OK, reward: createEmptyReward(), costItem: null, history: getPurchaseHistory(user, productId) };
+    return {
+      errorCode: ERROR_CODES.OK,
+      reward: createEmptyReward(),
+      costItem: null,
+      history: getPurchaseHistory(user, productId),
+      totalPaidAmount: getShopTotalPaidAmount(user),
+    };
   }
   const priceItemId = Number(record && record.m_PriceItemID) || 0;
   const totalPrice = getShopProductTotalPrice(record, count);
@@ -1126,6 +1130,7 @@ function processProductPurchase(ctx, productId, productCount, options = {}) {
       reward: createEmptyReward(),
       costItem: null,
       history: getPurchaseHistory(user, productId),
+      totalPaidAmount: getShopTotalPaidAmount(user),
     };
   }
   const reward = record
@@ -1136,7 +1141,7 @@ function processProductPurchase(ctx, productId, productCount, options = {}) {
   const history = getPurchaseHistory(user, productId);
   if (shouldDedupe) markCompletedPurchase(ctx.socket, purchaseKey);
   persistUserDb(ctx);
-  return { errorCode: ERROR_CODES.OK, reward, costItem, history };
+  return { errorCode: ERROR_CODES.OK, reward, costItem, history, totalPaidAmount: getShopTotalPaidAmount(user) };
 }
 
 function getShopProductTotalPrice(record, productCount = 1) {

@@ -6,6 +6,11 @@ module.exports = {
     const reconnectKey = ctx.safeReadString(payload, 0);
     console.log(`[RECONNECT_REQ] reconnectKey=${JSON.stringify(reconnectKey.value)} len=${reconnectKey.value.length}`);
     const user = ctx.findUserByReconnectKey(reconnectKey.value) || socket.session.user || ctx.createEphemeralUser();
+    const abandoned =
+      typeof ctx.abandonDynamicBattle === "function" ? ctx.abandonDynamicBattle(socket, "reconnect") : false;
+    if (!abandoned && typeof ctx.stopGameSyncTimers === "function") {
+      ctx.stopGameSyncTimers(socket);
+    }
     socket.session.gameReplay = {
       ...socket.session.gameReplay,
       inGameFlow: false,

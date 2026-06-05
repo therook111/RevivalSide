@@ -1,13 +1,14 @@
 const fs = require("fs");
 const path = require("path");
+const {
+  expandTableRoots,
+  parsePathList,
+} = require("../modules/gameplay-jsons");
 
 const ROOT_DIR = path.resolve(__dirname, "..");
-const SOURCE_ROOTS = [
-  path.join(ROOT_DIR, "gameplay-tables-json", "Assetbundles"),
-  path.join(ROOT_DIR, "gameplay-tables-json", "StreamingAssets"),
-];
 const OUTPUT_ROOT = path.join(ROOT_DIR, "gameplay-jsons", "Assetbundles");
 const OUTPUT_BASE = path.join(ROOT_DIR, "gameplay-jsons");
+let SOURCE_ROOTS = [];
 
 const UNIT_KEYS = [
   "m_UnitID",
@@ -787,6 +788,7 @@ const TABLES = [
 ];
 
 function main() {
+  SOURCE_ROOTS = resolveSourceRoots();
   if (!SOURCE_ROOTS.some((root) => fs.existsSync(root))) {
     throw new Error(`Missing source gameplay JSON root: ${SOURCE_ROOTS.join(" or ")}`);
   }
@@ -799,11 +801,13 @@ function main() {
 
 function copyCompleteTableTree() {
   let copied = 0;
+  for (const rootName of ["Assetbundles", "StreamingAssets"]) {
+    fs.rmSync(path.join(OUTPUT_BASE, rootName), { recursive: true, force: true });
+  }
   for (const sourceRoot of SOURCE_ROOTS) {
     if (!fs.existsSync(sourceRoot)) continue;
     const rootName = path.basename(sourceRoot);
     const targetRoot = path.join(OUTPUT_BASE, rootName);
-    fs.rmSync(targetRoot, { recursive: true, force: true });
     for (const sourcePath of findJsonFiles(sourceRoot)) {
       const relativePath = path.relative(sourceRoot, sourcePath);
       const targetPath = path.join(targetRoot, relativePath);
@@ -813,6 +817,16 @@ function copyCompleteTableTree() {
     }
   }
   return copied;
+}
+
+function resolveSourceRoots() {
+  const explicitRoots = parsePathList(process.env.CS_GAMEPLAY_BUILD_SOURCE_ROOTS || process.env.CS_GAMEPLAY_TABLE_JSON_ROOTS || "");
+  if (explicitRoots.length) return expandTableRoots(explicitRoots, ROOT_DIR);
+
+  return [
+    path.join(ROOT_DIR, "gameplay-tables-json", "Assetbundles"),
+    path.join(ROOT_DIR, "gameplay-tables-json", "StreamingAssets"),
+  ].filter((root) => fs.existsSync(root));
 }
 
 function findJsonFiles(root) {

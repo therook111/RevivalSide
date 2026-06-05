@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { getGameplayTableRoots } = require("../gameplay-jsons");
+const { getGameplayTableRoots, listGameplayTableFiles, readGameplayTable } = require("../gameplay-jsons");
 
 const DATE_PROFILES_FILE = path.join(__dirname, "date-profiles.json");
 const DATE_PROFILE_TABLE_NAME = "EVENT_DATE_PROFILE";
@@ -228,8 +228,9 @@ const LABEL_FIELDS = Object.freeze([
 
 function createEventManager(options = {}) {
   const rootDir = path.resolve(options.rootDir || path.resolve(__dirname, "..", ".."));
-  const config = resolveEventManagerConfig({ rootDir, env: options.env || process.env });
-  const reader = createEventTableReader({ rootDir, config });
+  const env = options.env || process.env;
+  const config = resolveEventManagerConfig({ rootDir, env });
+  const reader = createEventTableReader({ rootDir, config, env });
   let cachedRegistry = null;
 
   function getRegistry() {
@@ -300,24 +301,26 @@ function createEventManager(options = {}) {
 
 function createEventTableReader(options = {}) {
   const rootDir = path.resolve(options.rootDir || path.resolve(__dirname, "..", ".."));
-  const config = options.config || resolveEventManagerConfig({ rootDir, env: process.env });
+  const env = options.env || process.env;
+  const config = options.config || resolveEventManagerConfig({ rootDir, env });
 
   function readTables() {
-    if (config.tableScan === "all" || config.tableScan === "recursive") return readAllJsonTables();
+    if (config.tableScan === "all" || config.tableScan === "recursive") return readAllGameplayTables();
     return readKnownEventTables();
   }
 
   function readKnownEventTables() {
     const tables = [];
     for (const definition of DEFAULT_EVENT_TABLES) {
-      let found = false;
-      for (const tableRoot of config.tableRoots) {
-        const filePath = path.join(tableRoot, definition.directory, "luac", definition.fileName);
-        if (!fs.existsSync(filePath)) continue;
-        found = true;
-        tables.push(attachTableDefinition(readJsonTableFile(filePath), definition, tableRoot));
-      }
-      if (!found && !definition.optional) {
+      const tableData = readGameplayTable(definition.directory, definition.fileName, {
+        rootDir,
+        env,
+        logLabel: "event-manager",
+        optional: definition.optional,
+      });
+      if (tableData) {
+        tables.push(attachTableDefinition(readGameplayTableData(tableData, definition), definition, rootDir));
+      } else if (!definition.optional) {
         tables.push({
           category: definition.category,
           tableName: tableNameForFile(definition.fileName),
@@ -335,20 +338,35 @@ function createEventTableReader(options = {}) {
     return tables;
   }
 
-  function readAllJsonTables() {
+  function readAllGameplayTables() {
     const tables = [];
-    for (const tableRoot of config.tableRoots) {
-      for (const filePath of findJsonFiles(tableRoot)) {
-        const fileName = path.basename(filePath);
-        const category = categoryForTableName(tableNameForFile(fileName));
-        tables.push(
-          attachTableDefinition(
-            readJsonTableFile(filePath),
-            { category, directory: path.dirname(path.relative(tableRoot, filePath)), fileName, optional: true },
-            tableRoot
-          )
-        );
-      }
+    for (const file of listGameplayTableFiles({ rootDir, env, explicitRoots: config.tableRoots })) {
+      const category = categoryForTableName(tableNameForFile(file.fileName));
+      const definition = {
+        category,
+        directory: file.directory,
+        fileName: file.fileName,
+        optional: true,
+      };
+      const tableData = readGameplayTable(file.directory, file.fileName, {
+        rootDir,
+        env,
+        explicitRoots: [file.root],
+        logLabel: "event-manager",
+        optional: true,
+        allowLuacWhenPackaged: true,
+      });
+      tables.push(
+        attachTableDefinition(
+          tableData
+            ? readGameplayTableData(tableData, definition)
+            : file.extension === ".json"
+              ? readJsonTableFile(file.filePath)
+              : missingGameplayTableFile(file, "luac export failed"),
+          definition,
+          file.root
+        )
+      );
     }
     return tables;
   }
@@ -357,7 +375,8 @@ function createEventTableReader(options = {}) {
     config,
     readTables,
     readKnownEventTables,
-    readAllJsonTables,
+    readAllJsonTables: readAllGameplayTables,
+    readAllGameplayTables,
   };
 }
 
@@ -468,7 +487,7 @@ function resolveEventManagerConfig(options = {}) {
     tableScan,
     defaultWindowDays: readPositiveInt(env.CS_EVENT_DEFAULT_WINDOW_DAYS, 28),
     officialScheduleEnabled: parseEnvBool(env.CS_EVENT_OFFICIAL_SCHEDULE, true),
-    dateProfilesEnabled: parseEnvBool(env.CS_EVENT_DATE_PROFILES, false),
+    dateProfilesEnabled: parseEnvBool(env.CS_EVENT_DATE_PROFILES, Boolean(eventDate)),
     inferYearOnly: parseEnvBool(env.CS_EVENT_INFER_YEAR_ONLY, false),
     inferSeasonalIntervals: parseEnvBool(env.CS_EVENT_INFER_SEASONAL_INTERVALS, false),
     emitRequiredIntervals: parseEnvBool(env.CS_EVENT_EMIT_REQUIRED_INTERVALS, false),
@@ -509,6 +528,36 @@ function readJsonTableFile(filePath) {
   }
 
   return result;
+}
+
+function readGameplayTableData(parsed, definition) {
+  return {
+    filePath: "",
+    fileName: definition.fileName,
+    tableName: tableNameForFile(definition.fileName),
+    rootName: parsed && typeof parsed.rootName === "string" ? parsed.rootName : tableNameForFile(definition.fileName),
+    source: parsed && typeof parsed.source === "string" ? parsed.source : "",
+    root: parsed && typeof parsed === "object" && !Array.isArray(parsed) && Object.prototype.hasOwnProperty.call(parsed, "root")
+      ? parsed.root
+      : null,
+    records: extractRecords(parsed),
+    errors: [],
+    missing: false,
+  };
+}
+
+function missingGameplayTableFile(file, message) {
+  return {
+    filePath: file.filePath || "",
+    fileName: file.fileName || "",
+    tableName: tableNameForFile(file.fileName || ""),
+    rootName: "",
+    source: "",
+    root: null,
+    records: [],
+    errors: [message],
+    missing: true,
+  };
 }
 
 function parseEventDateInput(value) {
@@ -2058,7 +2107,7 @@ function isValidExactUtcDate(date, year, month, day) {
 
 function tableNameForFile(fileName) {
   return String(fileName || "")
-    .replace(/\.json$/i, "")
+    .replace(/\.(json|luac)$/i, "")
     .replace(/^LUA_/i, "");
 }
 

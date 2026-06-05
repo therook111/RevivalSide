@@ -27,7 +27,11 @@ module.exports = {
       ctx.sendServerGamePacket(socket, ctx.constants.GAME_END_NOT, payload, "game-giveup-end");
     }
     if (typeof ctx.sendRaidStateDataForSocket === "function") ctx.sendRaidStateDataForSocket(socket, "game-giveup-raid");
-    if (typeof ctx.stopGameSyncTimers === "function") ctx.stopGameSyncTimers(socket);
+    replay.dynamicBattleResultSent = true;
+    replay.pendingGameStartBootstrap = false;
+    replay.pendingGameStartPackets = [];
+    if (typeof ctx.abandonDynamicBattle === "function") ctx.abandonDynamicBattle(socket, "game-giveup");
+    else if (typeof ctx.stopGameSyncTimers === "function") ctx.stopGameSyncTimers(socket);
     return true;
   },
 };

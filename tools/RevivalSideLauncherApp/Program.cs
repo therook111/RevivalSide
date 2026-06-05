@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
@@ -8,6 +9,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -54,22 +56,59 @@ internal sealed class LauncherApp : Application
 
 internal sealed class LauncherWindow : Window
 {
+    private static readonly HashSet<string> CrossSaveGamePorts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "20001",
+        "20002",
+        "20003",
+        "20004",
+        "22000",
+    };
+
+    private static readonly string[] ManagedPathEnvironmentKeys =
+    {
+        "CS_COUNTERSIDE_MANAGED_DIR",
+        "COUNTERSIDE_MANAGED_DIR",
+        "CS_COUNTERSIDE_DIR",
+    };
+
+    private static readonly string[] GameplayTableOverrideEnvironmentKeys =
+    {
+        "CS_GAMEPLAY_TABLES_DIR",
+        "CS_STAGE_TABLE_PATH",
+        "CS_MAP_TABLE_PATH",
+    };
+
     private readonly string appRoot;
     private readonly string settingsPath;
-    private readonly string nodePath;
-    private readonly string npmPath;
+    private string nodePath = "node.exe";
+    private string npmPath = "npm.cmd";
+    private string dumpcapPath = "dumpcap.exe";
+    private string tsharkPath = "tshark.exe";
     private readonly object processLogLock = new();
-    private readonly Bitmap? launcherBackground;
-    private readonly string launcherBackgroundName;
+    private readonly object cutsceneBackgroundLock = new();
+    private Bitmap? launcherBackground;
+    private string launcherBackgroundName = "";
+    private bool cutsceneBackgroundRefreshRunning;
 
     private LauncherSettings settings;
     private Process? listenerProcess;
     private ProcessJob? listenerJob;
     private Process? wikiProcess;
+    private Image? launcherBackgroundView;
+    private Border? launcherBackgroundFallback;
+    private TextBlock? launcherBackgroundText;
     private Border? dashboardView;
     private Border? settingsView;
+    private Border? crossSaveView;
+    private Border? dashboardGameplayProgressPanel;
+    private Border? settingsGameplayProgressPanel;
+    private readonly List<CrossSaveCaptureProcess> crossSaveCaptureProcesses = new();
+    private string? crossSaveCaptureStamp;
+    private List<CrossSaveSource> crossSaveSources = new();
 
     private readonly Button dashboardNavButton = new() { Content = "Home", MinWidth = 92, Height = 38 };
+    private readonly Button crossSaveNavButton = new() { Content = "Cross Save", MinWidth = 128, Height = 38 };
     private readonly Button settingsNavButton = new() { Content = "Settings", MinWidth = 116, Height = 38 };
     private readonly Button openLogsButton = new() { Content = "Logs", MinWidth = 92, Height = 38 };
     private readonly Button startListenerButton = new() { Content = "START", MinWidth = 244, Height = 58 };
@@ -81,20 +120,35 @@ internal sealed class LauncherWindow : Window
     private readonly Button browseManagedButton = new() { Content = "Browse", MinWidth = 104, Height = 38 };
     private readonly Button detectManagedButton = new() { Content = "Detect", MinWidth = 104, Height = 38 };
     private readonly Button saveSettingsButton = new() { Content = "Save Settings", MinWidth = 150, Height = 40 };
-    private readonly Button verifyGameplayJsonsButton = new() { Content = "Verify Data", MinWidth = 130, Height = 40 };
-    private readonly Button installGameplayJsonsButton = new() { Content = "Install JSONs", MinWidth = 144, Height = 40 };
+    private readonly Button verifyGameplayAssetsButton = new() { Content = "Verify Assets", MinWidth = 138, Height = 40 };
+    private readonly Button buildGameplayAssetsButton = new() { Content = "Build Cache", MinWidth = 138, Height = 40 };
     private readonly Button setTimeButton = new() { Content = "Set Time", MinWidth = 126, Height = 40 };
     private readonly Button clearTimeButton = new() { Content = "Clear", MinWidth = 94, Height = 40 };
+    private readonly Button browseCrossSaveCaptureButton = new() { Content = "Listen", MinWidth = 104, Height = 40 };
+    private readonly Button refreshCrossSaveButton = new() { Content = "Stop", MinWidth = 104, Height = 40, IsEnabled = false };
+    private readonly Button importCrossSaveButton = new() { Content = "Extract and Copy", MinWidth = 174, Height = 40 };
 
     private readonly TextBlock listenerStatusText = new() { Text = "Stopped" };
     private readonly TextBlock gameplayDataStatusText = new() { Text = "Not checked" };
+    private readonly ProgressBar dashboardGameplayProgressBar = new() { Minimum = 0, Maximum = 100, Height = 8 };
+    private readonly ProgressBar settingsGameplayProgressBar = new() { Minimum = 0, Maximum = 100, Height = 8 };
+    private readonly TextBlock dashboardGameplayProgressText = new() { Text = "Gameplay cache pending" };
+    private readonly TextBlock settingsGameplayProgressText = new() { Text = "Gameplay cache pending" };
+    private readonly TextBlock crossSaveStatusText = new() { Text = "Idle" };
+    private readonly TextBlock crossSaveDetailsText = new() { Text = "No live capture yet." };
     private readonly TextBox managedDirBox = new() { IsReadOnly = true };
+    private readonly TextBox crossSaveCaptureDirBox = new() { IsReadOnly = true };
     private readonly NumericUpDown portInput = new() { Minimum = 1, Maximum = 65535, Value = 22000, Width = 110 };
     private readonly NumericUpDown httpPortInput = new() { Minimum = 1, Maximum = 65535, Value = 8088, Width = 110 };
     private readonly NumericUpDown wikiPortInput = new() { Minimum = 1, Maximum = 65535, Value = 5174, Width = 110 };
     private readonly TextBox eventDateInput = new() { Width = 150, PlaceholderText = "YYYY-MM-DD" };
     private readonly ComboBox joinLobbyModeInput = new() { Width = 132, ItemsSource = new[] { "auto", "on", "off" } };
     private readonly TextBox advancedEnvInput = new() { AcceptsReturn = true, TextWrapping = TextWrapping.NoWrap };
+    private readonly ComboBox crossSaveSourceInput = new() { MinWidth = 460 };
+    private readonly CheckBox crossSaveSwitchActiveInput = new() { Content = "Switch active after import", IsChecked = true };
+    private readonly CheckBox crossSaveUpdateExistingInput = new() { Content = "Update matching official import", IsChecked = true };
+    private readonly CheckBox crossSavePreserveUidInput = new() { Content = "Keep official UID" };
+    private readonly CheckBox crossSavePreserveFriendCodeInput = new() { Content = "Keep official friend code" };
     private readonly CheckBox userManagerRemoteInput = new() { Content = "Allow LAN User Manager access" };
     private readonly CheckBox verboseInput = new() { Content = "Verbose listener logs" };
     private readonly CheckBox replayGameFlowInput = new() { Content = "Replay captured game flow" };
@@ -107,6 +161,13 @@ internal sealed class LauncherWindow : Window
         IsReadOnly = true,
         TextWrapping = TextWrapping.NoWrap,
     };
+    private readonly TextBox crossSaveResultBox = new()
+    {
+        AcceptsReturn = true,
+        IsReadOnly = true,
+        TextWrapping = TextWrapping.NoWrap,
+        Height = 150,
+    };
 
     public LauncherWindow()
     {
@@ -114,9 +175,8 @@ internal sealed class LauncherWindow : Window
         settingsPath = Path.Combine(appRoot, "launcher-settings.json");
         settings = LoadSettings();
         settings.CounterSideManagedDir = ResolveInitialManagedDir(settings.CounterSideManagedDir);
-        nodePath = ResolveToolPath("node.exe", Path.Combine("runtime", "node", "node.exe"));
-        npmPath = ResolveToolPath("npm.cmd", Path.Combine("runtime", "node", "npm.cmd"));
-        (launcherBackground, launcherBackgroundName) = LoadRandomCutsceneBackground(appRoot);
+        RefreshToolPaths();
+        (launcherBackground, launcherBackgroundName) = LoadRandomCutsceneBackgroundFromCache();
 
         Title = "RevivalSide Launcher";
         Width = 1180;
@@ -134,32 +194,30 @@ internal sealed class LauncherWindow : Window
         AppendLog($"Architecture: {RuntimeInformation.ProcessArchitecture} on {RuntimeInformation.OSArchitecture}");
         AppendLog($"Node: {DescribeExecutable(nodePath)}");
         AppendLog($"npm: {npmPath}");
+        AppendLog($"dumpcap: {DescribeExecutable(dumpcapPath)}");
+        AppendLog($"tshark: {DescribeExecutable(tsharkPath)}");
         AppendLog(IsManagedDir(settings.CounterSideManagedDir) ? $"CounterSide DLL: {Path.Combine(settings.CounterSideManagedDir, "Assembly-CSharp.dll")}" : "CounterSide DLL: not selected");
-        try
-        {
-            var gameplayJsons = ValidateGameplayJsonsDirectory(GameplayJsonsDir());
-            gameplayDataStatusText.Text = $"{gameplayJsons.FileCount:N0} files";
-            AppendLog($"Gameplay JSONs: {gameplayJsons.FileCount:N0} files at {gameplayJsons.Path}");
-        }
-        catch (Exception ex)
-        {
-            gameplayDataStatusText.Text = "Missing or incomplete";
-            AppendLog($"Gameplay JSONs need install: {ex.Message}");
-        }
+        RefreshGameplayAssetStatus(log: true);
+        _ = RunStartupDependencyChecksAsync();
     }
 
     private Control BuildUi()
     {
         StyleControls();
         var root = new Grid();
-        if (launcherBackground != null)
+        launcherBackgroundFallback = new Border
         {
-            root.Children.Add(new Image { Source = launcherBackground, Stretch = Stretch.UniformToFill });
-        }
-        else
+            Background = DiagonalGradient(Color.FromRgb(16, 24, 36), Color.FromRgb(50, 34, 52)),
+            IsVisible = launcherBackground == null,
+        };
+        launcherBackgroundView = new Image
         {
-            root.Children.Add(new Border { Background = DiagonalGradient(Color.FromRgb(16, 24, 36), Color.FromRgb(50, 34, 52)) });
-        }
+            Source = launcherBackground,
+            Stretch = Stretch.UniformToFill,
+            IsVisible = launcherBackground != null,
+        };
+        root.Children.Add(launcherBackgroundFallback);
+        root.Children.Add(launcherBackgroundView);
         root.Children.Add(new Border { Background = HorizontalGradient(Color.FromArgb(230, 4, 7, 12), Color.FromArgb(88, 4, 7, 12)) });
         root.Children.Add(new Border { Background = VerticalGradient(Color.FromArgb(0, 4, 7, 12), Color.FromArgb(230, 4, 7, 12)), VerticalAlignment = VerticalAlignment.Bottom, Height = 280 });
 
@@ -172,8 +230,10 @@ internal sealed class LauncherWindow : Window
         var viewHost = new Grid { Margin = new Thickness(0, 16, 0, 0) };
         Grid.SetRow(viewHost, 1);
         dashboardView = BuildDashboardView();
+        crossSaveView = BuildCrossSaveView();
         settingsView = BuildSettingsView();
         viewHost.Children.Add(dashboardView);
+        viewHost.Children.Add(crossSaveView);
         viewHost.Children.Add(settingsView);
         shell.Children.Add(viewHost);
         root.Children.Add(shell);
@@ -183,7 +243,7 @@ internal sealed class LauncherWindow : Window
 
     private Control BuildHeader()
     {
-        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("*,324") };
+        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("*,470") };
         var brand = new StackPanel { Spacing = 3 };
         brand.Children.Add(new TextBlock
         {
@@ -200,14 +260,15 @@ internal sealed class LauncherWindow : Window
             Foreground = Brush(232, 238, 246),
             FontSize = 19,
         });
-        brand.Children.Add(new TextBlock
+        launcherBackgroundText = new TextBlock
         {
-            Text = string.IsNullOrWhiteSpace(launcherBackgroundName) ? "Cutscene background unavailable" : $"Story background: {launcherBackgroundName}",
+            Text = DescribeLauncherBackground(),
             Foreground = Brush(184, 196, 214),
             FontSize = 13,
             Margin = new Thickness(0, 6, 0, 0),
             TextTrimming = TextTrimming.CharacterEllipsis,
-        });
+        };
+        brand.Children.Add(launcherBackgroundText);
         header.Children.Add(brand);
 
         var nav = new StackPanel
@@ -219,6 +280,7 @@ internal sealed class LauncherWindow : Window
             Margin = new Thickness(0, 8, 0, 0),
         };
         nav.Children.Add(dashboardNavButton);
+        nav.Children.Add(crossSaveNavButton);
         nav.Children.Add(settingsNavButton);
         nav.Children.Add(openLogsButton);
         Grid.SetColumn(nav, 1);
@@ -232,20 +294,22 @@ internal sealed class LauncherWindow : Window
         var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("430,*") };
 
         var left = Glass(new Thickness(22), new Thickness(0, 0, 20, 0));
-        var leftLayout = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,Auto,Auto,Auto,*") };
+        var leftLayout = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,*") };
         AddRow(leftLayout, Eyebrow("Listener"), 0);
         listenerStatusText.FontSize = 34;
         listenerStatusText.FontWeight = FontWeight.SemiBold;
         listenerStatusText.Foreground = Brushes.White;
         AddRow(leftLayout, listenerStatusText, 1);
         AddRow(leftLayout, Muted("Start server, open tools.", 32), 2);
-        AddRow(leftLayout, Row(stopListenerButton, openUserManagerButton, openWikiButton), 3);
-        AddRow(leftLayout, Divider(), 4);
-        AddRow(leftLayout, Eyebrow("Client Routing"), 5);
-        AddRow(leftLayout, Row(patchHostsButton, unpatchHostsButton), 6);
+        dashboardGameplayProgressPanel = GameplayProgressPanel(dashboardGameplayProgressBar, dashboardGameplayProgressText);
+        AddRow(leftLayout, dashboardGameplayProgressPanel, 3);
+        AddRow(leftLayout, Row(stopListenerButton, openUserManagerButton, openWikiButton), 4);
+        AddRow(leftLayout, Divider(), 5);
+        AddRow(leftLayout, Eyebrow("Client Routing"), 6);
+        AddRow(leftLayout, Row(patchHostsButton, unpatchHostsButton), 7);
         var logs = Glass(new Thickness(12), new Thickness(0, 18, 0, 0), Color.FromArgb(168, 6, 9, 13));
         logs.Child = Scrollable(logBox);
-        AddRow(leftLayout, logs, 7);
+        AddRow(leftLayout, logs, 8);
         left.Child = leftLayout;
         grid.Children.Add(left);
 
@@ -258,6 +322,74 @@ internal sealed class LauncherWindow : Window
 
         view.Child = grid;
         return view;
+    }
+
+    private Border BuildCrossSaveView()
+    {
+        var card = Glass(new Thickness(24), new Thickness(0), Color.FromArgb(218, 10, 14, 22));
+        card.MaxWidth = 1080;
+        card.HorizontalAlignment = HorizontalAlignment.Center;
+        var layout = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto") };
+
+        var heading = new StackPanel { Spacing = 4, Margin = new Thickness(0, 0, 0, 16) };
+        heading.Children.Add(Eyebrow("Cross Save"));
+        heading.Children.Add(new TextBlock
+        {
+            Text = "Live all-port packet capture for official profile import.",
+            Foreground = Brush(190, 202, 220),
+            FontSize = 14,
+            TextWrapping = TextWrapping.Wrap,
+        });
+        AddRow(layout, heading, 0);
+
+        var content = new StackPanel { Spacing = 14 };
+
+        var sourcePanel = new StackPanel { Spacing = 12 };
+        sourcePanel.Children.Add(Field("Capture folder", crossSaveCaptureDirBox));
+        sourcePanel.Children.Add(Row(browseCrossSaveCaptureButton, refreshCrossSaveButton, importCrossSaveButton));
+        content.Children.Add(SettingsSection("Live Capture", sourcePanel));
+
+        var options = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("*,*"),
+            RowDefinitions = new RowDefinitions("Auto,Auto"),
+            ColumnSpacing = 18,
+            RowSpacing = 8,
+        };
+        AddCell(options, crossSaveSwitchActiveInput, 0, 0);
+        AddCell(options, crossSaveUpdateExistingInput, 1, 0);
+        AddCell(options, crossSavePreserveUidInput, 0, 1);
+        AddCell(options, crossSavePreserveFriendCodeInput, 1, 1);
+        content.Children.Add(SettingsSection("Import Options", options));
+
+        var status = new StackPanel { Spacing = 8 };
+        crossSaveStatusText.Foreground = Brush(226, 232, 240);
+        crossSaveStatusText.FontSize = 15;
+        crossSaveStatusText.FontWeight = FontWeight.SemiBold;
+        crossSaveDetailsText.Foreground = Brush(176, 188, 206);
+        crossSaveDetailsText.FontSize = 13;
+        crossSaveDetailsText.TextWrapping = TextWrapping.Wrap;
+        status.Children.Add(crossSaveStatusText);
+        status.Children.Add(crossSaveDetailsText);
+        crossSaveResultBox.FontFamily = "Cascadia Code, Consolas";
+        crossSaveResultBox.FontSize = 12;
+        status.Children.Add(crossSaveResultBox);
+        content.Children.Add(SettingsSection("Result", status));
+
+        AddRow(layout, Scrollable(content), 1);
+
+        var footer = new TextBlock
+        {
+            Text = "Uses Wireshark dumpcap/tshark. Npcap is required for live capture.",
+            Foreground = Brush(166, 180, 202),
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 12, 0, 0),
+        };
+        AddRow(layout, footer, 2);
+
+        card.Child = layout;
+        return card;
     }
 
     private Border BuildSettingsView()
@@ -340,8 +472,10 @@ internal sealed class LauncherWindow : Window
     {
         var layout = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*"), ColumnSpacing = 18 };
         var data = new StackPanel { Spacing = 10 };
-        data.Children.Add(ValueRow("Gameplay Data", gameplayDataStatusText));
-        data.Children.Add(Row(verifyGameplayJsonsButton, installGameplayJsonsButton));
+        data.Children.Add(ValueRow("Gameplay Assets", gameplayDataStatusText));
+        settingsGameplayProgressPanel = GameplayProgressPanel(settingsGameplayProgressBar, settingsGameplayProgressText);
+        data.Children.Add(settingsGameplayProgressPanel);
+        data.Children.Add(Row(verifyGameplayAssetsButton, buildGameplayAssetsButton));
 
         var time = new StackPanel { Spacing = 10 };
         time.Children.Add(Field("Server time", serverTimeInput));
@@ -362,8 +496,10 @@ internal sealed class LauncherWindow : Window
     private void ShowView(string viewName)
     {
         if (dashboardView != null) dashboardView.IsVisible = viewName == "dashboard";
+        if (crossSaveView != null) crossSaveView.IsVisible = viewName == "cross-save";
         if (settingsView != null) settingsView.IsVisible = viewName == "settings";
         StyleNavButton(dashboardNavButton, viewName == "dashboard");
+        StyleNavButton(crossSaveNavButton, viewName == "cross-save");
         StyleNavButton(settingsNavButton, viewName == "settings");
     }
 
@@ -372,6 +508,7 @@ internal sealed class LauncherWindow : Window
         foreach (var button in new[]
         {
             dashboardNavButton,
+            crossSaveNavButton,
             settingsNavButton,
             stopListenerButton,
             openUserManagerButton,
@@ -381,20 +518,22 @@ internal sealed class LauncherWindow : Window
             openLogsButton,
             browseManagedButton,
             detectManagedButton,
-            verifyGameplayJsonsButton,
+            browseCrossSaveCaptureButton,
+            refreshCrossSaveButton,
+            verifyGameplayAssetsButton,
             clearTimeButton,
         })
         {
             StyleButton(button);
         }
-        foreach (var button in new[] { startListenerButton, saveSettingsButton, installGameplayJsonsButton, setTimeButton })
+        foreach (var button in new[] { startListenerButton, saveSettingsButton, importCrossSaveButton, buildGameplayAssetsButton, setTimeButton })
         {
             StyleButton(button, primary: true);
         }
         startListenerButton.FontSize = 22;
         startListenerButton.FontWeight = FontWeight.Black;
 
-        foreach (var input in new Control[] { managedDirBox, portInput, httpPortInput, wikiPortInput, eventDateInput, joinLobbyModeInput, advancedEnvInput, serverTimeInput })
+        foreach (var input in new Control[] { managedDirBox, crossSaveCaptureDirBox, portInput, httpPortInput, wikiPortInput, eventDateInput, joinLobbyModeInput, crossSaveSourceInput, advancedEnvInput, serverTimeInput, crossSaveResultBox })
         {
             StyleInput(input);
         }
@@ -520,6 +659,25 @@ internal sealed class LauncherWindow : Window
         return layout;
     }
 
+    private static Border GameplayProgressPanel(ProgressBar bar, TextBlock text)
+    {
+        text.Foreground = Brush(190, 202, 220);
+        text.FontSize = 12;
+        text.TextTrimming = TextTrimming.CharacterEllipsis;
+        bar.Background = new SolidColorBrush(Color.FromArgb(116, 255, 255, 255));
+        bar.Foreground = Brush(255, 218, 76);
+
+        var panel = new StackPanel { Spacing = 6 };
+        panel.Children.Add(text);
+        panel.Children.Add(bar);
+        return new Border
+        {
+            IsVisible = false,
+            Margin = new Thickness(0, 2, 0, 8),
+            Child = panel,
+        };
+    }
+
     private static Control Field(string label, Control control)
     {
         var panel = new StackPanel { Spacing = 6 };
@@ -616,6 +774,7 @@ internal sealed class LauncherWindow : Window
     private void BindEvents()
     {
         dashboardNavButton.Click += (_, _) => ShowView("dashboard");
+        crossSaveNavButton.Click += (_, _) => ShowView("cross-save");
         settingsNavButton.Click += (_, _) => ShowView("settings");
         openLogsButton.Click += (_, _) => OpenLogsDirectory();
         startListenerButton.Click += async (_, _) => await RunUiAction(StartListenerAsync);
@@ -631,12 +790,16 @@ internal sealed class LauncherWindow : Window
         browseManagedButton.Click += async (_, _) => await RunUiAction(BrowseManagedAssemblyAsync);
         detectManagedButton.Click += async (_, _) => await RunUiAction(async () => { await DetectManagedAssemblyAsync(showMessage: true); });
         saveSettingsButton.Click += (_, _) => SaveSettingsFromUi();
-        verifyGameplayJsonsButton.Click += async (_, _) => await RunUiAction(VerifyGameplayJsonsAsync);
-        installGameplayJsonsButton.Click += async (_, _) => await RunUiAction(InstallGameplayJsonsAsync);
+        browseCrossSaveCaptureButton.Click += async (_, _) => await RunUiAction(StartCrossSaveCaptureAsync);
+        refreshCrossSaveButton.Click += (_, _) => StopCrossSaveCapture();
+        importCrossSaveButton.Click += async (_, _) => await RunUiAction(ExtractAndCopyCrossSaveAsync);
+        verifyGameplayAssetsButton.Click += async (_, _) => await RunUiAction(VerifyGameplayAssetsAsync);
+        buildGameplayAssetsButton.Click += async (_, _) => await RunUiAction(BuildGameplayAssetsAsync);
         setTimeButton.Click += async (_, _) => await RunUiAction(SetServerTimeAsync);
         clearTimeButton.Click += async (_, _) => await RunUiAction(ClearServerTimeAsync);
         Closing += (_, _) =>
         {
+            StopCrossSaveCapture();
             StopListener();
             StopWiki();
         };
@@ -659,9 +822,409 @@ internal sealed class LauncherWindow : Window
         }
     }
 
+    private async Task RunStartupDependencyChecksAsync()
+    {
+        try
+        {
+            await EnsureNodeAndNpmAsync(required: false);
+            await EnsureDotNet8RuntimeAsync(required: false);
+            await EnsurePythonAssetStackAsync(required: false);
+            await EnsureWiresharkAsync(required: false);
+            await EnsureNpcapAsync(required: false);
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"Dependency check skipped: {ex.Message}");
+        }
+        await RefreshCutsceneBackgroundAsync(force: false);
+    }
+
+    private async Task EnsureListenerDependenciesAsync()
+    {
+        await EnsureNodeAndNpmAsync(required: true);
+        await EnsureDotNet8RuntimeAsync(required: true);
+        await EnsurePythonAssetStackAsync(required: true);
+    }
+
+    private async Task EnsureAssetBuildDependenciesAsync()
+    {
+        await EnsureNodeAndNpmAsync(required: true);
+        await EnsurePythonAssetStackAsync(required: true);
+    }
+
+    private async Task EnsureCrossSaveCaptureDependenciesAsync()
+    {
+        await EnsureWiresharkAsync(required: true);
+        await EnsureNpcapAsync(required: true);
+    }
+
+    private async Task EnsureCrossSaveExtractDependenciesAsync()
+    {
+        await EnsureNodeAndNpmAsync(required: true);
+        await EnsureDotNet8RuntimeAsync(required: true);
+        await EnsureWiresharkAsync(required: true);
+    }
+
+    private Task<bool> EnsureNodeAndNpmAsync(bool required)
+    {
+        RefreshToolPaths();
+        AppendLog($"Node/npm: using {nodePath}, {npmPath}.");
+        return Task.FromResult(true);
+    }
+
+    private async Task<bool> EnsureDotNet8RuntimeAsync(bool required)
+    {
+        if (await HasDotNet8RuntimeAsync())
+        {
+            AppendLog(".NET 8 Runtime: detected.");
+            return true;
+        }
+
+        var installer = FindBundledRuntimeInstaller("dotnet", "*.exe", includeCommon: false);
+        if (!File.Exists(installer))
+        {
+            return HandleMissingDependency(required, ".NET 8 Runtime", ".NET 8 Runtime is missing and no bundled .NET installer was found.");
+        }
+
+        var installed = await PromptAndRunInstallerAsync(
+            "Install .NET 8",
+            ".NET 8 Runtime is required by the managed combat/table host fallback. Install the bundled runtime now?",
+            "Install",
+            "Later",
+            installer,
+            "/install /passive /norestart",
+            elevated: true);
+        if (installed && await HasDotNet8RuntimeAsync()) return true;
+        return HandleMissingDependency(required, ".NET 8 Runtime", ".NET 8 Runtime is still not available.");
+    }
+
+    private Task<bool> EnsurePythonAssetStackAsync(bool required)
+    {
+        var python = ResolveBundledPythonPath();
+        AppendLog(string.IsNullOrWhiteSpace(python)
+            ? "Python assets: deferred to asset tools."
+            : $"Python assets: using {python}.");
+        return Task.FromResult(true);
+    }
+
+    private Task<bool> EnsureWiresharkAsync(bool required)
+    {
+        RefreshToolPaths();
+        AppendLog($"Wireshark tools: using {dumpcapPath}, {tsharkPath}.");
+        return Task.FromResult(true);
+    }
+
+    private async Task<bool> EnsureNpcapAsync(bool required)
+    {
+        if (HasNpcap())
+        {
+            AppendLog("Npcap: detected.");
+            return true;
+        }
+
+        var installer = FindBundledRuntimeInstaller("npcap", "npcap-*.exe", includeCommon: true);
+        if (!File.Exists(installer))
+        {
+            return HandleMissingDependency(required, "Npcap", "Npcap capture driver is missing and no bundled Npcap installer was found.");
+        }
+
+        var installed = await PromptAndRunInstallerAsync(
+            "Install Npcap",
+            "Cross Save live capture needs the Npcap Windows packet capture driver. Install the bundled Npcap driver now?",
+            "Install",
+            "Later",
+            installer,
+            "",
+            elevated: true);
+        if (installed && HasNpcap()) return true;
+        return HandleMissingDependency(required, "Npcap", "Npcap capture driver is still not available.");
+    }
+
+    private bool HandleMissingDependency(bool required, string name, string message)
+    {
+        AppendLog($"{name}: {message}");
+        if (required) throw new InvalidOperationException(message);
+        return false;
+    }
+
+    private async Task<bool> PromptAndRunInstallerAsync(
+        string title,
+        string message,
+        string fileName,
+        string arguments,
+        bool elevated)
+    {
+        return await PromptAndRunInstallerAsync(title, message, "Install", "Later", fileName, arguments, elevated);
+    }
+
+    private async Task<bool> PromptAndRunInstallerAsync(
+        string title,
+        string message,
+        string installLabel,
+        string cancelLabel,
+        string fileName,
+        string arguments,
+        bool elevated)
+    {
+        var shouldInstall = await ShowConfirmAsync(title, message, installLabel, cancelLabel);
+        if (!shouldInstall)
+        {
+            AppendLog($"{title}: skipped.");
+            return false;
+        }
+
+        AppendLog($"{title}: running {fileName}");
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = fileName,
+            Arguments = arguments,
+            UseShellExecute = true,
+            WorkingDirectory = File.Exists(fileName) ? Path.GetDirectoryName(fileName) ?? appRoot : appRoot,
+        };
+        if (elevated) startInfo.Verb = "runas";
+        using var process = Process.Start(startInfo);
+        if (process == null) throw new InvalidOperationException($"Could not start installer: {fileName}");
+        await process.WaitForExitAsync();
+        AppendLog($"{title}: installer exited {process.ExitCode}.");
+        RefreshToolPaths();
+        return process.ExitCode == 0;
+    }
+
+    private async Task<bool> HasDotNet8RuntimeAsync()
+    {
+        var dotnet = ResolveToolPath("dotnet.exe");
+        if (!ToolPathExists(dotnet)) return false;
+        var result = await RunToolAsync(dotnet, ["--list-runtimes"], timeoutMs: 15000);
+        return result.ExitCode == 0 && result.CombinedOutput.SplitLines().Any(line => line.Contains("Microsoft.NETCore.App 8.", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private bool HasWiresharkTools()
+    {
+        return ToolPathExists(dumpcapPath) && ToolPathExists(tsharkPath);
+    }
+
+    private static bool HasNpcap()
+    {
+        var windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        foreach (var candidate in new[]
+        {
+            Path.Combine(windows, "System32", "Npcap", "Packet.dll"),
+            Path.Combine(windows, "System32", "Npcap", "wpcap.dll"),
+            Path.Combine(windows, "SysWOW64", "Npcap", "Packet.dll"),
+            Path.Combine(windows, "SysWOW64", "Npcap", "wpcap.dll"),
+        })
+        {
+            if (File.Exists(candidate)) return true;
+        }
+        return false;
+    }
+
+    private async Task<PythonTool?> FindUsablePythonAsync(bool requireAssetPackages)
+    {
+        foreach (var candidate in EnumeratePythonCandidates())
+        {
+            var probe = await RunToolAsync(candidate.FileName, candidate.Arguments.Concat(["-c", "import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)"]), timeoutMs: 15000);
+            if (probe.ExitCode != 0 || IsPythonStoreAliasOutput(probe.CombinedOutput)) continue;
+            if (requireAssetPackages && !await PythonHasAssetPackagesAsync(candidate)) continue;
+            return candidate;
+        }
+        return null;
+    }
+
+    private async Task<bool> PythonHasAssetPackagesAsync(PythonTool python)
+    {
+        var result = await RunToolAsync(python.FileName, python.Arguments.Concat(["-c", "import UnityPy; import PIL"]), timeoutMs: 30000);
+        return result.ExitCode == 0;
+    }
+
+    private IEnumerable<PythonTool> EnumeratePythonCandidates()
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void Add(List<PythonTool> list, PythonTool tool)
+        {
+            var key = tool.FileName + "\u001f" + string.Join("\u001f", tool.Arguments);
+            if (seen.Add(key)) list.Add(tool);
+        }
+
+        var candidates = new List<PythonTool>();
+        foreach (var path in EnumerateBundledPythonPaths())
+        {
+            Add(candidates, new PythonTool(path, [], path));
+        }
+        var pythonPathEnv = Environment.GetEnvironmentVariable("CS_PYTHON_PATH") ?? Environment.GetEnvironmentVariable("PYTHON") ?? "";
+        foreach (var configured in pythonPathEnv.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (File.Exists(configured)) Add(candidates, new PythonTool(configured, [], configured));
+        }
+        var py = ResolveToolFromPath("py.exe");
+        if (!string.IsNullOrWhiteSpace(py)) Add(candidates, new PythonTool(py, ["-3"], "py -3"));
+        foreach (var tool in new[] { "python.exe", "python3.exe" })
+        {
+            var resolved = ResolveToolFromPath(tool);
+            if (!string.IsNullOrWhiteSpace(resolved)) Add(candidates, new PythonTool(resolved, [], resolved));
+        }
+        foreach (var commonPath in EnumerateCommonPythonInstallPaths())
+        {
+            if (File.Exists(commonPath)) Add(candidates, new PythonTool(commonPath, [], commonPath));
+        }
+        return candidates;
+    }
+
+    private IEnumerable<string> EnumerateBundledPythonPaths()
+    {
+        var rid = GetWindowsRid();
+        foreach (var relativePath in new[]
+        {
+            Path.Combine("runtime", "python", "python.exe"),
+            Path.Combine("runtime", "python", "python3.exe"),
+            Path.Combine("runtime", "python", "Scripts", "python.exe"),
+            Path.Combine("runtime-python", rid, "python.exe"),
+            Path.Combine("runtime-python", rid, "python3.exe"),
+            Path.Combine("runtime-python", rid, "Scripts", "python.exe"),
+        })
+        {
+            foreach (var root in EnumerateToolSearchRoots())
+            {
+                var path = Path.Combine(root, relativePath);
+                if (File.Exists(path)) yield return path;
+            }
+        }
+    }
+
+    private static IEnumerable<string> EnumerateCommonPythonInstallPaths()
+    {
+        var suffixes = new[] { "Python313", "Python314", "Python312", "Python311", "Python310" };
+        foreach (var baseDir in new[]
+        {
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+            Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Python"),
+            "C:\\",
+        })
+        {
+            if (string.IsNullOrWhiteSpace(baseDir)) continue;
+            foreach (var suffix in suffixes)
+            {
+                yield return baseDir.Equals("C:\\", StringComparison.OrdinalIgnoreCase)
+                    ? Path.Combine(baseDir, suffix, "python.exe")
+                    : Path.Combine(baseDir, suffix, "python.exe");
+            }
+        }
+    }
+
+    private string FindBundledRuntimeInstaller(string toolName, string pattern, bool includeCommon)
+    {
+        foreach (var directory in EnumerateRuntimeInstallerDirectories(toolName, includeCommon))
+        {
+            if (!Directory.Exists(directory)) continue;
+            var match = Directory.EnumerateFiles(directory, pattern, SearchOption.TopDirectoryOnly)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(match)) return match;
+        }
+        return "";
+    }
+
+    private string FindBundledPythonPackageRoot()
+    {
+        foreach (var directory in EnumerateRuntimeInstallerDirectories("python-packages", includeCommon: false))
+        {
+            if (Directory.Exists(directory)) return directory;
+        }
+        return "";
+    }
+
+    private IEnumerable<string> EnumerateRuntimeInstallerDirectories(string toolName, bool includeCommon)
+    {
+        var rid = GetWindowsRid();
+        foreach (var root in new[] { appRoot, AppContext.BaseDirectory }.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            yield return Path.Combine(root, "runtime", "installers", toolName, rid);
+            if (includeCommon) yield return Path.Combine(root, "runtime", "installers", toolName, "all");
+        }
+    }
+
+    private static async Task<ToolRunResult> RunToolAsync(string fileName, IEnumerable<string> arguments, int timeoutMs)
+    {
+        var argumentList = arguments.ToArray();
+        var isBatchFile = fileName.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase) || fileName.EndsWith(".bat", StringComparison.OrdinalIgnoreCase);
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = isBatchFile ? "cmd.exe" : fileName,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+            },
+        };
+        if (isBatchFile)
+        {
+            process.StartInfo.ArgumentList.Add("/d");
+            process.StartInfo.ArgumentList.Add("/s");
+            process.StartInfo.ArgumentList.Add("/c");
+            process.StartInfo.ArgumentList.Add($"\"\"{fileName}\" {string.Join(" ", argumentList.Select(CommandQuote))}\"");
+        }
+        else
+        {
+            foreach (var argument in argumentList) process.StartInfo.ArgumentList.Add(argument);
+        }
+        var output = new StringBuilder();
+        process.OutputDataReceived += (_, e) => { if (e.Data != null) output.AppendLine(e.Data); };
+        process.ErrorDataReceived += (_, e) => { if (e.Data != null) output.AppendLine(e.Data); };
+        try
+        {
+            if (!process.Start()) return new ToolRunResult(-1, "");
+        }
+        catch (Exception ex)
+        {
+            return new ToolRunResult(-1, ex.Message);
+        }
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+        var waitTask = process.WaitForExitAsync();
+        var completed = await Task.WhenAny(waitTask, Task.Delay(timeoutMs));
+        if (completed != waitTask)
+        {
+            try { process.Kill(entireProcessTree: true); } catch { }
+            return new ToolRunResult(-1, "timed out");
+        }
+        process.WaitForExit();
+        return new ToolRunResult(process.ExitCode, output.ToString());
+    }
+
+    private static bool IsPythonStoreAliasOutput(string output)
+    {
+        return output.Contains("python was not found", StringComparison.OrdinalIgnoreCase)
+            || output.Contains("microsoft store", StringComparison.OrdinalIgnoreCase)
+            || output.Contains("app execution aliases", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ToolPathExists(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        if (Path.IsPathFullyQualified(path)) return File.Exists(path);
+        return !string.IsNullOrWhiteSpace(ResolveToolFromPath(path));
+    }
+
+    private static string GetWindowsRid()
+    {
+        return RuntimeInformation.OSArchitecture switch
+        {
+            Architecture.Arm64 => "win-arm64",
+            Architecture.X86 => "win-x86",
+            _ => "win-x64",
+        };
+    }
+
+    private static string CommandQuote(string value) => "\"" + value.Replace("\"", "\\\"") + "\"";
+
     private void LoadSettingsIntoUi()
     {
-        managedDirBox.Text = IsManagedDir(settings.CounterSideManagedDir) ? settings.CounterSideManagedDir : "CounterSide Assembly-CSharp.dll not selected";
+        var managedDir = GetConfiguredManagedDir();
+        managedDirBox.Text = IsManagedDir(managedDir) ? managedDir : "CounterSide Assembly-CSharp.dll not selected";
+        crossSaveCaptureDirBox.Text = CrossSaveCaptureDir();
         portInput.Value = ClampPort(settings.GamePort, 22000);
         httpPortInput.Value = ClampPort(settings.HttpPort, 8088);
         wikiPortInput.Value = ClampPort(settings.WikiPort, 5174);
@@ -691,7 +1254,10 @@ internal sealed class LauncherWindow : Window
         settings.SkipTutorialToWin = skipTutorialInput.IsChecked == true;
         settings.ResetTutorialOnLogin = resetTutorialInput.IsChecked == true;
         settings.AdvancedEnvText = advancedEnvInput.Text ?? "";
-        settings.CounterSideManagedDir = IsManagedDir(settings.CounterSideManagedDir) ? settings.CounterSideManagedDir : "";
+        settings.CounterSideManagedDir = GetConfiguredManagedDir();
+        settings.CrossSaveCaptureDir = (crossSaveCaptureDirBox.Text ?? "").Trim();
+        managedDirBox.Text = IsManagedDir(settings.CounterSideManagedDir) ? settings.CounterSideManagedDir : "CounterSide Assembly-CSharp.dll not selected";
+        crossSaveCaptureDirBox.Text = CrossSaveCaptureDir();
         SaveSettings();
         AppendLog("Settings saved.");
     }
@@ -700,10 +1266,14 @@ internal sealed class LauncherWindow : Window
     {
         if (listenerProcess is { HasExited: false }) return;
         SaveSettingsFromUi();
+        await EnsureListenerDependenciesAsync();
         EnsureRuntimeLayout();
         ValidateListenerRuntimeLayout();
-        var gameplayJsons = VerifyGameplayJsonsReady();
-        AppendLog($"Gameplay JSONs ready: {gameplayJsons.FileCount:N0} files at {gameplayJsons.Path}");
+        var gameplayAssets = VerifyGameplayAssetsReady();
+        AppendLog($"Gameplay assets ready: {gameplayAssets.Description}");
+        gameplayAssets = await EnsureGameplayAssetCacheAsync(force: false);
+        AppendLog($"Gameplay asset cache ready: {gameplayAssets.CachedLuaCount:N0} luac files at {gameplayAssets.CacheRoot}");
+        await EnsureClientPatchAsync();
         var env = BuildListenerEnvironment();
         var logWriter = OpenProcessLog("listener", out var logPath);
         var listenCommand = CreateListenCommand();
@@ -887,6 +1457,9 @@ internal sealed class LauncherWindow : Window
     private async Task OpenWikiAsync()
     {
         SaveSettingsFromUi();
+        await EnsureAssetBuildDependenciesAsync();
+        var wikiAssets = await EnsureWikiAssetCacheAsync(force: false);
+        AppendLog($"Wiki image cache ready: {wikiAssets.CachedPngCount:N0} PNGs at {wikiAssets.CacheRoot}");
         if (wikiProcess is not { HasExited: false })
         {
             var logWriter = OpenProcessLog("wiki", out var logPath);
@@ -945,6 +1518,621 @@ internal sealed class LauncherWindow : Window
         }
     }
 
+    private async Task StartCrossSaveCaptureAsync()
+    {
+        if (crossSaveCaptureProcesses.Count > 0) throw new InvalidOperationException("Cross Save capture is already listening.");
+        SaveSettingsFromUi();
+        await EnsureCrossSaveCaptureDependenciesAsync();
+        EnsureRuntimeLayout();
+        ValidateCrossSaveCaptureTool(dumpcapPath, "dumpcap.exe");
+
+        crossSaveCaptureStamp = DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+        var interfaces = await ResolveCrossSaveInterfacesAsync();
+        if (interfaces.Count == 0) throw new InvalidOperationException("No dumpcap interfaces were found.");
+
+        foreach (var iface in interfaces)
+        {
+            var safeName = SafeFileName(iface.Name);
+            var pcapFile = Path.Combine(CrossSaveCaptureDir(), $"counterside-all-{iface.Id}-{safeName}-{crossSaveCaptureStamp}.pcapng");
+            var logFile = Path.Combine(CrossSaveCaptureDir(), $"dumpcap-{iface.Id}-{safeName}-{crossSaveCaptureStamp}.log");
+            var writer = new StreamWriter(File.Open(logFile, FileMode.Create, FileAccess.Write, FileShare.ReadWrite), Encoding.UTF8)
+            {
+                AutoFlush = true,
+            };
+            var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = dumpcapPath,
+                    WorkingDirectory = appRoot,
+                    UseShellExecute = false,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true,
+                },
+                EnableRaisingEvents = true,
+            };
+            process.StartInfo.ArgumentList.Add("-i");
+            process.StartInfo.ArgumentList.Add(iface.Id);
+            process.StartInfo.ArgumentList.Add("-s");
+            process.StartInfo.ArgumentList.Add("0");
+            process.StartInfo.ArgumentList.Add("-w");
+            process.StartInfo.ArgumentList.Add(pcapFile);
+            process.ErrorDataReceived += (_, e) =>
+            {
+                if (e.Data != null) writer.WriteLine(e.Data);
+            };
+            if (!process.Start())
+            {
+                writer.Dispose();
+                throw new InvalidOperationException($"Could not start dumpcap on interface {iface.Id}.");
+            }
+            process.BeginErrorReadLine();
+            crossSaveCaptureProcesses.Add(new CrossSaveCaptureProcess(process, writer, pcapFile, logFile, iface));
+        }
+
+        crossSaveStatusText.Text = $"Listening on {crossSaveCaptureProcesses.Count:N0} interface(s)";
+        crossSaveDetailsText.Text = $"{crossSaveCaptureStamp} | {CrossSaveCaptureDir()}";
+        crossSaveResultBox.Text = "";
+        AppendLog($"Cross Save live capture listening on {crossSaveCaptureProcesses.Count:N0} interface(s).");
+        foreach (var capture in crossSaveCaptureProcesses)
+        {
+            AppendLog($"  dumpcap PID {capture.Process.Id}: {capture.Interface.Id} {capture.Interface.Name}");
+        }
+        UpdateButtons();
+    }
+
+    private void StopCrossSaveCapture()
+    {
+        if (crossSaveCaptureProcesses.Count == 0) return;
+        AppendLog("Stopping Cross Save live capture...");
+        foreach (var capture in crossSaveCaptureProcesses.ToArray())
+        {
+            try
+            {
+                if (!capture.Process.HasExited)
+                {
+                    capture.Process.Kill(entireProcessTree: true);
+                    capture.Process.WaitForExit(5000);
+                }
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"Stop dumpcap PID {capture.Process.Id} failed: {ex.Message}");
+            }
+            finally
+            {
+                try { capture.Writer.Dispose(); } catch { }
+                try { capture.Process.Dispose(); } catch { }
+                crossSaveCaptureProcesses.Remove(capture);
+            }
+        }
+
+        var files = GetCurrentCrossSaveCaptureFiles()
+            .Where(File.Exists)
+            .Select(path => new FileInfo(path))
+            .ToList();
+        crossSaveStatusText.Text = "Stopped";
+        crossSaveDetailsText.Text = files.Count == 1
+            ? $"{files[0].Name} | {FormatBytes(files[0].Length)}"
+            : $"{files.Count:N0} capture file(s) ready";
+        foreach (var file in files)
+        {
+            AppendLog($"  {file.Name} ({file.Length:N0} bytes)");
+        }
+        UpdateButtons();
+    }
+
+    private async Task ExtractAndCopyCrossSaveAsync()
+    {
+        if (crossSaveCaptureProcesses.Count > 0) throw new InvalidOperationException("Stop Cross Save capture before extracting.");
+        SaveSettingsFromUi();
+        await EnsureCrossSaveExtractDependenciesAsync();
+        EnsureRuntimeLayout();
+        ValidateCrossSaveRuntimeLayout();
+        ValidateCrossSaveCaptureTool(tsharkPath, "tshark.exe");
+        EnsureCompatibleExecutable("node.exe", nodePath);
+        if (!IsManagedDir(GetConfiguredManagedDir()) && !await DetectManagedAssemblyAsync(showMessage: false))
+        {
+            throw new InvalidOperationException("Select CounterSide Data\\Managed\\Assembly-CSharp.dll before extracting Cross Save.");
+        }
+        var gameplayAssets = await EnsureGameplayAssetCacheAsync(force: false);
+        AppendLog($"Cross Save gameplay cache ready: {gameplayAssets.CachedLuaCount:N0} luac files.");
+
+        var pcapFiles = GetCurrentCrossSaveCaptureFiles()
+            .Where(File.Exists)
+            .Select(path => new FileInfo(path))
+            .Where(file => file.Length > 0)
+            .OrderByDescending(file => file.Length)
+            .ToList();
+        if (pcapFiles.Count == 0) throw new InvalidOperationException("No Cross Save capture files were found.");
+
+        using var logWriter = OpenProcessLog("cross-save-extract", out var logPath);
+        AppendLog($"Cross Save extract log: {logPath}");
+        Directory.CreateDirectory(CrossSaveExtractRootDir());
+        foreach (var pcap in pcapFiles)
+        {
+            AppendProcessLog(logWriter, $"Scanning {pcap.Name}...");
+            var streams = await EnumerateCrossSaveCandidateStreamsAsync(pcap.FullName);
+            AppendProcessLog(logWriter, $"  {streams.Count:N0} candidate TCP stream(s)");
+            for (var index = 0; index < streams.Count; index++)
+            {
+                var stream = streams[index];
+                var logStream = index < 25 || stream.HasGamePort;
+                if (logStream) AppendProcessLog(logWriter, $"  stream {stream.Stream}: {stream.TotalBytes:N0} bytes");
+                var outputDir = Path.Combine(CrossSaveExtractRootDir(), $"{Path.GetFileNameWithoutExtension(pcap.Name)}-stream-{stream.Stream}");
+                var extracted = await TryExtractCrossSaveStreamAsync(pcap.FullName, outputDir, stream.Stream, logStream, logWriter);
+                if (!extracted || !ManifestHasJoinLobbyAck(Path.Combine(outputDir, "manifest.json"))) continue;
+
+                var sources = LoadCrossSaveSources(outputDir);
+                var source = sources.FirstOrDefault();
+                if (source == null) continue;
+
+                var copyPath = Path.Combine(CrossSaveExportsDir(), $"users-{DateTime.Now:yyyyMMdd-HHmmss}.json");
+                var result = await RunCrossSaveImportProcessAsync(source, gameplayAssets, outputDir, copyPath);
+                await CopyCrossSaveExportToClipboardAsync(copyPath);
+
+                crossSaveSources = sources;
+                crossSaveSourceInput.ItemsSource = null;
+                crossSaveSourceInput.ItemsSource = crossSaveSources;
+                crossSaveSourceInput.SelectedIndex = 0;
+                crossSaveStatusText.Text = $"Imported {result.Nickname}";
+                crossSaveDetailsText.Text = $"Local UID {result.UserUid} | official UID {result.OfficialUserUid} | copied {copyPath}";
+                crossSaveResultBox.Text = result.PrettyJson;
+                AppendProcessLog(logWriter, $"Found JOIN_LOBBY_ACK in {pcap.Name} stream {stream.Stream}.");
+                AppendProcessLog(logWriter, $"Copied users.json export and clipboard text: {copyPath}");
+                if (listenerProcess is { HasExited: false }) await ReloadRunningUserManagerAsync();
+                return;
+            }
+            if (streams.Count > 25) AppendProcessLog(logWriter, $"  scanned {streams.Count - 25:N0} additional lower-priority stream(s)");
+        }
+
+        throw new InvalidOperationException("No JOIN_LOBBY_ACK packet was found in the latest Cross Save capture.");
+    }
+
+    private async Task<List<CrossSaveCaptureInterface>> ResolveCrossSaveInterfacesAsync()
+    {
+        var result = await RunCrossSaveProcessAsync(dumpcapPath, new[] { "-D" });
+        if (result.ExitCode != 0) throw new InvalidOperationException(FirstNonEmptyLine(result.Error, "dumpcap interface scan failed"));
+        var interfaces = new List<CrossSaveCaptureInterface>();
+        var regex = new Regex(@"^(\d+)\.\s+(.+?)(?:\s+\((.+)\))?\s*$");
+        foreach (var line in result.Output.SplitLines())
+        {
+            var match = regex.Match(line.Trim());
+            if (!match.Success) continue;
+            var name = match.Groups[3].Success ? match.Groups[3].Value : match.Groups[2].Value;
+            interfaces.Add(new CrossSaveCaptureInterface(match.Groups[1].Value, name));
+        }
+        return interfaces;
+    }
+
+    private async Task<List<CrossSaveStreamInfo>> EnumerateCrossSaveCandidateStreamsAsync(string pcapFile)
+    {
+        var result = await RunCrossSaveProcessAsync(
+            tsharkPath,
+            new[]
+            {
+                "-r",
+                pcapFile,
+                "-Y",
+                "tcp.len > 0",
+                "-T",
+                "fields",
+                "-E",
+                "separator=\t",
+                "-e",
+                "tcp.stream",
+                "-e",
+                "tcp.srcport",
+                "-e",
+                "tcp.dstport",
+                "-e",
+                "tcp.len",
+            });
+        if (result.ExitCode != 0) throw new InvalidOperationException(FirstNonEmptyLine(result.Error, "tshark stream scan failed"));
+
+        var byStream = new Dictionary<int, CrossSaveStreamInfo>();
+        foreach (var line in result.Output.SplitLines())
+        {
+            var parts = line.Split('\t');
+            if (parts.Length < 4 || !int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var streamId)) continue;
+            if (!long.TryParse(parts[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out var length)) length = 0;
+            if (!byStream.TryGetValue(streamId, out var stream))
+            {
+                stream = new CrossSaveStreamInfo(streamId);
+                byStream[streamId] = stream;
+            }
+            stream.TotalBytes += Math.Max(0, length);
+            if (CrossSaveGamePorts.Contains(parts[1]) || CrossSaveGamePorts.Contains(parts[2])) stream.HasGamePort = true;
+        }
+
+        return byStream.Values
+            .Where(stream => stream.TotalBytes >= 64)
+            .OrderByDescending(stream => stream.HasGamePort)
+            .ThenByDescending(stream => stream.TotalBytes)
+            .Take(1000)
+            .ToList();
+    }
+
+    private async Task<bool> TryExtractCrossSaveStreamAsync(string pcapFile, string outputDir, int stream, bool logFailures, StreamWriter logWriter)
+    {
+        if (Directory.Exists(outputDir)) Directory.Delete(outputDir, recursive: true);
+        Directory.CreateDirectory(outputDir);
+        var result = await RunCrossSaveProcessAsync(
+            nodePath,
+            new[]
+            {
+                Path.Combine(appRoot, "tools", "extract-cs-pcap-fixtures.js"),
+                pcapFile,
+                outputDir,
+                "game",
+                stream.ToString(CultureInfo.InvariantCulture),
+            },
+            BuildCrossSaveToolEnvironment());
+        if (result.ExitCode == 0) return File.Exists(Path.Combine(outputDir, "manifest.json"));
+        if (logFailures) AppendProcessLog(logWriter, $"  stream {stream} skipped: {FirstNonEmptyLine(result.Error, "no details")}");
+        return false;
+    }
+
+    private async Task<CrossSaveProcessResult> RunCrossSaveProcessAsync(
+        string fileName,
+        IReadOnlyList<string> args,
+        IReadOnlyDictionary<string, string>? environment = null)
+    {
+        EnsureCompatibleExecutable(Path.GetFileName(fileName), fileName);
+        using var process = new Process
+        {
+            StartInfo = CreateHiddenProcessStartInfo(fileName),
+        };
+        foreach (var arg in args) process.StartInfo.ArgumentList.Add(arg);
+        if (environment != null)
+        {
+            foreach (var item in environment) process.StartInfo.Environment[item.Key] = item.Value;
+        }
+        if (!process.Start()) throw new InvalidOperationException($"Could not start {Path.GetFileName(fileName)}.");
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        process.WaitForExit();
+        return new CrossSaveProcessResult(process.ExitCode, await stdoutTask, await stderrTask);
+    }
+
+    private Dictionary<string, string> BuildCrossSaveToolEnvironment()
+    {
+        var env = BuildListenerEnvironment();
+        env["CS_TSHARK_PATH"] = tsharkPath;
+        var managedDir = GetConfiguredManagedDir();
+        if (IsManagedDir(managedDir)) env["CS_COUNTERSIDE_MANAGED_DIR"] = managedDir;
+        return env;
+    }
+
+    private void ValidateCrossSaveCaptureTool(string fileName, string toolName)
+    {
+        if (!File.Exists(fileName))
+        {
+            throw new FileNotFoundException($"{toolName} was not found. Install Wireshark with Npcap, or package runtime\\Wireshark with the launcher.", fileName);
+        }
+        EnsureCompatibleExecutable(toolName, fileName);
+    }
+
+    private List<string> GetCurrentCrossSaveCaptureFiles()
+    {
+        var captureDir = CrossSaveCaptureDir();
+        if (!Directory.Exists(captureDir)) return new List<string>();
+        var stamp = crossSaveCaptureStamp ?? FindLatestCrossSaveCaptureStamp();
+        if (string.IsNullOrWhiteSpace(stamp)) return new List<string>();
+        return Directory
+            .EnumerateFiles(captureDir, $"counterside-all-*-{stamp}.pcapng")
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private string FindLatestCrossSaveCaptureStamp()
+    {
+        var captureDir = CrossSaveCaptureDir();
+        if (!Directory.Exists(captureDir)) return "";
+        var regex = new Regex(@"counterside-all-\d+-.+-(\d{8}-\d{6})\.pcapng$", RegexOptions.IgnoreCase);
+        return Directory
+            .EnumerateFiles(captureDir, "counterside-all-*.pcapng")
+            .Select(path => new { Path = path, Match = regex.Match(Path.GetFileName(path)), LastWrite = File.GetLastWriteTimeUtc(path) })
+            .Where(item => item.Match.Success)
+            .OrderByDescending(item => item.LastWrite)
+            .Select(item => item.Match.Groups[1].Value)
+            .FirstOrDefault() ?? "";
+    }
+
+    private static bool ManifestHasJoinLobbyAck(string manifestPath)
+    {
+        if (!File.Exists(manifestPath)) return false;
+        using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+        if (!document.RootElement.TryGetProperty("server", out var serverPackets) || serverPackets.ValueKind != JsonValueKind.Array) return false;
+        return serverPackets.EnumerateArray().Any(entry => ReadJsonInt(entry, "packetId") == 205);
+    }
+
+    private async Task CopyCrossSaveExportToClipboardAsync(string filePath)
+    {
+        if (!File.Exists(filePath)) return;
+        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+        if (clipboard != null)
+        {
+            await clipboard.SetTextAsync(File.ReadAllText(filePath, Encoding.UTF8));
+        }
+    }
+
+    private void RefreshCrossSaveSources()
+    {
+        try
+        {
+            EnsureRuntimeLayout();
+            crossSaveSources = LoadCrossSaveSources();
+            crossSaveSourceInput.ItemsSource = null;
+            crossSaveSourceInput.ItemsSource = crossSaveSources;
+            crossSaveSourceInput.SelectedIndex = crossSaveSources.Count > 0 ? 0 : -1;
+            crossSaveStatusText.Text = crossSaveSources.Count == 1
+                ? "1 official lobby packet found"
+                : $"{crossSaveSources.Count:N0} official lobby packets found";
+            if (crossSaveSources.Count == 0)
+            {
+                crossSaveDetailsText.Text = $"No JOIN_LOBBY_ACK packets were found in {CrossSaveCaptureDir()}.";
+                crossSaveResultBox.Text = "";
+            }
+            else
+            {
+                AppendLog($"Cross Save sources refreshed: {crossSaveSources.Count:N0} official lobby packet(s).");
+            }
+        }
+        catch (Exception ex)
+        {
+            crossSaveSources = new List<CrossSaveSource>();
+            crossSaveSourceInput.ItemsSource = null;
+            crossSaveStatusText.Text = "Cross Save sources unavailable";
+            crossSaveDetailsText.Text = ex.Message;
+            crossSaveResultBox.Text = "";
+            AppendLog($"Cross Save refresh failed: {ex.Message}");
+        }
+        UpdateCrossSaveSourceDetails();
+    }
+
+    private List<CrossSaveSource> LoadCrossSaveSources()
+    {
+        return LoadCrossSaveSources(CrossSaveCaptureDir());
+    }
+
+    private List<CrossSaveSource> LoadCrossSaveSources(string captureDir)
+    {
+        captureDir = Path.GetFullPath(captureDir);
+        var manifestPath = Path.Combine(captureDir, "manifest.json");
+        if (!File.Exists(manifestPath)) return new List<CrossSaveSource>();
+
+        using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+        if (!document.RootElement.TryGetProperty("server", out var serverPackets) || serverPackets.ValueKind != JsonValueKind.Array)
+        {
+            return new List<CrossSaveSource>();
+        }
+
+        var sources = new List<CrossSaveSource>();
+        var index = 0;
+        foreach (var entry in serverPackets.EnumerateArray())
+        {
+            index += 1;
+            if (ReadJsonInt(entry, "packetId") != 205) continue;
+            var payloadFile = ReadJsonString(entry, "payloadFile");
+            if (string.IsNullOrWhiteSpace(payloadFile)) continue;
+            var payloadPath = Path.GetFullPath(Path.Combine(captureDir, payloadFile));
+            if (!IsPathInside(captureDir, payloadPath) || !File.Exists(payloadPath)) continue;
+            var payloadSize = ReadJsonLong(entry, "payloadSize");
+            if (payloadSize <= 0) payloadSize = new FileInfo(payloadPath).Length;
+            sources.Add(new CrossSaveSource(
+                Id: $"server:{index}",
+                Index: index,
+                PayloadFile: payloadFile,
+                PayloadSizeBytes: payloadSize,
+                Compressed: ReadJsonBool(entry, "compressed"),
+                Stream: ReadJsonInt(entry, "stream"),
+                Frame: ReadJsonInt(entry, "frame"),
+                CaptureTimeSeconds: ReadJsonDouble(entry, "time"),
+                Sha256: ReadJsonString(entry, "sha256")));
+        }
+
+        sources.Sort((left, right) => right.Index.CompareTo(left.Index));
+        return sources;
+    }
+
+    private void UpdateCrossSaveSourceDetails()
+    {
+        var source = crossSaveSourceInput.SelectedItem as CrossSaveSource;
+        importCrossSaveButton.IsEnabled = source != null;
+        if (source == null)
+        {
+            if (crossSaveSources.Count > 0) crossSaveDetailsText.Text = "Select a JOIN_LOBBY_ACK source to import.";
+            return;
+        }
+        crossSaveStatusText.Text = $"Selected {source.Id}";
+        crossSaveDetailsText.Text =
+            $"{source.PayloadFile} | {FormatBytes(source.PayloadSizeBytes)} | frame {source.Frame} | {FormatCaptureTime(source.CaptureTimeSeconds)} | {ShortHash(source.Sha256)}";
+    }
+
+    private async Task ImportCrossSaveProfileAsync()
+    {
+        SaveSettingsFromUi();
+        EnsureRuntimeLayout();
+        ValidateCrossSaveRuntimeLayout();
+        if (crossSaveSources.Count == 0) RefreshCrossSaveSources();
+        var source = crossSaveSourceInput.SelectedItem as CrossSaveSource ?? crossSaveSources.FirstOrDefault();
+        if (source == null) throw new InvalidOperationException("No captured official JOIN_LOBBY_ACK source is available.");
+        if (!IsManagedDir(GetConfiguredManagedDir()) && !await DetectManagedAssemblyAsync(showMessage: false))
+        {
+            throw new InvalidOperationException("Select CounterSide Data\\Managed\\Assembly-CSharp.dll before importing Cross Save.");
+        }
+        var gameplayAssets = await EnsureGameplayAssetCacheAsync(force: false);
+        AppendLog($"Cross Save gameplay cache ready: {gameplayAssets.CachedLuaCount:N0} luac files.");
+        var result = await RunCrossSaveImportProcessAsync(source, gameplayAssets, CrossSaveCaptureDir(), "");
+        crossSaveResultBox.Text = result.PrettyJson;
+        crossSaveStatusText.Text = $"Imported {result.Nickname}";
+        crossSaveDetailsText.Text = $"Local UID {result.UserUid} | official UID {result.OfficialUserUid} | active {result.ActiveUserUid}";
+        AppendLog($"Cross Save imported {result.Nickname} as local UID {result.UserUid}.");
+        if (listenerProcess is { HasExited: false }) await ReloadRunningUserManagerAsync();
+    }
+
+    private async Task<CrossSaveImportResult> RunCrossSaveImportProcessAsync(CrossSaveSource source, GameplayAssetStatus gameplayAssets, string captureDir, string copyToPath)
+    {
+        using var logWriter = OpenProcessLog("cross-save-import", out var logPath);
+        AppendLog($"Cross Save import started from {source.Id}.");
+        AppendLog($"Cross Save log: {logPath}");
+        var process = new Process
+        {
+            StartInfo = CreateCrossSaveImportStartInfo(source, gameplayAssets, captureDir, copyToPath),
+        };
+        foreach (var item in BuildListenerEnvironment()) process.StartInfo.Environment[item.Key] = item.Value;
+        process.StartInfo.Environment["CS_COUNTERSIDE_MANAGED_DIR"] = gameplayAssets.ManagedDir;
+        process.StartInfo.Environment["CS_GAMEPLAY_TABLES_DIR"] = gameplayAssets.CacheRoot;
+        process.StartInfo.Environment["CS_TSHARK_PATH"] = tsharkPath;
+
+        if (!process.Start()) throw new InvalidOperationException("Could not start Cross Save importer.");
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        process.WaitForExit();
+        var stdout = await stdoutTask;
+        var stderr = await stderrTask;
+        WriteProcessOutput(logWriter, stderr);
+        WriteProcessOutput(logWriter, stdout);
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"Cross Save import failed with exit code {process.ExitCode}. See {logPath}");
+        }
+        return ParseCrossSaveImportResult(stdout);
+    }
+
+    private ProcessStartInfo CreateCrossSaveImportStartInfo(CrossSaveSource source, GameplayAssetStatus gameplayAssets, string captureDir, string copyToPath)
+    {
+        var script = Path.Combine(appRoot, "tools", "import-official-join-lobby-profile.js");
+        var usersPath = Path.Combine(appRoot, "server-data", "users.json");
+        var startInfo = CreateHiddenProcessStartInfo(nodePath);
+        startInfo.ArgumentList.Add(script);
+        startInfo.ArgumentList.Add("--capture-dir");
+        startInfo.ArgumentList.Add(captureDir);
+        startInfo.ArgumentList.Add("--user-db");
+        startInfo.ArgumentList.Add(usersPath);
+        if (!string.IsNullOrWhiteSpace(copyToPath))
+        {
+            startInfo.ArgumentList.Add("--copy-to");
+            startInfo.ArgumentList.Add(copyToPath);
+        }
+        startInfo.ArgumentList.Add("--managed-dir");
+        startInfo.ArgumentList.Add(gameplayAssets.ManagedDir);
+        startInfo.ArgumentList.Add("--gameplay-tables-dir");
+        startInfo.ArgumentList.Add(gameplayAssets.CacheRoot);
+        startInfo.ArgumentList.Add("--source-id");
+        startInfo.ArgumentList.Add(source.Id);
+        if (crossSaveSwitchActiveInput.IsChecked == true) startInfo.ArgumentList.Add("--switch-active");
+        if (crossSaveUpdateExistingInput.IsChecked == true) startInfo.ArgumentList.Add("--update-existing");
+        if (crossSavePreserveUidInput.IsChecked == true) startInfo.ArgumentList.Add("--preserve-official-uid");
+        if (crossSavePreserveFriendCodeInput.IsChecked == true) startInfo.ArgumentList.Add("--preserve-official-friend-code");
+        var combatHost = ResolveCrossSaveCombatHostPath();
+        if (!string.IsNullOrWhiteSpace(combatHost))
+        {
+            startInfo.ArgumentList.Add("--combat-host");
+            startInfo.ArgumentList.Add(combatHost);
+        }
+        return startInfo;
+    }
+
+    private void ValidateCrossSaveRuntimeLayout()
+    {
+        RequireRuntimeFile(Path.Combine("tools", "extract-cs-pcap-fixtures.js"), "pcap extract helper");
+        RequireRuntimeFile(Path.Combine("tools", "import-official-join-lobby-profile.js"), "official profile import helper");
+        RequireRuntimeFile(Path.Combine("server", "userManager.js"), "user manager profile helper");
+        RequireRuntimeDirectory(Path.Combine("modules", "official-profile-import"), "official profile import module");
+        RequireRuntimeDirectory("combat-handler", "combat handler");
+        if (!File.Exists(Path.Combine(appRoot, "combat-host", "CombatHost.exe")) && !File.Exists(Path.Combine(appRoot, "combat-host", "CombatHost.dll")) && !File.Exists(Path.Combine(appRoot, "combat-host", "CombatHost.csproj")))
+        {
+            throw new DirectoryNotFoundException($"combat-host was not found under {Path.Combine(appRoot, "combat-host")}");
+        }
+    }
+
+    private string ResolveCrossSaveCombatHostPath()
+    {
+        var candidates = new[]
+        {
+            Path.Combine(appRoot, "combat-host", "CombatHost.exe"),
+            Path.Combine(appRoot, "combat-host", "CombatHost.dll"),
+        };
+        return candidates.FirstOrDefault(File.Exists) ?? "";
+    }
+
+    private CrossSaveImportResult ParseCrossSaveImportResult(string stdout)
+    {
+        using var document = JsonDocument.Parse(ExtractJsonObject(stdout));
+        var pretty = JsonSerializer.Serialize(document.RootElement, new JsonSerializerOptions { WriteIndented = true });
+        var user = document.RootElement.TryGetProperty("user", out var userElement) ? userElement : default;
+        return new CrossSaveImportResult(
+            PrettyJson: pretty,
+            UserUid: ReadJsonString(user, "userUid"),
+            OfficialUserUid: ReadJsonString(user, "officialUserUid"),
+            Nickname: ReadJsonString(user, "nickname") is { Length: > 0 } nickname ? nickname : "official profile",
+            ActiveUserUid: ReadJsonString(document.RootElement, "activeUserUid"));
+    }
+
+    private static string ExtractJsonObject(string text)
+    {
+        var trimmed = (text ?? "").Trim();
+        var start = trimmed.IndexOf('{');
+        var end = trimmed.LastIndexOf('}');
+        if (start < 0 || end <= start) throw new InvalidOperationException("Cross Save importer did not return JSON.");
+        return trimmed[start..(end + 1)];
+    }
+
+    private async Task ReloadRunningUserManagerAsync()
+    {
+        try
+        {
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+            await client.PostAsync($"http://127.0.0.1:{settings.HttpPort}/user-manager/api/reload", new StringContent("{}", Encoding.UTF8, "application/json"));
+            AppendLog("Running listener profile database reloaded.");
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"Running listener reload skipped: {ex.Message}");
+        }
+    }
+
+    private void WriteProcessOutput(StreamWriter writer, string text)
+    {
+        foreach (var line in (text ?? "").SplitLines())
+        {
+            WriteProcessLog(writer, line);
+            AppendLog(line);
+        }
+    }
+
+    private string CrossSaveCaptureDir()
+    {
+        var configured = (crossSaveCaptureDirBox.Text ?? settings.CrossSaveCaptureDir ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(configured) || IsLegacyCrossSaveSourceDir(configured)) return DefaultCrossSaveCaptureDir();
+        var expanded = Environment.ExpandEnvironmentVariables(configured.Trim('"')).Replace('/', Path.DirectorySeparatorChar);
+        return Path.GetFullPath(Path.IsPathFullyQualified(expanded) ? expanded : Path.Combine(appRoot, expanded));
+    }
+
+    private string DefaultCrossSaveCaptureDir() => Path.Combine(appRoot, "captures");
+
+    private string CrossSaveExtractRootDir() => Path.Combine(appRoot, "server-data", "capture-extracts");
+
+    private string CrossSaveExportsDir() => Path.Combine(appRoot, "exports");
+
+    private bool IsLegacyCrossSaveSourceDir(string directory)
+    {
+        try
+        {
+            var fullPath = Path.GetFullPath(Path.IsPathFullyQualified(directory) ? directory : Path.Combine(appRoot, directory));
+            return fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                .EndsWith(Path.Combine("server-data", "captured-game-flow"), StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private void RunHostsPatch(bool remove)
     {
         var script = Path.Combine(appRoot, "tools", "patch-hosts.ps1");
@@ -965,6 +2153,71 @@ internal sealed class LauncherWindow : Window
         process.Start();
         AppendLog(remove ? "Hosts unpatch requested." : "Hosts patch requested.");
     }
+
+    private async Task EnsureClientPatchAsync()
+    {
+        var managedDir = RequireConfiguredManagedDir();
+        using var logWriter = OpenProcessLog("client-patch", out var logPath);
+        AppendLog("Checking CounterSide client patch...");
+        AppendLog($"Client patch log: {logPath}");
+
+        using var process = new Process
+        {
+            StartInfo = CreateClientPatchStartInfo(managedDir),
+        };
+        foreach (var item in BuildListenerEnvironment()) process.StartInfo.Environment[item.Key] = item.Value;
+        process.StartInfo.Environment["CS_COUNTERSIDE_MANAGED_DIR"] = managedDir;
+        process.OutputDataReceived += (_, e) => { if (e.Data != null) AppendProcessLog(logWriter, e.Data); };
+        process.ErrorDataReceived += (_, e) => { if (e.Data != null) AppendProcessLog(logWriter, e.Data); };
+        if (!process.Start()) throw new InvalidOperationException("Could not start CounterSide client patcher.");
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+        await process.WaitForExitAsync();
+        process.WaitForExit();
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"CounterSide client patch failed with exit code {process.ExitCode}. Close CounterSide, run the launcher as administrator if needed, then retry. See {logPath}");
+        }
+        AppendLog("CounterSide client patch ready.");
+    }
+
+    private ProcessStartInfo CreateClientPatchStartInfo(string managedDir)
+    {
+        var packagedPatcher = Path.Combine(appRoot, "tools", "CounterPassClientPatcher", "CounterPassClientPatcher.exe");
+        if (File.Exists(packagedPatcher))
+        {
+            var startInfo = CreateHiddenProcessStartInfo(packagedPatcher);
+            startInfo.ArgumentList.Add("--managed-dir");
+            startInfo.ArgumentList.Add(managedDir);
+            return startInfo;
+        }
+
+        var sourceProject = Path.Combine(appRoot, "tools", "CounterPassClientPatcher", "CounterPassClientPatcher.csproj");
+        if (File.Exists(sourceProject))
+        {
+            var startInfo = CreateHiddenProcessStartInfo("dotnet");
+            startInfo.ArgumentList.Add("run");
+            startInfo.ArgumentList.Add("--project");
+            startInfo.ArgumentList.Add(sourceProject);
+            startInfo.ArgumentList.Add("--");
+            startInfo.ArgumentList.Add("--managed-dir");
+            startInfo.ArgumentList.Add(managedDir);
+            return startInfo;
+        }
+
+        throw new FileNotFoundException("CounterSide client patcher was not found.", packagedPatcher);
+    }
+
+    private ProcessStartInfo CreateHiddenProcessStartInfo(string fileName) => new()
+    {
+        FileName = fileName,
+        WorkingDirectory = appRoot,
+        UseShellExecute = false,
+        RedirectStandardOutput = true,
+        RedirectStandardError = true,
+        CreateNoWindow = true,
+    };
 
     private async Task SetServerTimeAsync()
     {
@@ -1027,6 +2280,23 @@ internal sealed class LauncherWindow : Window
         var env = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         PrependPath(env, Path.GetDirectoryName(npmPath));
         PrependPath(env, Path.GetDirectoryName(nodePath));
+        var bundledPython = ResolveBundledPythonPath();
+        if (!string.IsNullOrWhiteSpace(bundledPython))
+        {
+            env["CS_PYTHON_PATH"] = bundledPython;
+            PrependPath(env, Path.GetDirectoryName(bundledPython));
+        }
+
+        env["CS_PORT"] = settings.GamePort.ToString(CultureInfo.InvariantCulture);
+        env["CS_HTTP_MIRROR_PORT"] = settings.HttpPort.ToString(CultureInfo.InvariantCulture);
+        env["CS_EVENT_DATE"] = settings.EventDate.Trim();
+        if (!string.IsNullOrWhiteSpace(settings.EventDate)) env["CS_EVENT_MANAGER"] = "auto";
+        env["CS_USE_LOCAL_JOIN_LOBBY_ACK"] = NormalizeJoinLobbyMode(settings.JoinLobbyAckMode);
+        env["CS_USER_MANAGER_ALLOW_REMOTE"] = settings.UserManagerAllowRemote ? "1" : "0";
+        env["CS_VERBOSE_CAPTURE"] = settings.VerboseCapture ? "1" : "0";
+        env["CS_REPLAY_CAPTURED_GAME_FLOW"] = settings.ReplayCapturedGameFlow ? "1" : "0";
+        env["CS_SKIP_TUTORIAL_TO_WIN"] = settings.SkipTutorialToWin ? "1" : "0";
+        env["CS_RESET_TUTORIAL_PROGRESS_ON_LOGIN"] = settings.ResetTutorialOnLogin ? "1" : "0";
 
         var packagedCombatHost = Path.Combine(appRoot, "combat-host", "CombatHost.exe");
         var sourceCombatProject = Path.Combine(appRoot, "combat-host", "CombatHost.csproj");
@@ -1035,8 +2305,12 @@ internal sealed class LauncherWindow : Window
             env["CS_CSHARP_COMBAT_HOST_DLL"] = packagedCombatHost;
             env["CS_COMBAT_HOST_PATH"] = packagedCombatHost;
         }
-        if (IsManagedDir(settings.CounterSideManagedDir)) env["CS_COUNTERSIDE_MANAGED_DIR"] = settings.CounterSideManagedDir;
         ApplyAdvancedEnvironment(env, settings.AdvancedEnvText);
+        ApplyAuthoritativeManagedEnvironment(env);
+        if (IsManagedDir(GetConfiguredManagedDir()))
+        {
+            env["CS_GAMEPLAY_TABLES_DIR"] = GameplayLuaCacheDir();
+        }
         return env;
     }
 
@@ -1062,13 +2336,16 @@ internal sealed class LauncherWindow : Window
     private static void PrependPath(Dictionary<string, string> env, string? directory)
     {
         if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory)) return;
-        var current = Environment.GetEnvironmentVariable("PATH") ?? "";
+        var pathKey = OperatingSystem.IsWindows() ? "Path" : "PATH";
+        var current = env.TryGetValue(pathKey, out var existing)
+            ? existing
+            : Environment.GetEnvironmentVariable(pathKey) ?? Environment.GetEnvironmentVariable("PATH") ?? "";
         var prefix = directory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         var alreadyPresent = current
             .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Any(item => item.Trim('"').TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Equals(prefix, StringComparison.OrdinalIgnoreCase));
         if (alreadyPresent) return;
-        env["PATH"] = string.IsNullOrWhiteSpace(current) ? prefix : $"{prefix}{Path.PathSeparator}{current}";
+        env[pathKey] = string.IsNullOrWhiteSpace(current) ? prefix : $"{prefix}{Path.PathSeparator}{current}";
     }
 
     private void EnsureRuntimeLayout()
@@ -1077,6 +2354,9 @@ internal sealed class LauncherWindow : Window
         Directory.CreateDirectory(Path.Combine(appRoot, "server-data", "captured-flows"));
         Directory.CreateDirectory(Path.Combine(appRoot, "server-data", "captured-tcp"));
         Directory.CreateDirectory(Path.Combine(appRoot, "server-data", "captured-game-flow"));
+        Directory.CreateDirectory(CrossSaveCaptureDir());
+        Directory.CreateDirectory(CrossSaveExtractRootDir());
+        Directory.CreateDirectory(CrossSaveExportsDir());
         Directory.CreateDirectory(LogsDir());
         var usersPath = Path.Combine(appRoot, "server-data", "users.json");
         if (!File.Exists(usersPath))
@@ -1099,6 +2379,10 @@ internal sealed class LauncherWindow : Window
         RequireRuntimeFile("cs-listener.js", "listener entry");
         RequireRuntimeFile("package.json", "npm package manifest");
         RequireRuntimeFile("packet-schema.json", "packet schema");
+        RequireRuntimeFile(Path.Combine("tools", "ensure-gameplay-assets.js"), "gameplay asset cache helper");
+        RequireRuntimeFile(Path.Combine("tools", "ensure-wiki-assets.js"), "wiki image asset cache helper");
+        RequireRuntimeFile(Path.Combine("tools", "cs_asset_decrypt.py"), "CounterSide asset decrypt helper");
+        RequireRuntimeFile(Path.Combine("tools", "cs_extract_decrypted_assets.py"), "CounterSide asset extract helper");
         RequireRuntimeFile(Path.Combine("server-data", "captured-flows", "manifest.json"), "HTTP captured mirror manifest");
         RequireRuntimeDirectory("server", "listener server");
         RequireRuntimeDirectory("packet-handlers", "packet handlers");
@@ -1123,120 +2407,395 @@ internal sealed class LauncherWindow : Window
         if (!Directory.Exists(path)) throw new DirectoryNotFoundException($"{name} was not found: {path}");
     }
 
-    private async Task VerifyGameplayJsonsAsync()
+    private async Task VerifyGameplayAssetsAsync()
     {
-        var status = await Task.Run(VerifyGameplayJsonsReady);
-        AppendLog($"Gameplay JSONs verified: {status.FileCount:N0} files at {status.Path}");
+        SaveSettingsFromUi();
+        await EnsureAssetBuildDependenciesAsync();
+        var status = await Task.Run(VerifyGameplayAssetsReady);
+        AppendLog($"Gameplay assets verified: {status.Description}");
     }
 
-    private async Task InstallGameplayJsonsAsync()
+    private async Task BuildGameplayAssetsAsync()
     {
-        var topLevel = TopLevel.GetTopLevel(this);
-        if (topLevel == null) return;
-        var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        SaveSettingsFromUi();
+        await EnsureAssetBuildDependenciesAsync();
+        if (!IsManagedDir(GetConfiguredManagedDir()) && !await DetectManagedAssemblyAsync(showMessage: false))
         {
-            Title = "Choose a complete gameplay-jsons folder to install into this launcher.",
-            AllowMultiple = false,
-        });
-        var source = folders.FirstOrDefault()?.TryGetLocalPath();
-        if (string.IsNullOrWhiteSpace(source)) return;
-
-        var sourceStatus = ValidateGameplayJsonsDirectory(source);
-        var destination = GameplayJsonsDir();
-        if (SamePath(source, destination))
-        {
-            gameplayDataStatusText.Text = $"{sourceStatus.FileCount:N0} files";
-            AppendLog($"Gameplay JSONs already installed: {sourceStatus.FileCount:N0} files at {sourceStatus.Path}");
-            return;
+            throw new InvalidOperationException("Select CounterSide Data\\Managed\\Assembly-CSharp.dll before building the gameplay asset cache.");
         }
-        AppendLog($"Installing gameplay JSONs from {sourceStatus.Path}");
-        await Task.Run(() => CopyGameplayJsonsDirectory(sourceStatus.Path, destination));
-        var installed = VerifyGameplayJsonsReady();
-        AppendLog($"Gameplay JSONs installed: {installed.FileCount:N0} files at {installed.Path}");
+        var status = await EnsureGameplayAssetCacheAsync(force: true);
+        AppendLog($"Gameplay asset cache rebuilt: {status.CachedLuaCount:N0} luac files at {status.CacheRoot}");
     }
 
-    private GameplayJsonStatus VerifyGameplayJsonsReady()
+    private void RefreshGameplayAssetStatus(bool log)
     {
-        var status = ValidateGameplayJsonsDirectory(GameplayJsonsDir());
-        Dispatcher.UIThread.Post(() => gameplayDataStatusText.Text = $"{status.FileCount:N0} files");
-        return status;
-    }
-
-    private static GameplayJsonStatus ValidateGameplayJsonsDirectory(string directory)
-    {
-        var full = Path.GetFullPath(directory);
-        if (!Directory.Exists(full)) throw new DirectoryNotFoundException($"gameplay-jsons was not found: {full}");
-        var assetbundles = Path.Combine(full, "Assetbundles");
-        var streamingAssets = Path.Combine(full, "StreamingAssets");
-        var defaults = Path.Combine(full, "new-account-defaults.json");
-        if (!Directory.Exists(assetbundles)) throw new DirectoryNotFoundException($"gameplay-jsons is missing Assetbundles: {assetbundles}");
-        if (!Directory.Exists(streamingAssets)) throw new DirectoryNotFoundException($"gameplay-jsons is missing StreamingAssets: {streamingAssets}");
-        if (!File.Exists(defaults)) throw new FileNotFoundException("gameplay-jsons is missing new-account-defaults.json.", defaults);
-        var fileCount = CountFiles(full);
-        if (fileCount < 1000) throw new InvalidOperationException($"gameplay-jsons looks incomplete: only {fileCount:N0} files were found at {full}");
-        return new GameplayJsonStatus(full, fileCount);
-    }
-
-    private void CopyGameplayJsonsDirectory(string source, string destination)
-    {
-        var fullSource = Path.GetFullPath(source);
-        var fullDestination = Path.GetFullPath(destination);
-        EnsurePathUnderAppRoot(fullDestination);
-
-        var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-        var temp = Path.Combine(appRoot, $".gameplay-jsons.install.{stamp}");
-        var backup = Path.Combine(appRoot, $"gameplay-jsons.backup.{stamp}");
         try
         {
-            CopyDirectoryRecursive(fullSource, temp);
-            ValidateGameplayJsonsDirectory(temp);
-            if (Directory.Exists(fullDestination)) Directory.Move(fullDestination, backup);
-            Directory.Move(temp, fullDestination);
-            ValidateGameplayJsonsDirectory(fullDestination);
-            if (Directory.Exists(backup)) Directory.Delete(backup, recursive: true);
+            var status = VerifyGameplayAssetsReady();
+            if (log) AppendLog($"Gameplay assets: {status.Description}");
+        }
+        catch (Exception ex)
+        {
+            SetGameplayAssetStatus("Needs CounterSide");
+            if (log) AppendLog($"Gameplay assets not ready: {ex.Message}");
+        }
+    }
+
+    private GameplayAssetStatus VerifyGameplayAssetsReady()
+    {
+        var managedDir = RequireConfiguredManagedDir();
+        var scriptRoots = FindCounterSideScriptBundleRoots(managedDir);
+        var scriptBundleCount = scriptRoots.Sum(CountScriptBundles);
+        if (scriptBundleCount <= 0)
+        {
+            throw new DirectoryNotFoundException($"No encrypted ab_script bundles were found from {managedDir}.");
+        }
+        var cacheRoot = GameplayLuaCacheDir();
+        var cachedLuaCount = CountLuaCacheFiles(cacheRoot);
+        var cacheText = cachedLuaCount > 0 ? $"{cachedLuaCount:N0} luac" : "cache pending";
+        var statusText = $"{scriptBundleCount:N0} bundles / {cacheText}";
+        SetGameplayAssetStatus(statusText);
+        return new GameplayAssetStatus(managedDir, scriptBundleCount, cacheRoot, cachedLuaCount, statusText);
+    }
+
+    private async Task<GameplayAssetStatus> EnsureGameplayAssetCacheAsync(bool force)
+    {
+        var status = VerifyGameplayAssetsReady();
+        var script = Path.Combine(appRoot, "tools", "ensure-gameplay-assets.js");
+        if (!File.Exists(script)) throw new FileNotFoundException("Gameplay asset cache helper was not found.", script);
+        if (Path.IsPathFullyQualified(nodePath) && !File.Exists(nodePath)) throw new FileNotFoundException("node.exe was not found.", nodePath);
+
+        var logWriter = OpenProcessLog("gameplay-assets", out var logPath);
+        AppendLog(force ? "Rebuilding gameplay asset cache from installed encrypted assets..." : "Checking gameplay asset cache from installed encrypted assets...");
+        AppendLog($"Gameplay asset log: {logPath}");
+        SetGameplayAssetProgress("Checking installed gameplay assets...", 0, 1, indeterminate: true);
+        Exception? lastError = null;
+        var attemptForce = force;
+        try
+        {
+            for (var attempt = 1; attempt <= 2; attempt++)
+            {
+                try
+                {
+                    await RunGameplayAssetCacheHelperAsync(script, status, attemptForce, logWriter);
+                    lastError = null;
+                    break;
+                }
+                catch (Exception ex) when (attempt == 1)
+                {
+                    lastError = ex;
+                    AppendProcessLog(logWriter, $"Gameplay asset cache helper failed once: {ex.Message}");
+                    if (!ClearGameplayAssetCacheForRetry(logWriter)) throw;
+                    attemptForce = true;
+                    SetGameplayAssetProgress("Rebuilding gameplay cache after stale cache cleanup...", 0, 1, indeterminate: true);
+                    AppendProcessLog(logWriter, "Retrying gameplay asset cache helper after deleting stale cache.");
+                }
+            }
+            if (lastError != null) throw lastError;
         }
         catch
         {
-            if (Directory.Exists(temp)) Directory.Delete(temp, recursive: true);
-            if (!Directory.Exists(fullDestination) && Directory.Exists(backup)) Directory.Move(backup, fullDestination);
+            SetGameplayAssetProgress("Gameplay cache failed. See logs.", 0, 1, indeterminate: false);
             throw;
         }
+        finally
+        {
+            CloseProcessLog(logWriter);
+        }
+        var verified = VerifyGameplayAssetsReady();
+        SetGameplayAssetProgress($"Gameplay cache ready: {verified.CachedLuaCount:N0} luac files", 1, 1, indeterminate: false);
+        return verified;
     }
 
-    private void EnsurePathUnderAppRoot(string path)
+    private async Task RunGameplayAssetCacheHelperAsync(string script, GameplayAssetStatus status, bool force, StreamWriter logWriter)
     {
-        var root = Path.GetFullPath(appRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        var full = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
-        if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+        using var process = new Process
         {
-            throw new InvalidOperationException($"Refusing to replace a folder outside the RevivalSide install directory: {path}");
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = nodePath,
+                WorkingDirectory = appRoot,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+            },
+        };
+        process.StartInfo.ArgumentList.Add(script);
+        process.StartInfo.ArgumentList.Add("--managed-dir");
+        process.StartInfo.ArgumentList.Add(status.ManagedDir);
+        process.StartInfo.ArgumentList.Add("--progress-json");
+        if (force) process.StartInfo.ArgumentList.Add("--force");
+        foreach (var item in BuildListenerEnvironment()) process.StartInfo.Environment[item.Key] = item.Value;
+        process.OutputDataReceived += (_, e) => { if (e.Data != null) HandleGameplayAssetOutput(logWriter, e.Data); };
+        process.ErrorDataReceived += (_, e) => { if (e.Data != null) HandleGameplayAssetOutput(logWriter, e.Data); };
+        if (!process.Start()) throw new InvalidOperationException("Could not start gameplay asset cache helper.");
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+        await process.WaitForExitAsync();
+        process.WaitForExit();
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"Gameplay asset cache helper failed with exit code {process.ExitCode}.");
         }
     }
 
-    private static void CopyDirectoryRecursive(string source, string destination)
+    private async Task<WikiAssetStatus> EnsureWikiAssetCacheAsync(bool force)
     {
-        if (Directory.Exists(destination)) Directory.Delete(destination, recursive: true);
-        Directory.CreateDirectory(destination);
-        foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
+        var managedDir = RequireConfiguredManagedDir();
+        var script = Path.Combine(appRoot, "tools", "ensure-wiki-assets.js");
+        if (!File.Exists(script)) throw new FileNotFoundException("Wiki image asset cache helper was not found.", script);
+        if (Path.IsPathFullyQualified(nodePath) && !File.Exists(nodePath)) throw new FileNotFoundException("node.exe was not found.", nodePath);
+
+        var logWriter = OpenProcessLog("wiki-assets", out var logPath);
+        AppendLog(force ? "Rebuilding wiki image cache from installed encrypted assets..." : "Checking wiki image cache from installed encrypted assets...");
+        AppendLog($"Wiki image asset log: {logPath}");
+        using var process = new Process
         {
-            Directory.CreateDirectory(Path.Combine(destination, Path.GetRelativePath(source, directory)));
+            StartInfo = new ProcessStartInfo
+            {
+                FileName = nodePath,
+                WorkingDirectory = appRoot,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+            },
+        };
+        process.StartInfo.ArgumentList.Add(script);
+        process.StartInfo.ArgumentList.Add("--managed-dir");
+        process.StartInfo.ArgumentList.Add(managedDir);
+        if (force) process.StartInfo.ArgumentList.Add("--force");
+        foreach (var item in BuildListenerEnvironment()) process.StartInfo.Environment[item.Key] = item.Value;
+        process.OutputDataReceived += (_, e) => { if (e.Data != null) AppendProcessLog(logWriter, e.Data); };
+        process.ErrorDataReceived += (_, e) => { if (e.Data != null) AppendProcessLog(logWriter, e.Data); };
+        try
+        {
+            if (!process.Start()) throw new InvalidOperationException("Could not start wiki image asset cache helper.");
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            await process.WaitForExitAsync();
+            process.WaitForExit();
+            if (process.ExitCode != 0)
+            {
+                throw new InvalidOperationException($"Wiki image asset cache helper failed with exit code {process.ExitCode}. See {logPath}");
+            }
         }
-        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+        finally
         {
-            var target = Path.Combine(destination, Path.GetRelativePath(source, file));
-            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            File.Copy(file, target, overwrite: true);
+            CloseProcessLog(logWriter);
+        }
+        return VerifyWikiAssetsReady();
+    }
+
+    private WikiAssetStatus VerifyWikiAssetsReady()
+    {
+        var cacheRoot = WikiAssetCacheDir();
+        return new WikiAssetStatus(cacheRoot, CountPngFiles(cacheRoot));
+    }
+
+    private void SetGameplayAssetStatus(string text)
+    {
+        Dispatcher.UIThread.Post(() => gameplayDataStatusText.Text = text);
+    }
+
+    private bool ClearGameplayAssetCacheForRetry(StreamWriter writer)
+    {
+        try
+        {
+            var cacheRoot = GameplayLuaCacheDir();
+            if (!IsPathUnderAppRoot(cacheRoot)) throw new InvalidOperationException($"Refusing to delete cache outside app root: {cacheRoot}");
+            DeleteDirectoryIfExists(cacheRoot);
+
+            var parent = Path.GetDirectoryName(cacheRoot) ?? "";
+            var baseName = Path.GetFileName(cacheRoot);
+            if (Directory.Exists(parent) && IsPathUnderAppRoot(parent))
+            {
+                foreach (var directory in Directory.EnumerateDirectories(parent, $".{baseName}.*", SearchOption.TopDirectoryOnly))
+                {
+                    if (IsPathUnderAppRoot(directory)) DeleteDirectoryIfExists(directory);
+                }
+            }
+            AppendProcessLog(writer, $"Deleted stale gameplay asset cache: {cacheRoot}");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            AppendProcessLog(writer, $"Could not delete stale gameplay asset cache: {ex.Message}");
+            return false;
         }
     }
 
-    private static int CountFiles(string directory)
+    private void DeleteDirectoryIfExists(string directory)
     {
-        var count = 0;
-        foreach (var _ in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories)) count++;
-        return count;
+        if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
     }
 
-    private string GameplayJsonsDir() => Path.Combine(appRoot, "gameplay-jsons");
+    private bool IsPathUnderAppRoot(string path)
+    {
+        var root = Path.GetFullPath(appRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        var fullPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            + Path.DirectorySeparatorChar;
+        return fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void HandleGameplayAssetOutput(StreamWriter writer, string text)
+    {
+        if (TryParseGameplayAssetProgress(text, out var progress))
+        {
+            WriteProcessLog(writer, text);
+            SetGameplayAssetProgress(progress);
+            return;
+        }
+        AppendProcessLog(writer, text);
+    }
+
+    private void SetGameplayAssetProgress(GameplayCacheProgress progress)
+    {
+        var current = Math.Max(0, progress.Current);
+        var total = Math.Max(0, progress.Total);
+        var message = string.IsNullOrWhiteSpace(progress.Message) ? "Building gameplay cache..." : progress.Message;
+        var label = total > 1 ? $"{message} ({current:N0}/{total:N0})" : message;
+        var value = total > 0 ? Math.Min(100, Math.Max(0, current * 100d / total)) : 0;
+        SetGameplayAssetProgress(label, value, 100, indeterminate: total <= 0);
+    }
+
+    private void SetGameplayAssetProgress(string message, double current, double total, bool indeterminate)
+    {
+        var value = total > 0 ? Math.Min(100, Math.Max(0, current * 100d / total)) : 0;
+        Dispatcher.UIThread.Post(() =>
+        {
+            ApplyGameplayAssetProgress(dashboardGameplayProgressPanel, dashboardGameplayProgressBar, dashboardGameplayProgressText, message, value, indeterminate);
+            ApplyGameplayAssetProgress(settingsGameplayProgressPanel, settingsGameplayProgressBar, settingsGameplayProgressText, message, value, indeterminate);
+        });
+    }
+
+    private static void ApplyGameplayAssetProgress(Border? panel, ProgressBar bar, TextBlock text, string message, double value, bool indeterminate)
+    {
+        if (panel != null) panel.IsVisible = true;
+        text.Text = message;
+        bar.IsIndeterminate = indeterminate;
+        bar.Value = indeterminate ? 0 : value;
+    }
+
+    private static bool TryParseGameplayAssetProgress(string text, out GameplayCacheProgress progress)
+    {
+        const string Prefix = "[gameplay-assets:progress] ";
+        progress = new GameplayCacheProgress("", 0, 0, "");
+        if (!text.StartsWith(Prefix, StringComparison.Ordinal)) return false;
+        try
+        {
+            using var document = JsonDocument.Parse(text[Prefix.Length..]);
+            var root = document.RootElement;
+            progress = new GameplayCacheProgress(
+                TryGetJsonString(root, "phase"),
+                TryGetJsonInt(root, "current"),
+                TryGetJsonInt(root, "total"),
+                TryGetJsonString(root, "message"));
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string TryGetJsonString(JsonElement element, string name)
+    {
+        return element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String ? property.GetString() ?? "" : "";
+    }
+
+    private static int TryGetJsonInt(JsonElement element, string name)
+    {
+        if (!element.TryGetProperty(name, out var property)) return 0;
+        return property.ValueKind == JsonValueKind.Number && property.TryGetInt32(out var value) ? value : 0;
+    }
+
+    private string GameplayLuaCacheDir() => Path.Combine(appRoot, ".cache", "gameplay-luac");
+
+    private string WikiAssetCacheDir() => Path.Combine(appRoot, ".cache", "wiki-assets", "all");
+
+    private static IReadOnlyList<string> FindCounterSideScriptBundleRoots(string managedDir)
+    {
+        var dataDir = FindCounterSideDataDirFromManaged(managedDir);
+        var streamingAssets = string.IsNullOrWhiteSpace(dataDir) ? "" : Path.Combine(dataDir, "StreamingAssets");
+        var candidates = new[]
+        {
+            streamingAssets,
+            string.IsNullOrWhiteSpace(streamingAssets) ? "" : Path.Combine(streamingAssets, "Assetbundles"),
+            string.IsNullOrWhiteSpace(dataDir) ? "" : Path.Combine(dataDir, "Assetbundles"),
+        };
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<string>();
+        foreach (var candidate in candidates)
+        {
+            if (string.IsNullOrWhiteSpace(candidate) || !Directory.Exists(candidate) || CountScriptBundles(candidate) <= 0) continue;
+            var full = Path.GetFullPath(candidate);
+            if (seen.Add(full)) result.Add(full);
+        }
+        return result;
+    }
+
+    private static string FindCounterSideDataDirFromManaged(string managedDir)
+    {
+        var parent = Directory.GetParent(managedDir)?.FullName ?? "";
+        if (Path.GetFileName(managedDir).Equals("Managed", StringComparison.OrdinalIgnoreCase)
+            && Path.GetFileName(parent).Equals("Data", StringComparison.OrdinalIgnoreCase))
+        {
+            return parent;
+        }
+        var siblingData = string.IsNullOrWhiteSpace(parent) ? "" : Path.Combine(parent, "Data");
+        if (!string.IsNullOrWhiteSpace(siblingData) && Directory.Exists(siblingData)) return siblingData;
+        return parent;
+    }
+
+    private static string FindCounterSideRootDirFromManaged(string managedDir)
+    {
+        var dataDir = FindCounterSideDataDirFromManaged(managedDir);
+        if (string.IsNullOrWhiteSpace(dataDir)) return "";
+        if (Path.GetFileName(dataDir).Equals("Data", StringComparison.OrdinalIgnoreCase))
+        {
+            return Directory.GetParent(dataDir)?.FullName ?? "";
+        }
+        return dataDir;
+    }
+
+    private static int CountScriptBundles(string directory)
+    {
+        try
+        {
+            return Directory.EnumerateFiles(directory, "ab_script*", SearchOption.TopDirectoryOnly).Count();
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    private static int CountLuaCacheFiles(string directory)
+    {
+        try
+        {
+            return Directory.Exists(directory) ? Directory.EnumerateFiles(directory, "*.luac", SearchOption.AllDirectories).Count() : 0;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    private static int CountPngFiles(string directory)
+    {
+        try
+        {
+            return Directory.Exists(directory) ? Directory.EnumerateFiles(directory, "*.png", SearchOption.AllDirectories).Count() : 0;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
 
     private async Task BrowseManagedAssemblyAsync()
     {
@@ -1264,6 +2823,8 @@ internal sealed class LauncherWindow : Window
         managedDirBox.Text = normalized;
         SaveSettings();
         AppendLog($"CounterSide DLL selected: {normalized}");
+        RefreshGameplayAssetStatus(log: true);
+        _ = RefreshCutsceneBackgroundAsync(force: false);
     }
 
     private async Task<bool> DetectManagedAssemblyAsync(bool showMessage)
@@ -1275,6 +2836,8 @@ internal sealed class LauncherWindow : Window
             managedDirBox.Text = detected;
             SaveSettings();
             AppendLog($"CounterSide DLL detected: {detected}");
+            RefreshGameplayAssetStatus(log: true);
+            _ = RefreshCutsceneBackgroundAsync(force: false);
             return true;
         }
         if (showMessage)
@@ -1390,6 +2953,39 @@ internal sealed class LauncherWindow : Window
         }
     }
 
+    private void ApplyAuthoritativeManagedEnvironment(Dictionary<string, string> env)
+    {
+        foreach (var key in ManagedPathEnvironmentKeys) env[key] = "";
+        foreach (var key in GameplayTableOverrideEnvironmentKeys) env[key] = "";
+
+        var managedDir = GetConfiguredManagedDir();
+        if (!IsManagedDir(managedDir)) return;
+
+        env["CS_COUNTERSIDE_MANAGED_DIR"] = managedDir;
+        env["COUNTERSIDE_MANAGED_DIR"] = managedDir;
+
+        var gameRoot = FindCounterSideRootDirFromManaged(managedDir);
+        env["CS_COUNTERSIDE_DIR"] = string.IsNullOrWhiteSpace(gameRoot) ? managedDir : gameRoot;
+    }
+
+    private string GetConfiguredManagedDir()
+    {
+        var normalized = NormalizeManagedDir(settings.CounterSideManagedDir);
+        if (!IsManagedDir(normalized)) return "";
+        settings.CounterSideManagedDir = normalized;
+        return normalized;
+    }
+
+    private string RequireConfiguredManagedDir()
+    {
+        var managedDir = GetConfiguredManagedDir();
+        if (!IsManagedDir(managedDir))
+        {
+            throw new InvalidOperationException("CounterSide Data\\Managed\\Assembly-CSharp.dll is not selected.");
+        }
+        return Path.GetFullPath(managedDir);
+    }
+
     private static string UnquoteEnvValue(string value)
     {
         if (value.Length >= 2 && ((value[0] == '"' && value[^1] == '"') || (value[0] == '\'' && value[^1] == '\''))) return value[1..^1];
@@ -1406,10 +3002,10 @@ internal sealed class LauncherWindow : Window
     {
         foreach (var candidate in new[]
         {
+            saved,
             Environment.GetEnvironmentVariable("CS_COUNTERSIDE_MANAGED_DIR"),
             Environment.GetEnvironmentVariable("COUNTERSIDE_MANAGED_DIR"),
             Environment.GetEnvironmentVariable("CS_COUNTERSIDE_DIR"),
-            saved,
             FindCounterSideManagedDir(),
         })
         {
@@ -1534,84 +3130,134 @@ internal sealed class LauncherWindow : Window
     private void UpdateButtons()
     {
         var listenerRunning = listenerProcess is { HasExited: false };
+        var crossSaveCaptureRunning = crossSaveCaptureProcesses.Count > 0;
         startListenerButton.IsEnabled = !listenerRunning;
         stopListenerButton.IsEnabled = listenerRunning;
+        browseCrossSaveCaptureButton.IsEnabled = !crossSaveCaptureRunning;
+        refreshCrossSaveButton.IsEnabled = crossSaveCaptureRunning;
+        importCrossSaveButton.IsEnabled = !crossSaveCaptureRunning;
     }
 
     private string ServerTimeStatePath() => Path.Combine(appRoot, "server-data", "server-time.json");
 
     private static decimal ClampPort(int value, int fallback) => Math.Clamp(value <= 0 ? fallback : value, 1, 65535);
 
-    private static bool SamePath(string left, string right)
-    {
-        var fullLeft = Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var fullRight = Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return fullLeft.Equals(fullRight, StringComparison.OrdinalIgnoreCase);
-    }
-
     private static void OpenUrl(string url)
     {
         Process.Start(new ProcessStartInfo { FileName = url, UseShellExecute = true });
     }
 
-    private static (Bitmap? Image, string Name) LoadRandomCutsceneBackground(string appRoot)
+    private async Task RefreshCutsceneBackgroundAsync(bool force)
     {
-        var zipPath = Path.Combine(appRoot, "extracted-assets", "cutscene-bg-16x9.zip");
-        if (File.Exists(zipPath))
+        var managedDir = GetConfiguredManagedDir();
+        if (!IsManagedDir(managedDir)) return;
+        var script = Path.Combine(appRoot, "tools", "ensure-cutscene-backgrounds.js");
+        if (!File.Exists(script)) return;
+        lock (cutsceneBackgroundLock)
         {
-            try
+            if (cutsceneBackgroundRefreshRunning) return;
+            cutsceneBackgroundRefreshRunning = true;
+        }
+
+        StreamWriter? logWriter = null;
+        try
+        {
+            logWriter = OpenProcessLog("cutscene-assets", out var logPath);
+            AppendLog("Checking launcher cutscene background cache from installed encrypted assets...");
+            AppendLog($"Cutscene asset log: {logPath}");
+            using var process = new Process
             {
-                using var zip = ZipFile.OpenRead(zipPath);
-                var entries = zip.Entries.Where(entry => entry.Length > 100_000 && entry.FullName.EndsWith(".png", StringComparison.OrdinalIgnoreCase)).ToArray();
-                if (entries.Length > 0)
+                StartInfo = new ProcessStartInfo
                 {
-                    var entry = entries[Random.Shared.Next(entries.Length)];
-                    using var stream = entry.Open();
-                    using var memory = new MemoryStream();
-                    stream.CopyTo(memory);
-                    memory.Position = 0;
-                    return (new Bitmap(memory), Path.GetFileNameWithoutExtension(entry.FullName));
-                }
-            }
-            catch
+                    FileName = nodePath,
+                    WorkingDirectory = appRoot,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true,
+                },
+            };
+            process.StartInfo.ArgumentList.Add(script);
+            process.StartInfo.ArgumentList.Add("--managed-dir");
+            process.StartInfo.ArgumentList.Add(managedDir);
+            process.StartInfo.ArgumentList.Add("--max-bundles");
+            process.StartInfo.ArgumentList.Add("24");
+            if (force) process.StartInfo.ArgumentList.Add("--force");
+            foreach (var item in BuildListenerEnvironment()) process.StartInfo.Environment[item.Key] = item.Value;
+            process.OutputDataReceived += (_, e) => { if (e.Data != null && logWriter != null) AppendProcessLog(logWriter, e.Data); };
+            process.ErrorDataReceived += (_, e) => { if (e.Data != null && logWriter != null) AppendProcessLog(logWriter, e.Data); };
+            if (!process.Start()) return;
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            await process.WaitForExitAsync();
+            process.WaitForExit();
+            if (process.ExitCode != 0)
             {
-                // Fall through to extracted folder lookup.
+                AppendLog($"Cutscene background cache skipped: helper exited {process.ExitCode}.");
+                return;
+            }
+            var loaded = LoadRandomCutsceneBackgroundFromCache();
+            if (loaded.Image != null)
+            {
+                Dispatcher.UIThread.Post(() => SetLauncherBackground(loaded.Image, loaded.Name));
             }
         }
-
-        foreach (var root in new[]
+        catch (Exception ex)
         {
-            Path.Combine(appRoot, "extracted-assets", "cutscene-bg-16x9"),
-            Path.Combine(appRoot, "extracted-assets", "all"),
-            Path.Combine(appRoot, "decrypted-assets", "CounterSide"),
-        })
-        {
-            try
-            {
-                if (!Directory.Exists(root)) continue;
-                var files = Directory.EnumerateFiles(root, "*.png", SearchOption.AllDirectories).Where(IsCutsceneBackgroundPath).Take(2000).ToArray();
-                if (files.Length == 0) continue;
-                var file = files[Random.Shared.Next(files.Length)];
-                using var stream = File.OpenRead(file);
-                using var memory = new MemoryStream();
-                stream.CopyTo(memory);
-                memory.Position = 0;
-                return (new Bitmap(memory), Path.GetFileNameWithoutExtension(file));
-            }
-            catch
-            {
-                // Keep the launcher usable even if an asset is unreadable.
-            }
+            AppendLog($"Cutscene background cache skipped: {ex.Message}");
         }
-        return (null, "");
+        finally
+        {
+            if (logWriter != null) CloseProcessLog(logWriter);
+            lock (cutsceneBackgroundLock) cutsceneBackgroundRefreshRunning = false;
+        }
     }
 
-    private static bool IsCutsceneBackgroundPath(string path)
+    private void SetLauncherBackground(Bitmap image, string name)
     {
-        var normalized = path.Replace('\\', '/');
-        return normalized.Contains("CutsceneBG16x9/", StringComparison.OrdinalIgnoreCase)
-            || normalized.Contains("cutscen_bg", StringComparison.OrdinalIgnoreCase);
+        var old = launcherBackground;
+        launcherBackground = image;
+        launcherBackgroundName = name;
+        if (launcherBackgroundView != null)
+        {
+            launcherBackgroundView.Source = image;
+            launcherBackgroundView.IsVisible = true;
+        }
+        if (launcherBackgroundFallback != null) launcherBackgroundFallback.IsVisible = false;
+        if (launcherBackgroundText != null) launcherBackgroundText.Text = DescribeLauncherBackground();
+        old?.Dispose();
     }
+
+    private (Bitmap? Image, string Name) LoadRandomCutsceneBackgroundFromCache()
+    {
+        try
+        {
+            var cacheDir = CutsceneBackgroundCacheDir();
+            if (!Directory.Exists(cacheDir)) return (null, "");
+            var files = Directory.EnumerateFiles(cacheDir, "*.png", SearchOption.TopDirectoryOnly)
+                .Where(file => File.Exists(file) && new FileInfo(file).Length > 100_000)
+                .Take(2000)
+                .ToArray();
+            if (files.Length == 0) return (null, "");
+            var selected = files[Random.Shared.Next(files.Length)];
+            using var stream = File.OpenRead(selected);
+            using var memory = new MemoryStream();
+            stream.CopyTo(memory);
+            memory.Position = 0;
+            return (new Bitmap(memory), Path.GetFileNameWithoutExtension(selected));
+        }
+        catch
+        {
+            return (null, "");
+        }
+    }
+
+    private string DescribeLauncherBackground() =>
+        string.IsNullOrWhiteSpace(launcherBackgroundName)
+            ? "Story background: encrypted CounterSide assets"
+            : $"Story background: {launcherBackgroundName}";
+
+    private string CutsceneBackgroundCacheDir() => Path.Combine(appRoot, ".cache", "cutscene-bg-16x9", "backgrounds");
 
     private static string ResolveAppRoot()
     {
@@ -1659,18 +3305,134 @@ internal sealed class LauncherWindow : Window
         return File.Exists(Path.Combine(directory, "cs-listener.js")) && File.Exists(Path.Combine(directory, "package.json"));
     }
 
+    private void RefreshToolPaths()
+    {
+        var rid = GetWindowsRid();
+        nodePath = ResolveToolPath("node.exe", Path.Combine("runtime", "node", "node.exe"), Path.Combine("runtime-node", rid, "node.exe"));
+        npmPath = ResolveToolPath("npm.cmd", Path.Combine("runtime", "node", "npm.cmd"), Path.Combine("runtime-node", rid, "npm.cmd"));
+        dumpcapPath = ResolveToolPath(
+            "dumpcap.exe",
+            Path.Combine("runtime", "Wireshark", "dumpcap.exe"),
+            Path.Combine("runtime", "wireshark", "dumpcap.exe"),
+            Path.Combine("runtime-wireshark", rid, "dumpcap.exe"),
+            Path.Combine("wireshark", rid, "dumpcap.exe"),
+            Path.Combine("Wireshark", "dumpcap.exe"));
+        tsharkPath = ResolveToolPath(
+            "tshark.exe",
+            Path.Combine("runtime", "Wireshark", "tshark.exe"),
+            Path.Combine("runtime", "wireshark", "tshark.exe"),
+            Path.Combine("runtime-wireshark", rid, "tshark.exe"),
+            Path.Combine("wireshark", rid, "tshark.exe"),
+            Path.Combine("Wireshark", "tshark.exe"));
+    }
+
     private static string ResolveToolPath(string toolName, params string[] bundledRelativePaths)
     {
+        var searchRoots = EnumerateToolSearchRoots().Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         foreach (var relativePath in bundledRelativePaths)
         {
-            var bundledPath = Path.Combine(AppContext.BaseDirectory, relativePath);
-            if (File.Exists(bundledPath)) return bundledPath;
-            var rootPath = Path.Combine(ResolveAppRoot(), relativePath);
-            if (File.Exists(rootPath)) return rootPath;
+            foreach (var root in searchRoots)
+            {
+                var candidate = Path.Combine(root, relativePath);
+                if (File.Exists(candidate)) return candidate;
+            }
         }
         var pathTool = ResolveToolFromPath(toolName);
         if (!string.IsNullOrWhiteSpace(pathTool)) return pathTool;
+        if (toolName.Equals("node.exe", StringComparison.OrdinalIgnoreCase) || toolName.Equals("npm.cmd", StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (var baseDir in new[] { Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86) })
+            {
+                if (string.IsNullOrWhiteSpace(baseDir)) continue;
+                var nodePath = Path.Combine(baseDir, "nodejs", toolName);
+                if (File.Exists(nodePath)) return nodePath;
+            }
+        }
+        if (toolName.Equals("dumpcap.exe", StringComparison.OrdinalIgnoreCase) || toolName.Equals("tshark.exe", StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (var baseDir in new[] { Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86) })
+            {
+                if (string.IsNullOrWhiteSpace(baseDir)) continue;
+                var wiresharkPath = Path.Combine(baseDir, "Wireshark", toolName);
+                if (File.Exists(wiresharkPath)) return wiresharkPath;
+            }
+        }
+        if (toolName.Equals("dotnet.exe", StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (var dotnetPath in new[]
+            {
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "dotnet.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "x64", "dotnet.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "dotnet", "dotnet.exe"),
+            })
+            {
+                if (File.Exists(dotnetPath)) return dotnetPath;
+            }
+        }
         return toolName;
+    }
+
+    private static IEnumerable<string> EnumerateToolSearchRoots()
+    {
+        foreach (var root in new[] { AppContext.BaseDirectory, Environment.CurrentDirectory, ResolveAppRoot() })
+        {
+            if (!string.IsNullOrWhiteSpace(root)) yield return root;
+            var payloadRoot = ResolvePackagedPayloadRoot(root);
+            if (!string.IsNullOrWhiteSpace(payloadRoot)) yield return payloadRoot;
+        }
+        var installedRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RevivalSide");
+        if (Directory.Exists(installedRoot)) yield return installedRoot;
+        foreach (var payloadRoot in EnumerateCachedPayloadRoots()) yield return payloadRoot;
+    }
+
+    private static IEnumerable<string> EnumerateCachedPayloadRoots()
+    {
+        var cacheRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RevivalSideSetup", "payload-cache");
+        if (!Directory.Exists(cacheRoot)) yield break;
+        IEnumerable<string> cacheDirectories;
+        try
+        {
+            cacheDirectories = Directory.EnumerateDirectories(cacheRoot)
+                .OrderByDescending(path => Directory.GetLastWriteTimeUtc(path))
+                .ToArray();
+        }
+        catch
+        {
+            yield break;
+        }
+
+        foreach (var cacheDirectory in cacheDirectories)
+        {
+            var payloadRoot = Path.Combine(cacheDirectory, "extract", "payload");
+            if (Directory.Exists(payloadRoot)) yield return payloadRoot;
+        }
+    }
+
+    private static string ResolvePackagedPayloadRoot(string seed)
+    {
+        var directory = new DirectoryInfo(seed);
+        while (directory != null)
+        {
+            if (directory.Name.Equals("payload", StringComparison.OrdinalIgnoreCase) &&
+                IsAppRoot(Path.Combine(directory.FullName, "app")))
+            {
+                return directory.FullName;
+            }
+            if (directory.Name.Equals("runtime-apps", StringComparison.OrdinalIgnoreCase))
+            {
+                return directory.Parent?.FullName ?? "";
+            }
+            if (directory.Parent?.Name.Equals("runtime-apps", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return directory.Parent.Parent?.FullName ?? "";
+            }
+            if (IsAppRoot(directory.FullName) && directory.Parent?.Name.Equals("payload", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return directory.Parent.FullName;
+            }
+            directory = directory.Parent;
+        }
+        return "";
     }
 
     private static string ResolveToolFromPath(string toolName)
@@ -1694,6 +3456,31 @@ internal sealed class LauncherWindow : Window
                     // Ignore malformed PATH entries.
                 }
             }
+        }
+        return "";
+    }
+
+    private string ResolveBundledPythonPath()
+    {
+        foreach (var path in EnumerateBundledPythonPaths())
+        {
+            if (File.Exists(path)) return path;
+        }
+        var configured = Environment.GetEnvironmentVariable("CS_PYTHON_PATH") ?? Environment.GetEnvironmentVariable("PYTHON") ?? "";
+        foreach (var path in configured.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (File.Exists(path)) return path;
+        }
+        var py = ResolveToolFromPath("py.exe");
+        if (!string.IsNullOrWhiteSpace(py)) return py;
+        foreach (var tool in new[] { "python.exe", "python3.exe" })
+        {
+            var resolved = ResolveToolFromPath(tool);
+            if (!string.IsNullOrWhiteSpace(resolved)) return resolved;
+        }
+        foreach (var path in EnumerateCommonPythonInstallPaths())
+        {
+            if (File.Exists(path)) return path;
         }
         return "";
     }
@@ -1752,11 +3539,16 @@ internal sealed class LauncherWindow : Window
 
     private void AppendProcessLog(StreamWriter writer, string text)
     {
+        WriteProcessLog(writer, text);
+        AppendLog(text);
+    }
+
+    private void WriteProcessLog(StreamWriter writer, string text)
+    {
         lock (processLogLock)
         {
             try { writer.WriteLine($"[{DateTime.Now:O}] {text}"); } catch { }
         }
-        AppendLog(text);
     }
 
     private void CloseProcessLog(StreamWriter writer)
@@ -1814,6 +3606,46 @@ internal sealed class LauncherWindow : Window
         await window.ShowDialog(this);
     }
 
+    private async Task<bool> ShowConfirmAsync(string title, string message, string confirmLabel, string cancelLabel)
+    {
+        var confirm = new Button { Content = confirmLabel, MinWidth = 104, Height = 38 };
+        var cancel = new Button { Content = cancelLabel, MinWidth = 96, Height = 38 };
+        StyleButton(confirm, primary: true);
+        StyleButton(cancel);
+        var buttons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Children = { cancel, confirm },
+        };
+        var window = new Window
+        {
+            Title = title,
+            Width = 500,
+            SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Background = Brush(17, 22, 30),
+            Content = new Border
+            {
+                Padding = new Thickness(22),
+                Child = new StackPanel
+                {
+                    Spacing = 16,
+                    Children =
+                    {
+                        new TextBlock { Text = message, Foreground = Brush(236, 242, 248), TextWrapping = TextWrapping.Wrap, FontSize = 15 },
+                        buttons,
+                    },
+                },
+            },
+        };
+        confirm.Click += (_, _) => window.Close(true);
+        cancel.Click += (_, _) => window.Close(false);
+        var result = await window.ShowDialog<bool?>(this);
+        return result == true;
+    }
+
     private static IBrush Brush(byte r, byte g, byte b) => new SolidColorBrush(Color.FromRgb(r, g, b));
     private static IBrush HorizontalGradient(Color left, Color right) => new LinearGradientBrush
     {
@@ -1835,6 +3667,78 @@ internal sealed class LauncherWindow : Window
     };
     private static string Quote(string value) => "\"" + value.Replace("\"", "\\\"") + "\"";
     private static string StringValue(object? value) => value == null ? "" : Convert.ToString(value) ?? "";
+
+    private static bool IsPathInside(string root, string target)
+    {
+        var relative = Path.GetRelativePath(Path.GetFullPath(root), Path.GetFullPath(target));
+        return relative.Length > 0 && !relative.StartsWith("..", StringComparison.Ordinal) && !Path.IsPathFullyQualified(relative);
+    }
+
+    private static string ReadJsonString(JsonElement element, string name)
+    {
+        if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty(name, out var value)) return "";
+        return value.ValueKind switch
+        {
+            JsonValueKind.String => value.GetString() ?? "",
+            JsonValueKind.Number => value.ToString(),
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            _ => "",
+        };
+    }
+
+    private static int ReadJsonInt(JsonElement element, string name)
+    {
+        if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty(name, out var value)) return 0;
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number)) return number;
+        return int.TryParse(ReadJsonString(element, name), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : 0;
+    }
+
+    private static long ReadJsonLong(JsonElement element, string name)
+    {
+        if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty(name, out var value)) return 0;
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var number)) return number;
+        return long.TryParse(ReadJsonString(element, name), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) ? parsed : 0;
+    }
+
+    private static double ReadJsonDouble(JsonElement element, string name)
+    {
+        if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty(name, out var value)) return 0;
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number)) return number;
+        return double.TryParse(ReadJsonString(element, name), NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) ? parsed : 0;
+    }
+
+    private static bool ReadJsonBool(JsonElement element, string name)
+    {
+        if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty(name, out var value)) return false;
+        if (value.ValueKind == JsonValueKind.True) return true;
+        if (value.ValueKind == JsonValueKind.False) return false;
+        return bool.TryParse(ReadJsonString(element, name), out var parsed) && parsed;
+    }
+
+    private static string FormatBytes(long value)
+    {
+        if (value < 1024) return $"{value:N0} B";
+        if (value < 1024 * 1024) return $"{value / 1024.0:N1} KB";
+        return $"{value / 1024.0 / 1024.0:N1} MB";
+    }
+
+    private static string FormatCaptureTime(double seconds) => seconds > 0 ? $"{seconds:N1}s" : "time unknown";
+
+    private static string ShortHash(string value)
+    {
+        var text = value.Trim();
+        return text.Length > 16 ? text[..16] : text;
+    }
+
+    private static string SafeFileName(string value)
+    {
+        var safe = Regex.Replace(value, @"[^A-Za-z0-9._-]+", "_").Trim('_');
+        return string.IsNullOrWhiteSpace(safe) ? "interface" : safe;
+    }
+
+    private static string FirstNonEmptyLine(string value, string fallback) =>
+        (value ?? "").SplitLines().FirstOrDefault(line => !string.IsNullOrWhiteSpace(line)) ?? fallback;
 }
 
 internal sealed class LauncherSettings
@@ -1845,6 +3749,7 @@ internal sealed class LauncherSettings
     public int HttpPort { get; set; } = 8088;
     public int WikiPort { get; set; } = 5174;
     public string CounterSideManagedDir { get; set; } = "";
+    public string CrossSaveCaptureDir { get; set; } = "";
     public string EventDate { get; set; } = "";
     public string JoinLobbyAckMode { get; set; } = "auto";
     public bool UserManagerAllowRemote { get; set; }
@@ -1965,4 +3870,33 @@ internal static class StringExtensions
 }
 
 internal sealed record ListenCommand(ProcessStartInfo StartInfo, string Display);
-internal sealed record GameplayJsonStatus(string Path, int FileCount);
+internal sealed record GameplayAssetStatus(string ManagedDir, int ScriptBundleCount, string CacheRoot, int CachedLuaCount, string Description);
+internal sealed record GameplayCacheProgress(string Phase, int Current, int Total, string Message);
+internal sealed record WikiAssetStatus(string CacheRoot, int CachedPngCount);
+internal sealed record PythonTool(string FileName, string[] Arguments, string Display);
+internal sealed record ToolRunResult(int ExitCode, string CombinedOutput);
+internal sealed record CrossSaveCaptureInterface(string Id, string Name);
+internal sealed record CrossSaveCaptureProcess(Process Process, StreamWriter Writer, string PcapFile, string LogFile, CrossSaveCaptureInterface Interface);
+internal sealed class CrossSaveStreamInfo(int stream)
+{
+    public int Stream { get; } = stream;
+    public long TotalBytes { get; set; }
+    public bool HasGamePort { get; set; }
+}
+
+internal sealed record CrossSaveSource(
+    string Id,
+    int Index,
+    string PayloadFile,
+    long PayloadSizeBytes,
+    bool Compressed,
+    int Stream,
+    int Frame,
+    double CaptureTimeSeconds,
+    string Sha256)
+{
+    public override string ToString() => $"{Id} | frame {Frame} | {PayloadFile}";
+}
+
+internal sealed record CrossSaveImportResult(string PrettyJson, string UserUid, string OfficialUserUid, string Nickname, string ActiveUserUid);
+internal sealed record CrossSaveProcessResult(int ExitCode, string Output, string Error);

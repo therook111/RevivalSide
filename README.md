@@ -2,7 +2,7 @@
 
 RevivalSide is a local CounterSide revival research server. It includes the Node.js TCP listener, packet handlers, capture tooling, a C# combat-host bridge, and project-built combat-host binaries.
 
-This repository intentionally does not track client assets, raw packet captures, decompiled `Assembly-CSharp` source dumps, decrypted Lua bytecode, account databases, or raw game DLLs. It does track the complete parsed gameplay JSON tables under `gameplay-jsons`, so fresh clones use the same runtime table data as an already-prepared local repo.
+This repository intentionally does not track client assets, raw packet captures, decompiled `Assembly-CSharp` source dumps, decrypted Lua bytecode, account databases, or raw game DLLs. Runtime gameplay tables can be loaded from the encrypted CounterSide install by deriving the script assets from the selected `Data\Managed` directory.
 
 ## What Is Tracked
 
@@ -12,7 +12,7 @@ This repository intentionally does not track client assets, raw packet captures,
 - `combat-host/`: C# local combat host and managed assembly patcher.
 - `prebuilt/combat-host/`: published RevivalSide combat host binaries.
 - `tools/`: capture, table extraction, packet schema, and setup helper scripts.
-- `gameplay-jsons/`: checked-in complete parsed gameplay table source used by the listener, event manager, shops, contracts, missions, account defaults, wiki table reads, and local systems.
+- `gameplay-jsons/`: optional legacy parsed gameplay table fixtures. Normal listener runtime can use installed `.luac` assets instead.
 - `stages/`: hand-authored stage definitions used by current tutorial work.
 - `server-data/captured-*`: sanitized HTTP, login/content, and tutorial game-stream fixtures.
 - `packet-schema.json`: generated protocol reference used for packet work.
@@ -31,7 +31,7 @@ npm install
 npm run build:combat-host
 ```
 
-Fresh local accounts and runtime features use the checked-in `gameplay-jsons` data immediately. Generate local raw/decompiled table data only when refreshing `gameplay-jsons` from a newer CounterSide client or extracting images/assets.
+Fresh local accounts and runtime features can use `.luac` tables cached from the encrypted assets next to `Data\Managed`, without requiring raw/decompiled table dumps or `gameplay-jsons`.
 
 To run the local wiki:
 

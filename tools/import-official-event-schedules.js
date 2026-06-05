@@ -1,6 +1,7 @@
 const fs = require("fs");
 const https = require("https");
 const path = require("path");
+const { readGameplayTableRecords } = require("../modules/gameplay-jsons");
 
 const ROOT_DIR = path.resolve(__dirname, "..");
 const CACHE_DIR = path.join(ROOT_DIR, "server-data", "official-notices-cache");
@@ -494,40 +495,36 @@ function inferContractCategoryHint(name, line, contexts) {
 
 function buildGameplayEntryIndex() {
   const stringMap = loadEnglishStringMap();
-  const roots = [
-    path.join(ROOT_DIR, "gameplay-jsons", "Assetbundles", "ab_script", "luac"),
-    path.join(ROOT_DIR, "gameplay-jsons", "StreamingAssets", "ab_script", "luac"),
-  ];
-  const unitAliasMap = loadUnitAliasMap(roots, stringMap);
+  const unitAliasMap = loadUnitAliasMap(stringMap);
   const byKey = new Map();
-  for (const root of roots) {
-    for (const fileName of TABLE_FILES) {
-      const filePath = path.join(root, fileName);
-      if (!fs.existsSync(filePath)) continue;
-      const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
-      const records = Array.isArray(parsed.records) ? parsed.records : [];
-      for (let index = 0; index < records.length; index += 1) {
-        const record = records[index];
-        if (!record || typeof record !== "object" || Array.isArray(record)) continue;
-        const openTags = tagsFromFields(record, OPEN_TAG_FIELDS);
-        const intervalTags = tagsFromFields(record, INTERVAL_TAG_FIELDS);
-        const contentsTags = tagsFromFields(record, CONTENTS_ALLOW_FIELDS);
-        const eventPassId = Number(record.EventPassID || 0) || 0;
-        if (!openTags.length && !intervalTags.length && !contentsTags.length && !eventPassId) continue;
-        const searchText = buildEntrySearchText(fileName, record, stringMap, unitAliasMap);
-        const key = `${fileName}:${index}:${openTags.join("|")}:${intervalTags.join("|")}:${contentsTags.join("|")}:${eventPassId}`;
-        if (byKey.has(key)) continue;
-        byKey.set(key, {
-          fileName,
-          index,
-          searchText,
-          tokens: tokensForText(searchText),
-          openTags,
-          intervalTags,
-          contentsTags,
-          counterPassIds: eventPassId ? [eventPassId] : [],
-        });
-      }
+  for (const fileName of TABLE_FILES) {
+    const records = readGameplayTableRecords("ab_script", fileName, {
+      rootDir: ROOT_DIR,
+      logLabel: "official-event-schedules",
+      optional: true,
+      allowLuacWhenPackaged: true,
+    });
+    for (let index = 0; index < records.length; index += 1) {
+      const record = records[index];
+      if (!record || typeof record !== "object" || Array.isArray(record)) continue;
+      const openTags = tagsFromFields(record, OPEN_TAG_FIELDS);
+      const intervalTags = tagsFromFields(record, INTERVAL_TAG_FIELDS);
+      const contentsTags = tagsFromFields(record, CONTENTS_ALLOW_FIELDS);
+      const eventPassId = Number(record.EventPassID || 0) || 0;
+      if (!openTags.length && !intervalTags.length && !contentsTags.length && !eventPassId) continue;
+      const searchText = buildEntrySearchText(fileName, record, stringMap, unitAliasMap);
+      const key = `${fileName}:${index}:${openTags.join("|")}:${intervalTags.join("|")}:${contentsTags.join("|")}:${eventPassId}`;
+      if (byKey.has(key)) continue;
+      byKey.set(key, {
+        fileName,
+        index,
+        searchText,
+        tokens: tokensForText(searchText),
+        openTags,
+        intervalTags,
+        contentsTags,
+        counterPassIds: eventPassId ? [eventPassId] : [],
+      });
     }
   }
   return Array.from(byKey.values());
@@ -567,42 +564,40 @@ function targetEmployeesFromLookahead(lines, lineIndex) {
 }
 
 function loadEnglishStringMap() {
-  const candidates = [
-    path.join(ROOT_DIR, "gameplay-jsons", "Assetbundles", "ab_script_string_table", "luac", "LUA_STRING_ENG.json"),
-    path.join(ROOT_DIR, "gameplay-jsons", "StreamingAssets", "ab_script_string_table", "luac", "LUA_STRING_ENG.json"),
-  ];
   const map = new Map();
-  for (const filePath of candidates) {
-    if (!fs.existsSync(filePath)) continue;
-    const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
-    for (const row of Array.isArray(parsed.records) ? parsed.records : []) {
-      if (!Array.isArray(row) || typeof row[0] !== "string" || typeof row[1] !== "string") continue;
-      map.set(row[0], row[1]);
-    }
-    break;
+  const records = readGameplayTableRecords("ab_script_string_table", "LUA_STRING_ENG.json", {
+    rootDir: ROOT_DIR,
+    logLabel: "official-event-schedules",
+    optional: true,
+    allowLuacWhenPackaged: true,
+  });
+  for (const row of records) {
+    if (!Array.isArray(row) || typeof row[0] !== "string" || typeof row[1] !== "string") continue;
+    map.set(row[0], row[1]);
   }
   return map;
 }
 
-function loadUnitAliasMap(roots, stringMap) {
+function loadUnitAliasMap(stringMap) {
   const map = new Map();
-  for (const root of roots) {
-    const filePath = path.join(root, "LUA_COLLECTION_V2_EMPLOYEE.json");
-    if (!fs.existsSync(filePath)) continue;
-    const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
-    for (const row of Array.isArray(parsed.records) ? parsed.records : []) {
-      if (!row || typeof row !== "object" || Array.isArray(row)) continue;
-      const unitId = Number(row.UnitID || row.m_UnitID || 0) || 0;
-      if (!unitId) continue;
-      const aliases = [
-        row.NameValue,
-        row.TeamConceptStrID,
-        row.TeamUpStrID,
-        row.OpenTag,
-      ].flatMap((value) => resolveStringAlias(value, stringMap));
-      if (!aliases.length) continue;
-      map.set(unitId, unique([...(map.get(unitId) || []), ...aliases]));
-    }
+  const records = readGameplayTableRecords("ab_script", "LUA_COLLECTION_V2_EMPLOYEE.json", {
+    rootDir: ROOT_DIR,
+    logLabel: "official-event-schedules",
+    optional: true,
+    allowLuacWhenPackaged: true,
+  });
+  for (const row of records) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) continue;
+    const unitId = Number(row.UnitID || row.m_UnitID || 0) || 0;
+    if (!unitId) continue;
+    const aliases = [
+      row.NameValue,
+      row.TeamConceptStrID,
+      row.TeamUpStrID,
+      row.OpenTag,
+    ].flatMap((value) => resolveStringAlias(value, stringMap));
+    if (!aliases.length) continue;
+    map.set(unitId, unique([...(map.get(unitId) || []), ...aliases]));
   }
   return map;
 }

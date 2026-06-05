@@ -40,6 +40,7 @@ public sealed class HostResponse
     public HostResult? Result { get; set; }
     public List<IntervalExportRow>? Intervals { get; set; }
     public OfficialProfileSnapshot? OfficialProfile { get; set; }
+    public string? TableJson { get; set; }
 }
 
 public sealed class HostPacket
@@ -94,6 +95,13 @@ public sealed class JoinLobbyMergeData
 public sealed class JoinLobbyNormalizeData
 {
     public string LocalPayloadBase64 { get; set; } = "";
+}
+
+public sealed class GameplayTableExportData
+{
+    public string Directory { get; set; } = "";
+    public string FileName { get; set; } = "";
+    public string RootName { get; set; } = "";
 }
 
 public sealed class OfficialProfileSnapshot

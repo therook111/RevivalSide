@@ -13,12 +13,12 @@ You can set up only the wiki, only the listener, or both. If you want the normal
 
 The setup has four big parts:
 
-1. Install the basic tools: Node.js, .NET, Python, and Java.
+1. Install the basic tools: Node.js, .NET, and Python.
 2. Download or open the repo.
 3. Optionally refresh local game data if you are updating tables/assets.
 4. Start the wiki and the listener.
 
-Fresh clones include checked-in complete parsed gameplay tables in `gameplay-jsons`. The listener, event manager, shop, contract, mission, collection, stamina, and account-default systems read from that one folder. You only need part 3 when refreshing tables from a newer CounterSide install or extracting images for the wiki.
+The listener, event manager, shop, contract, mission, collection, and stamina systems can read installed `.luac` tables derived from the encrypted CounterSide assets next to `Data\Managed`. You only need part 3 when warming that cache, refreshing maintainer JSON fixtures, or extracting images for the wiki.
 
 ## Before You Start
 
@@ -89,7 +89,7 @@ Install Java 17 or newer. Eclipse Temurin is a good choice:
 https://adoptium.net/
 ```
 
-Java runs `unluac`, which turns the dumped Lua bytecode into readable table files.
+Java is only needed for maintainer workflows that explicitly run `unluac` to refresh parsed table source. Normal listener startup does not use it.
 
 ### Optional: Git
 
@@ -188,7 +188,7 @@ Change it to your real `Data\Managed` folder. The folder must contain `Assembly-
 
 ## Refresh Local Game Data
 
-The repo does not store raw game assets, raw DLLs, your account data, decrypted Lua bytecode, or decompiled Lua intermediates. It does store complete parsed gameplay JSON in `gameplay-jsons`. Run this section only when you are rebuilding `gameplay-jsons` from your own CounterSide install or extracting images.
+The repo does not store raw game assets, raw DLLs, your account data, decrypted Lua bytecode, or decompiled Lua intermediates. Runtime table reads can use installed `.luac` assets, so run this section only when warming the local gameplay cache, rebuilding optional maintainer JSON fixtures, or extracting images.
 
 Set a short variable for your CounterSide folder:
 
@@ -212,37 +212,19 @@ If `py` does not work on your machine, run:
 python -m pip install UnityPy pillow
 ```
 
-### Dump The Gameplay Scripts
+### Build The Installed-Client Gameplay Cache
 
 Run:
 
 ```powershell
-py .\tools\cs_asset_decrypt.py dump-scripts --root "$client\Data\StreamingAssets\Assetbundles" --out-dir .\gameplay-tables\Assetbundles --manifest .\gameplay-tables\catalog.json --overwrite
+npm run ensure:gameplay-assets
 ```
 
-This reads the local CounterSide script bundles and writes decrypted Lua bytecode into `gameplay-tables`.
+This starts from `CS_COUNTERSIDE_MANAGED_DIR` or the auto-detected Steam install, walks from `Data\Managed` to the installed encrypted `Data\StreamingAssets\ab_script*` bundles, and writes decrypted Lua bytecode to `.cache\gameplay-luac`. It does not run `unluac` or rebuild parsed/decompiled table dumps.
 
-### Decompile The Lua
+### Rebuild Optional Gameplay JSON Fixtures
 
-Run:
-
-```powershell
-py .\tools\cs_lua_table_pipeline.py decompile --luac-root .\gameplay-tables --out-dir .\gameplay-tables-decompiled --jar .\tools\unluac.jar --overwrite
-```
-
-This creates readable Lua files in `gameplay-tables-decompiled`.
-
-### Parse The Lua Tables To JSON
-
-Run:
-
-```powershell
-py .\tools\cs_lua_table_pipeline.py parse --lua-root .\gameplay-tables-decompiled --out-dir .\gameplay-tables-json --overwrite
-```
-
-This creates a temporary full parsed JSON dump in `gameplay-tables-json`.
-
-### Rebuild The Checked-In Gameplay JSON Source
+This is only needed when deliberately refreshing legacy parsed JSON fixtures from a prepared parsed JSON root. Normal listener startup does not do this.
 
 Run:
 
@@ -250,14 +232,14 @@ Run:
 npm run build:gameplay-jsons
 ```
 
-This copies the full parsed table dump into `gameplay-jsons`, which is the one runtime table source used by the listener and wiki table reads.
+If you use this maintainer workflow, set `CS_GAMEPLAY_BUILD_SOURCE_ROOTS` or keep a legacy `gameplay-tables-json` parsed root available first.
 
 ### Build The Server Data Indexes
 
 Run:
 
 ```powershell
-py .\tools\cs_build_server_data.py --parsed-root .\gameplay-tables-json\Assetbundles --out-dir .\server-data
+py .\tools\cs_build_server_data.py --parsed-root .\gameplay-jsons\StreamingAssets --out-dir .\server-data
 ```
 
 This creates compact server files like `server-data\units.json`.
@@ -509,9 +491,8 @@ Do not commit local generated data from your own client unless the project owner
 Keep these local:
 
 - `Assembly-CSharp`
-- `gameplay-tables`
-- `gameplay-tables-decompiled`
-- `gameplay-tables-json`
+- `.cache`
+- legacy `gameplay-tables*` folders if you still create them manually
 - `extracted-assets`
 - raw packet captures
 - account state or personal game data

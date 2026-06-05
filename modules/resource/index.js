@@ -12,6 +12,7 @@ const {
 
 const PURCHASE_DEDUPE_MS = Number(process.env.CS_RESOURCE_PURCHASE_DEDUPE_MS || 10000);
 const TRACK_SHOP_PURCHASE_LIMITS = readEnvBool(process.env.CS_SHOP_TRACK_PURCHASE_LIMITS, true);
+const TRACK_ADMIN_COIN_TOTAL_PAYMENT = readEnvBool(process.env.CS_SHOP_TRACK_ADMIN_COIN_TOTAL_PAYMENT, true);
 const DOTNET_TICKS_AT_UNIX_EPOCH = 621355968000000000n;
 const TICKS_PER_MS = 10000n;
 const TICKS_PER_DAY = 24n * 60n * 60n * 10000000n;
@@ -77,6 +78,12 @@ function spendShopPrice(ctx, user, record, productCount = 1) {
       `[resource] spend itemId=${itemId} amount=${totalPrice.toString()} balanceFree=${updated.countFree} balancePaid=${updated.countPaid}`
     );
   }
+  if (updated && itemId === RESOURCE_ITEM_IDS.ADMIN_COIN) {
+    const totalPaidAmount = recordShopTotalPaidAmount(user, totalPrice);
+    if (TRACK_ADMIN_COIN_TOTAL_PAYMENT) {
+      console.log(`[resource] totalPaidAmount=${totalPaidAmount} adminCoinSpend=${totalPrice.toString()}`);
+    }
+  }
   return updated;
 }
 
@@ -132,6 +139,30 @@ function getShopPurchaseHistories(user) {
       nextResetDate: String(entry.nextResetDate || "0"),
     }))
     .filter((entry) => entry.shopId > 0);
+}
+
+function getShopTotalPaidAmount(user) {
+  if (!user || typeof user !== "object") return 0;
+  const existing = Number(
+    user.shopTotalPaidAmount != null
+      ? user.shopTotalPaidAmount
+      : user.totalPaidAmount != null
+        ? user.totalPaidAmount
+        : user.totalPayment || 0
+  );
+  const normalized = Number.isFinite(existing) && existing > 0 ? existing : 0;
+  user.shopTotalPaidAmount = normalized;
+  return normalized;
+}
+
+function recordShopTotalPaidAmount(user, amount) {
+  const current = getShopTotalPaidAmount(user);
+  if (!TRACK_ADMIN_COIN_TOTAL_PAYMENT || !user || typeof user !== "object") return current;
+  const increment = Number(toBigInt(amount || 0, 0n));
+  if (!Number.isFinite(increment) || increment <= 0) return current;
+  const next = current + increment;
+  user.shopTotalPaidAmount = next;
+  return next;
 }
 
 function getCurrentRawTicks(ctx) {
@@ -240,6 +271,8 @@ module.exports = {
   grantFallbackResource,
   recordShopPurchase,
   getShopPurchaseHistories,
+  getShopTotalPaidAmount,
+  recordShopTotalPaidAmount,
   getPurchaseKey,
   hasCompletedPurchase,
   markCompletedPurchase,

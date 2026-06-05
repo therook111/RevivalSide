@@ -7,7 +7,7 @@ This project is the C# combat boundary for RevivalSide.
 At runtime the host:
 
 1. Loads `Assembly-CSharp.dll` from the contributor's local CounterSide `Data\Managed` folder.
-2. Patches a local cache copy so Lua table loading can be redirected to dumped tables on disk.
+2. Patches a local cache copy so Lua table loading can be redirected to the installed-client Lua bytecode cache or checked-in gameplay JSON tables.
 3. Starts the managed local server for battle state, deployment, sync packets, and end packets.
 
 The patched managed cache is generated under `bin\...\patched-managed` or `bin\host-cache\...\patched-managed` and must not be committed. The project-built `CombatHost` binaries are published to `prebuilt\combat-host`.

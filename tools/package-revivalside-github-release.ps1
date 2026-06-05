@@ -3,6 +3,7 @@ param(
   [string]$UniversalInstallerDir = "",
   [string]$ReleaseTag = "",
   [string]$ReleaseBaseUrl = "",
+  [string]$PythonPath = "",
   [int]$ChunkSizeMB = 1900,
   [switch]$SkipUniversalBuild,
   [switch]$SkipPayloadArchive,
@@ -150,7 +151,14 @@ $manifestAssetName = "RevivalSidePayloadManifest.json"
 $manifestUrl = "$releaseBaseUrlResolved/$manifestAssetName"
 
 if (-not $SkipUniversalBuild) {
-  & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $rootPath "tools\package-revivalside-universal-installer.ps1") -OutputDir $universalPath
+  $universalArgs = @(
+    "-NoProfile",
+    "-ExecutionPolicy", "Bypass",
+    "-File", (Join-Path $rootPath "tools\package-revivalside-universal-installer.ps1"),
+    "-OutputDir", $universalPath
+  )
+  if ($PythonPath) { $universalArgs += @("-PythonPath", $PythonPath) }
+  & powershell @universalArgs
   if ($LASTEXITCODE -ne 0) { throw "Universal installer packaging failed" }
 }
 

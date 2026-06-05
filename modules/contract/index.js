@@ -17,6 +17,7 @@ const {
 } = require("../packet-codec");
 const {
   getContractRecord,
+  getAllContractIds,
   getVisibleContractIds,
   getContractPoolUnitIds,
   getContractPoolUnitEntries,
@@ -230,6 +231,11 @@ function buildCustomPickupSelectTargetAck(user, request) {
   const resolvedTargetId = normalizeCustomPickupTarget(pickup, targetUnitId, {
     includeOperators: String(pickup.m_ContractType || "") === "OPERATOR",
   });
+  if (targetUnitId > 0 && resolvedTargetId <= 0) {
+    console.log(
+      `[contract:custom-pickup] rejected target customPickupId=${customPickupId} targetUnitId=${targetUnitId} poolId=${pickup.m_UnitPoolID || 0}`
+    );
+  }
   if (resolvedTargetId > 0) {
     const previousTargetId = Number(state.customPickupTargetUnitId || 0);
     const maxSelectCount = getCustomPickupMaxSelectCount(pickup);
@@ -360,20 +366,14 @@ function buildInstantContractListAck(user, ctx) {
 }
 
 function getAllContractStates(user, ctx) {
-  const clockState = getActiveContractClockState(ctx);
-  return getVisibleContractIds()
-    .filter((contractId) => isContractRecordActiveForClock(resolveContractRecord(contractId), clockState, "contract"))
-    .map((contractId) => getContractState(user, contractId, ctx));
+  return getVisibleActiveContractRecords(ctx).map((entry) => getContractState(user, entry.contractId, ctx));
 }
 
 function getAllContractBonusStates(user, ctx) {
-  const clockState = getActiveContractClockState(ctx);
   const seen = new Set();
   const states = [];
   for (const record of [
-    ...getVisibleContractIds()
-      .map((contractId) => resolveContractRecord(contractId))
-      .filter((record) => isContractRecordActiveForClock(record, clockState, "contract")),
+    ...getVisibleActiveContractRecords(ctx).map((entry) => entry.record),
     ...getActiveCustomPickupContractRecords(ctx),
   ]) {
     const state = getContractBonusState(user, record);
@@ -382,6 +382,170 @@ function getAllContractBonusStates(user, ctx) {
     states.push(state);
   }
   return states;
+}
+
+function getVisibleActiveContractRecords(ctx) {
+  const clockState = getActiveContractClockState(ctx);
+  const active = getVisibleContractIds()
+    .map((contractId) => ({ contractId, record: resolveContractRecord(contractId) }))
+    .filter((entry) => isContractEntryVisibleForContentsTags(entry.record, entry.contractId, clockState))
+    .filter((entry) => !isRetiredContractRecord(entry.record, entry.contractId))
+    .filter((entry) => isContractRecordActiveForClock(entry.record, clockState, "contract"));
+  const bestByKey = new Map();
+  for (const entry of active) {
+    const key = contractDedupeKey(entry.record, entry.contractId);
+    if (!key) continue;
+    const current = bestByKey.get(key);
+    if (!current || scoreContractDedupeRecord(entry.record, entry.contractId) > scoreContractDedupeRecord(current.record, current.contractId)) {
+      bestByKey.set(key, entry);
+    }
+  }
+  return active.filter((entry) => {
+    const key = contractDedupeKey(entry.record, entry.contractId);
+    return !key || bestByKey.get(key) === entry;
+  });
+}
+
+function filterDuplicateContractOpenTags(tags) {
+  return filterDuplicateContractTags(tags, getContractRecordOpenTags);
+}
+
+function filterDuplicateContractIntervalTags(tags) {
+  return filterDuplicateContractTags(tags, getContractRecordIntervalTags);
+}
+
+function filterDuplicateContractIntervalData(intervalData) {
+  const input = Array.isArray(intervalData) ? intervalData : [];
+  const filteredKeys = new Set(
+    filterDuplicateContractIntervalTags(input.map((interval) => interval && interval.strKey)).map((tag) => normalizeTag(tag))
+  );
+  return input.filter((interval) => {
+    const key = normalizeTag(interval && interval.strKey);
+    return !key || filteredKeys.has(key);
+  });
+}
+
+function filterDuplicateContractTags(tags, getTagsForRecord) {
+  const input = Array.isArray(tags) ? tags : [];
+  const activeTagKeys = new Set(input.map((tag) => normalizeTag(tag)).filter(Boolean));
+  if (!activeTagKeys.size) return input.slice();
+
+  const entriesByDedupeKey = new Map();
+  for (const contractId of getAllContractIds()) {
+    const record = resolveContractRecord(contractId);
+    if (!record || isRetiredContractRecord(record, contractId)) continue;
+    const matchedTags = getTagsForRecord(record, contractId).filter((tag) => activeTagKeys.has(tag));
+    if (!matchedTags.length) continue;
+    const key = contractDedupeKey(record, contractId);
+    if (!key) continue;
+    if (!entriesByDedupeKey.has(key)) entriesByDedupeKey.set(key, []);
+    entriesByDedupeKey.get(key).push({ contractId, record, tags: matchedTags });
+  }
+
+  const suppressed = new Set();
+  for (const entries of entriesByDedupeKey.values()) {
+    if (entries.length <= 1) continue;
+    let keeper = entries[0];
+    for (const entry of entries.slice(1)) {
+      if (scoreContractDedupeRecord(entry.record, entry.contractId) > scoreContractDedupeRecord(keeper.record, keeper.contractId)) {
+        keeper = entry;
+      }
+    }
+    const keeperTags = new Set(keeper.tags);
+    for (const entry of entries) {
+      if (entry === keeper) continue;
+      for (const tag of entry.tags) {
+        if (!keeperTags.has(tag)) suppressed.add(tag);
+      }
+    }
+  }
+
+  if (!suppressed.size) return input.slice();
+  return input.filter((tag) => !suppressed.has(normalizeTag(tag)));
+}
+
+function getContractRecordOpenTags(record, contractId = 0) {
+  const id = Number(record && (record.m_ContractID || record.ContractID || record.contractId)) || Number(contractId) || 0;
+  const baseRecord = getContractRecord(id) || {};
+  return normalizeTags([
+    getRecordOpenTags(record),
+    getRecordOpenTags(baseRecord),
+  ]);
+}
+
+function getContractRecordIntervalTags(record, contractId = 0) {
+  const id = Number(record && (record.m_ContractID || record.ContractID || record.contractId)) || Number(contractId) || 0;
+  const baseRecord = getContractRecord(id) || {};
+  return normalizeTags([
+    getRecordIntervalTags(record),
+    getRecordIntervalTags(baseRecord),
+  ]);
+}
+
+function contractDedupeKey(record, contractId = 0) {
+  if (!record) return "";
+  const baseRecord = getContractRecord(Number(record.m_ContractID || record.ContractID || record.contractId || contractId) || 0) || {};
+  const addUnitStrId = String(record.m_addUnitStrId || baseRecord.m_addUnitStrId || record.addUnitStrId || "").trim().toUpperCase();
+  const category = Number(record.m_ContractCategory || baseRecord.m_ContractCategory || 0);
+  const tags = [
+    ...getRecordOpenTags(record),
+    ...getRecordOpenTags(baseRecord),
+    ...getRecordIntervalTags(record),
+    ...getRecordIntervalTags(baseRecord),
+    String(record.m_ContractName || ""),
+    String(baseRecord.m_ContractName || ""),
+  ].join("|");
+  const pickupLike =
+    category === 200 ||
+    record.m_bPickUp === true ||
+    baseRecord.m_bPickUp === true ||
+    record.m_addUnitPickUp === true ||
+    baseRecord.m_addUnitPickUp === true ||
+    /CLASSIFIED|PICKUP/i.test(tags);
+  const addUnitKey = normalizeContractUnitToken(addUnitStrId);
+  const dedupeUnitKey = isPlaceholderContractUnitKey(addUnitKey) ? "" : addUnitKey;
+  const visibleName = normalizeContractUnitToken(record.m_ContractName || baseRecord.m_ContractName || "");
+  const visibleBanner = normalizeDedupeToken(record.m_MainBannerFileName || baseRecord.m_MainBannerFileName || "");
+  const identity = pickupLike
+    ? dedupeUnitKey || visibleName || visibleBanner
+    : visibleName || visibleBanner || dedupeUnitKey;
+  if (!identity) return "";
+  return `${category || "pickup"}:${identity}`;
+}
+
+function scoreContractDedupeRecord(record, contractId = 0) {
+  const id = Number(record && (record.m_ContractID || record.ContractID || record.contractId)) || Number(contractId) || 0;
+  const baseRecord = getContractRecord(id) || {};
+  const tags = [
+    ...getRecordOpenTags(record),
+    ...getRecordOpenTags(baseRecord),
+    ...getRecordIntervalTags(record),
+    ...getRecordIntervalTags(baseRecord),
+  ].join("|").toUpperCase();
+  return (
+    (/GLOBAL/.test(tags) ? 1000000 : 0) +
+    (/V4/.test(tags) ? 10000 : 0) +
+    Math.max(0, id)
+  );
+}
+
+function isRetiredContractRecord(record, contractId = 0) {
+  const id = Number(record && (record.m_ContractID || record.ContractID || record.contractId)) || Number(contractId) || 0;
+  const baseRecord = getContractRecord(id) || {};
+  const text = [
+    ...getRecordOpenTags(record),
+    ...getRecordOpenTags(baseRecord),
+    ...getRecordIntervalTags(record),
+    ...getRecordIntervalTags(baseRecord),
+    String(record && (record.m_ContractName || record.m_ContractStrID) || ""),
+    String(baseRecord && (baseRecord.m_ContractName || baseRecord.m_ContractStrID) || ""),
+  ].join("|").toUpperCase();
+  return (
+    text.includes("TAG_KOR_CONTRACT_OLD_VERSION") ||
+    text.includes("DATE_KOR_CONTRACT_OLD_VERSION") ||
+    text.includes("DATE_GLOBAL_CLASSIFIED_OLD_VERSION") ||
+    text.includes("SI_NAME_CONTRACT_OLD")
+  );
 }
 
 function resolveContractRecord(contractId) {
@@ -396,6 +560,7 @@ function getActiveContractClockState(ctx) {
     openTags: new Set(),
     intervalTags: new Set(),
     intervalsByTag: new Map(),
+    contentsTags: getContextContentsTagSet(ctx),
   };
   const manager = ctx && ctx.eventManager;
   if (!manager || typeof manager.getActiveEventState !== "function") return empty;
@@ -415,6 +580,7 @@ function getActiveContractClockState(ctx) {
     openTags: new Set(),
     intervalTags: new Set(),
     intervalsByTag: new Map(),
+    contentsTags: getContextContentsTagSet(ctx, state),
   };
   for (const interval of Array.isArray(state.intervalData) ? state.intervalData : []) {
     const tag = normalizeTag(interval && interval.strKey);
@@ -463,7 +629,8 @@ function isShopInheritedEventEntry(entry) {
 }
 
 function isContractRecordActiveForClock(record, clockState, kind = "contract") {
-  if (!record || !clockState || !clockState.enabled) return true;
+  if (!record) return false;
+  if (!clockState || !clockState.enabled) return !isClockGatedContractRecord(record, kind);
   const contractId = Number(record.m_ContractID || record.ContractID || record.contractId || 0);
   const customPickupId = Number(record.customPickupId || record.m_CustomPickupID || record.CustomPickupID || 0);
   if (kind === "custom" && isAlwaysOnCustomPickupRecord(record)) return true;
@@ -471,6 +638,43 @@ function isContractRecordActiveForClock(record, clockState, kind = "contract") {
   if (contractId > 0 && clockState.contractIds.has(contractId)) return true;
   if (hasActiveClockTag(record, clockState)) return true;
   return !isClockGatedContractRecord(record, kind);
+}
+
+function isContractEntryVisibleForContentsTags(record, contractId, clockState) {
+  const id = Number(record && (record.m_ContractID || record.ContractID || record.contractId)) || Number(contractId) || 0;
+  const baseRecord = getContractRecord(id) || {};
+  return isRecordVisibleForContentsTags(record, clockState) && isRecordVisibleForContentsTags(baseRecord, clockState);
+}
+
+function isRecordVisibleForContentsTags(record, clockState) {
+  if (!record) return true;
+  const activeTags = clockState && clockState.contentsTags instanceof Set ? clockState.contentsTags : new Set();
+  const ignoreTags = getRecordContentsIgnoreTags(record);
+  if (ignoreTags.some((tag) => activeTags.has(tag))) return false;
+
+  const allowTags = getRecordContentsAllowTags(record);
+  if (allowTags.length && !allowTags.some((tag) => activeTags.has(tag))) return false;
+  return true;
+}
+
+function getContextContentsTagSet(ctx, activeState = null) {
+  const tags = [];
+  let hasContextTags = false;
+  if (Array.isArray(ctx && ctx.contentsTags)) {
+    tags.push(...ctx.contentsTags);
+    hasContextTags = true;
+  }
+  if (ctx && typeof ctx.getEffectiveContentsTags === "function") {
+    try {
+      tags.push(...ctx.getEffectiveContentsTags((ctx.config && ctx.config.CONTENTS_TAGS) || []));
+      hasContextTags = true;
+    } catch (_) {
+      // keep any explicit context tags collected above
+    }
+  }
+  if (!hasContextTags && activeState && Array.isArray(activeState.contentsTags)) tags.push(...activeState.contentsTags);
+  if (!hasContextTags && activeState && Array.isArray(activeState.counterPassContentsTags)) tags.push(...activeState.counterPassContentsTags);
+  return new Set(normalizeTags(tags).filter((tag) => !isObsoleteContractContentsTag(tag)));
 }
 
 function hasActiveClockTag(record, clockState) {
@@ -547,6 +751,26 @@ function getRecordIntervalTags(record) {
   ]);
 }
 
+function getRecordContentsAllowTags(record) {
+  return normalizeTags([
+    record && record.listContentsTagAllow,
+    record && record.contentsTagAllow,
+    record && record.ContentsTagAllow,
+    record && record.m_ContentsTagAllow,
+    record && record.m_ContentsTag,
+    record && record.listContentsTag,
+  ]);
+}
+
+function getRecordContentsIgnoreTags(record) {
+  return normalizeTags([
+    record && record.listContentsTagIgnore,
+    record && record.contentsTagIgnore,
+    record && record.ContentsTagIgnore,
+    record && record.m_ContentsTagIgnore,
+  ]);
+}
+
 function normalizeTags(values) {
   return (Array.isArray(values) ? values : [values])
     .flatMap((value) => (Array.isArray(value) ? value : String(value || "").split(/[,|;\s]+/)))
@@ -557,6 +781,37 @@ function normalizeTags(values) {
 function normalizeTag(value) {
   const tag = String(value || "").trim().toUpperCase();
   return tag && tag !== "NONE" && tag !== "NULL" ? tag : "";
+}
+
+function normalizeDedupeToken(value) {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function normalizeContractUnitToken(value) {
+  return normalizeDedupeToken(value)
+    .replace(/^NKM_UNIT_/, "")
+    .replace(/^SI_UNIT_NAME_/, "")
+    .replace(/^SI_UNIT_TITLE_/, "")
+    .replace(/^SI_NAME_UNIT_/, "");
+}
+
+function isObsoleteContractContentsTag(tag) {
+  const key = String(tag || "").toUpperCase();
+  return (
+    key === "TAG_GLOBAL_CONTRACT_BASIC" ||
+    key === "TAG_GLOBAL_CONTRACT_OPERATOR_TUTORIAL" ||
+    key === "TAG_GLOBAL_CONTRACT_CBT" ||
+    key === "TAG_GLOBAL_CONTRACT_OBT"
+  );
+}
+
+function isPlaceholderContractUnitKey(value) {
+  const key = normalizeDedupeToken(value);
+  return key === "NKM_NPC_ADMINISTRATOR" || key === "NPC_ADMINISTRATOR" || key === "ADMINISTRATOR";
 }
 
 function getContractState(user, contractId, ctx) {
@@ -936,12 +1191,11 @@ function getCustomPickupContractState(user, customPickupId) {
   ensureContractStateStore(user);
   const record = getCustomPickupContractRecords().find((entry) => Number(entry.customPickupId) === Number(customPickupId)) || {};
   const includeOperators = String(record.m_ContractType || "") === "OPERATOR";
-  const defaultTarget = normalizeCustomPickupTarget(record, 0, { includeOperators });
   if (!user) {
     return {
       customPickupId: Number(customPickupId) || 0,
       totalUseCount: 0,
-      customPickupTargetUnitId: defaultTarget,
+      customPickupTargetUnitId: 0,
       currentSelectCount: 0,
     };
   }
@@ -949,12 +1203,14 @@ function getCustomPickupContractState(user, customPickupId) {
   const existing = user.customPickupContracts[key] || findCustomPickupStateByType(user, record) || {};
   const maxSelectCount = getCustomPickupMaxSelectCount(record);
   const currentSelectCount = Math.max(0, Number(existing.currentSelectCount || 0));
+  const existingTarget = Number(existing.customPickupTargetUnitId || 0);
+  const selectedTarget = existingTarget > 0 && currentSelectCount > 0
+    ? normalizeCustomPickupTarget(record, existingTarget, { includeOperators })
+    : 0;
   const state = {
     customPickupId: Number(customPickupId) || 0,
     totalUseCount: Number(existing.totalUseCount || 0),
-    customPickupTargetUnitId: normalizeCustomPickupTarget(record, existing.customPickupTargetUnitId || defaultTarget, {
-      includeOperators,
-    }),
+    customPickupTargetUnitId: selectedTarget,
     currentSelectCount: maxSelectCount > 0 ? Math.min(currentSelectCount, maxSelectCount) : currentSelectCount,
   };
   user.customPickupContracts[key] = state;
@@ -1019,8 +1275,10 @@ function findCustomPickupStateByType(user, record) {
 function normalizeCustomPickupTarget(record, targetUnitId, options = {}) {
   const entries = getContractPoolUnitEntries(record && record.m_UnitPoolID, options).filter((entry) => entry.pickupTarget);
   const requested = Number(targetUnitId || 0);
+  if (!Number.isInteger(requested) || requested <= 0) return 0;
   if (requested > 0 && entries.some((entry) => Number(entry.unitId) === requested)) return requested;
-  return Number(entries[0] && entries[0].unitId) || 0;
+  if (requested <= entries.length) return Number(entries[requested - 1] && entries[requested - 1].unitId) || 0;
+  return 0;
 }
 
 function getSelectableContractState(user, requestedContractId = 0) {
@@ -1237,5 +1495,8 @@ module.exports = {
   buildContractBonusStateData,
   buildCustomPickupContractData,
   getAllCustomPickupContracts,
+  filterDuplicateContractOpenTags,
+  filterDuplicateContractIntervalTags,
+  filterDuplicateContractIntervalData,
   openMiscContract,
 };

@@ -61,6 +61,7 @@ internal sealed class CombatEngine
             "extractJoinLobbyProfile" => ExtractJoinLobbyProfile(Read<PacketValidationData>(request.Data)),
             "mergeJoinLobbyAck" => MergeJoinLobbyAck(Read<JoinLobbyMergeData>(request.Data)),
             "normalizeJoinLobbyAck" => NormalizeJoinLobbyAck(Read<JoinLobbyNormalizeData>(request.Data)),
+            "exportLuaTable" => ExportLuaTable(Read<GameplayTableExportData>(request.Data)),
             _ => new HostResponse { Ok = false, Error = $"unknown command: {request.Command}" }
         };
     }
@@ -133,6 +134,13 @@ internal sealed class CombatEngine
         return ManagedCombatBridge.TryNormalizeJoinLobbyAck(options, data, out var response, out var error)
             ? response ?? new HostResponse { Ok = true }
             : new HostResponse { Ok = false, Error = error ?? "managed lobby normalize failed" };
+    }
+
+    private HostResponse ExportLuaTable(GameplayTableExportData data)
+    {
+        return ManagedCombatBridge.TryExportLuaTable(options, data, out var response, out var error)
+            ? response ?? new HostResponse { Ok = true }
+            : new HostResponse { Ok = false, Error = error ?? "managed Lua table export failed" };
     }
 
     private HostResponse StartBattle(StartBattleData data)

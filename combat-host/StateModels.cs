@@ -64,6 +64,8 @@ public sealed class PlayerDeckData
     public int ShipUnitId { get; set; }
     public int ShipLevel { get; set; } = 1;
     public int ShipSkinId { get; set; }
+    public int ShipLimitBreakLevel { get; set; }
+    public int ShipTacticLevel { get; set; }
     public string OperatorUid { get; set; } = "0";
     public int OperatorId { get; set; }
     public int OperatorLevel { get; set; } = 1;

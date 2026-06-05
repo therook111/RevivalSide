@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { findGameplayTableFile } = require("../gameplay-jsons");
+const { readGameplayTableRecords } = require("../gameplay-jsons");
 const { createAdminRewardPosts } = require("../admin");
 const {
   writeString,
@@ -255,10 +255,12 @@ function getAttendanceRewardSpecs(catalog, rewardGroup, loginDate) {
 function loadAttendanceCatalog() {
   const tabPath = attendanceTabTablePath();
   const rewardPath = attendanceRewardTablePath();
-  const cacheKey = `${tabPath}\n${rewardPath}\n${process.env.CS_ATTENDANCE_TAB_IDX || ""}\n${process.env.CS_ATTENDANCE_TAB_IDS || ""}\n${process.env.CS_ATTENDANCE_REWARD_GROUP || ""}\n${process.env.CS_ATTENDANCE_REWARD_GROUPS || ""}\n${process.env.CS_ACTIVE_ATTENDANCE_TAB_IDS || ""}\n${process.env.CS_ATTENDANCE_ACTIVE_TAB_IDS || ""}`;
+  const cacheKey = `${tabPath || "luac:LUA_ATTENDANCE_TAB_TEMPLET"}\n${rewardPath || "luac:LUA_ATTENDANCE_REWARD_TEMPLET"}\n${process.env.CS_ATTENDANCE_TAB_IDX || ""}\n${process.env.CS_ATTENDANCE_TAB_IDS || ""}\n${process.env.CS_ATTENDANCE_REWARD_GROUP || ""}\n${process.env.CS_ATTENDANCE_REWARD_GROUPS || ""}\n${process.env.CS_ACTIVE_ATTENDANCE_TAB_IDS || ""}\n${process.env.CS_ATTENDANCE_ACTIVE_TAB_IDS || ""}`;
   if (cachedCatalog && cachedCatalogKey === cacheKey) return cachedCatalog;
 
-  const rewardRecords = readRecords(rewardPath);
+  const rewardRecords = rewardPath
+    ? readJsonRecords(rewardPath)
+    : readGameplayTableRecords("ab_script", "LUA_ATTENDANCE_REWARD_TEMPLET.json", { rootDir: ROOT_DIR, logLabel: "attendance" });
   const rewardsByGroup = new Map();
   for (const record of rewardRecords) {
     const group = Number(record && record.m_RewardGroup);
@@ -272,7 +274,9 @@ function loadAttendanceCatalog() {
 
   const explicitTabIds = parseNumberSet(process.env.CS_ATTENDANCE_TAB_IDX || process.env.CS_ATTENDANCE_TAB_IDS);
   const explicitGroups = parseNumberSet(process.env.CS_ATTENDANCE_REWARD_GROUP || process.env.CS_ATTENDANCE_REWARD_GROUPS);
-  const tabRecords = readRecords(tabPath);
+  const tabRecords = tabPath
+    ? readJsonRecords(tabPath)
+    : readGameplayTableRecords("ab_script", "LUA_ATTENDANCE_TAB_TEMPLET.json", { rootDir: ROOT_DIR, logLabel: "attendance" });
   const allTabs = tabRecords.map((record) => normalizeAttendanceTab(record, rewardsByGroup)).filter(Boolean);
   let tabs = allTabs;
   if (explicitTabIds.size) tabs = tabs.filter((tab) => explicitTabIds.has(tab.idx));
@@ -442,20 +446,14 @@ function normalizeAttendanceTab(record, rewardsByGroup) {
 }
 
 function attendanceTabTablePath() {
-  return (
-    process.env.CS_ATTENDANCE_TAB_TABLE_PATH ||
-    findGameplayTableFile("ab_script", "LUA_ATTENDANCE_TAB_TEMPLET.json", { rootDir: ROOT_DIR })
-  );
+  return process.env.CS_ATTENDANCE_TAB_TABLE_PATH || "";
 }
 
 function attendanceRewardTablePath() {
-  return (
-    process.env.CS_ATTENDANCE_REWARD_TABLE_PATH ||
-    findGameplayTableFile("ab_script", "LUA_ATTENDANCE_REWARD_TEMPLET.json", { rootDir: ROOT_DIR })
-  );
+  return process.env.CS_ATTENDANCE_REWARD_TABLE_PATH || "";
 }
 
-function readRecords(filePath) {
+function readJsonRecords(filePath) {
   try {
     const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
     return Array.isArray(parsed.records) ? parsed.records : [];

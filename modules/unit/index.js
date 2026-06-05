@@ -192,6 +192,8 @@ function buildPlayerDeckForGameLoad(user, req = {}, options = {}) {
     shipUnitId: ship ? Number(ship.unitId || 0) : 0,
     shipLevel: ship ? Number(ship.level || 1) : 1,
     shipSkinId: ship ? Number(ship.skinId || 0) : 0,
+    shipLimitBreakLevel: ship ? Number(ship.limitBreakLevel || 0) : 0,
+    shipTacticLevel: ship ? Number(ship.tacticLevel || 0) : 0,
     operatorUid: operator ? String(toBigInt(operator.uid || operator.operatorUid || 0)) : "0",
     operatorId: operator ? Number(operator.id || operator.unitId || 0) : 0,
     operatorLevel: operator ? Number(operator.level || 1) : 1,

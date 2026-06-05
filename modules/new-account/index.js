@@ -20,7 +20,32 @@ const {
 } = require("../unit");
 
 const ROOT_DIR = path.resolve(__dirname, "..", "..");
-const DEFAULTS_PATH = path.join(ROOT_DIR, "gameplay-jsons", "new-account-defaults.json");
+const DEFAULTS_PATHS = [
+  process.env.CS_NEW_ACCOUNT_DEFAULTS_PATH,
+  path.join(ROOT_DIR, "server-data", "new-account-defaults.json"),
+  path.join(ROOT_DIR, "gameplay-jsons", "new-account-defaults.json"),
+].filter(Boolean);
+const BUILTIN_DEFAULTS = Object.freeze({
+  user: Object.freeze({
+    level: 1,
+    exp: "0",
+    totalExp: "0",
+  }),
+  profile: Object.freeze({
+    friendIntro: "",
+    mainUnitId: 0,
+    mainUnitSkinId: 0,
+    mainUnitTacticLevel: 0,
+    frameId: 0,
+    selfiFrameId: 0,
+    titleId: 0,
+  }),
+  roster: Object.freeze({
+    units: Object.freeze([]),
+    ships: Object.freeze([]),
+    operators: Object.freeze([]),
+  }),
+});
 const BOOTSTRAP_KEY = "officialNewAccountDefaultsV2";
 const ROSTER_MODES = Object.freeze({
   NONE: "none",
@@ -153,12 +178,21 @@ function rememberBootstrap(user, result, options = {}) {
 
 function loadNewAccountDefaults() {
   if (cachedDefaults) return cachedDefaults;
-  try {
-    const parsed = JSON.parse(fs.readFileSync(DEFAULTS_PATH, "utf8"));
-    cachedDefaults = parsed && typeof parsed === "object" ? parsed : {};
-  } catch (_) {
-    cachedDefaults = {};
+  for (const configuredPath of DEFAULTS_PATHS) {
+    const filePath = path.resolve(ROOT_DIR, configuredPath);
+    try {
+      if (!fs.existsSync(filePath)) continue;
+      const parsed = JSON.parse(fs.readFileSync(filePath, "utf8"));
+      if (parsed && typeof parsed === "object") {
+        cachedDefaults = parsed;
+        return cachedDefaults;
+      }
+    } catch (_) {
+      // Try the next defaults source; the built-in baseline is enough for
+      // normal fresh accounts when the legacy gameplay-jsons folder is absent.
+    }
   }
+  cachedDefaults = BUILTIN_DEFAULTS;
   return cachedDefaults;
 }
 

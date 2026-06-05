@@ -77,7 +77,8 @@ internal sealed class InstallerWindow : Window
 
     public InstallerWindow()
     {
-        (backgroundImage, backgroundName) = LoadRandomCutsceneBackground(Path.Combine(localPayloadRoot, "app"));
+        backgroundImage = null;
+        backgroundName = "";
         Title = "RevivalSide Setup";
         Width = 940;
         Height = 620;
@@ -240,7 +241,7 @@ internal sealed class InstallerWindow : Window
         };
         var architecture = InfoChip("Architecture", architectureText);
         var payload = InfoChip("Payload", payloadText);
-        var gameplay = InfoChip("Gameplay Data", gameplayText);
+        var gameplay = InfoChip("Asset Mode", gameplayText);
         strip.Children.Add(architecture);
         Grid.SetColumn(payload, 1);
         strip.Children.Add(payload);
@@ -361,12 +362,20 @@ internal sealed class InstallerWindow : Window
         {
             payloadRoot = await EnsurePayloadReadyAsync();
             await Task.Run(() => InstallCore(target));
+            var canLaunch = await PromptInstallDotNet8IfMissingAsync(target);
             progress.IsIndeterminate = false;
             progress.Value = 100;
-            launchButton.IsEnabled = true;
+            launchButton.IsEnabled = canLaunch;
             SetStatus("Complete");
             AppendLog("Install complete.");
-            LaunchInstalled(target);
+            if (canLaunch)
+            {
+                LaunchInstalled(target);
+            }
+            else
+            {
+                AppendLog("Launch skipped until .NET 8 Runtime is installed.");
+            }
         }
         catch (Exception ex)
         {
@@ -389,16 +398,25 @@ internal sealed class InstallerWindow : Window
         var appPayload = Path.Combine(payloadRoot, "app");
         var runtimePayload = Path.Combine(payloadRoot, "runtime-apps", rid);
         var nodePayload = Path.Combine(payloadRoot, "runtime-node", rid);
+        var pythonPayload = Path.Combine(payloadRoot, "runtime-python", rid);
+        var wiresharkPayload = Path.Combine(payloadRoot, "runtime-wireshark", rid);
+        var dotnetInstallerPayload = Path.Combine(payloadRoot, "runtime-installers", "dotnet");
+        var npcapInstallerPayload = Path.Combine(payloadRoot, "runtime-installers", "npcap");
 
         SetStatus("Checking package");
         RequireDirectory(appPayload, "app payload");
         RequireDirectory(runtimePayload, $"runtime payload {rid}");
-        RequireDirectory(nodePayload, $"Node runtime for {rid}");
         RequireFile(Path.Combine(nodePayload, "node.exe"), $"node.exe for {rid}");
         RequireFile(Path.Combine(nodePayload, "npm.cmd"), $"npm.cmd for {rid}");
-        var payloadGameplayJsons = ValidateGameplayJsons(appPayload, "gameplay JSON payload");
-        SetGameplayStatus($"{payloadGameplayJsons.FileCount:N0} files");
-        AppendLog($"Gameplay JSON payload: {payloadGameplayJsons.FileCount:N0} files");
+        RequireFile(Path.Combine(pythonPayload, "python.exe"), $"python.exe for {rid}");
+        RequireFile(Path.Combine(wiresharkPayload, "dumpcap.exe"), $"dumpcap.exe for {rid}");
+        RequireFile(Path.Combine(wiresharkPayload, "tshark.exe"), $"tshark.exe for {rid}");
+        RequireDirectory(dotnetInstallerPayload, ".NET runtime installers");
+        RequireDirectory(npcapInstallerPayload, "Npcap installer");
+        RequireMatchingFile(npcapInstallerPayload, "npcap-*.exe", "Npcap installer");
+        var payloadApp = ValidateAppPayload(appPayload, "app payload");
+        SetGameplayStatus("Client luac");
+        AppendLog($"App payload ready: {payloadApp.FileCount:N0} files; gameplay tables load from the user's installed CounterSide assets.");
 
         SetStatus("Copying files");
         AppendLog($"Installing {rid} to {target}");
@@ -407,11 +425,28 @@ internal sealed class InstallerWindow : Window
         CopyDirectory(appPayload, target, preserveUserData: true);
         CopyDirectory(runtimePayload, target, preserveUserData: false);
         CopyDirectory(nodePayload, Path.Combine(target, "runtime", "node"), preserveUserData: false);
+        CopyDirectory(pythonPayload, Path.Combine(target, "runtime", "python"), preserveUserData: false);
+        CopyDirectory(wiresharkPayload, Path.Combine(target, "runtime", "Wireshark"), preserveUserData: false);
+        CopyDirectory(dotnetInstallerPayload, Path.Combine(target, "runtime", "installers", "dotnet"), preserveUserData: false);
+        CopyDirectory(npcapInstallerPayload, Path.Combine(target, "runtime", "installers", "npcap"), preserveUserData: false);
+        AppendLog("Bundled Node, Python, and Wireshark binaries staged; .NET 8 and Npcap installers staged.");
+        ClearRuntimeCaches(target);
 
         EnsureCleanUserDbSeed(target);
-        var installedGameplayJsons = ValidateGameplayJsons(target, "installed gameplay JSONs");
-        SetGameplayStatus($"{installedGameplayJsons.FileCount:N0} files");
-        AppendLog($"Installed gameplay JSONs: {installedGameplayJsons.FileCount:N0} files");
+        var installedApp = ValidateAppPayload(target, "installed app");
+        RequireFile(Path.Combine(target, "RevivalSideLauncher.exe"), "installed launcher");
+        RequireDirectory(Path.Combine(target, "combat-host"), "installed combat host");
+        RequireFile(Path.Combine(target, "tools", "CounterPassClientPatcher", "CounterPassClientPatcher.exe"), "installed client patcher");
+        RequireFile(Path.Combine(target, "runtime", "node", "node.exe"), "installed node.exe");
+        RequireFile(Path.Combine(target, "runtime", "node", "npm.cmd"), "installed npm.cmd");
+        RequireFile(Path.Combine(target, "runtime", "python", "python.exe"), "installed python.exe");
+        RequireFile(Path.Combine(target, "runtime", "Wireshark", "dumpcap.exe"), "installed dumpcap.exe");
+        RequireFile(Path.Combine(target, "runtime", "Wireshark", "tshark.exe"), "installed tshark.exe");
+        RequireDirectory(Path.Combine(target, "runtime", "installers", "dotnet"), "installed .NET runtime installers");
+        RequireDirectory(Path.Combine(target, "runtime", "installers", "npcap"), "installed Npcap installer");
+        RequireMatchingFile(Path.Combine(target, "runtime", "installers", "npcap"), "npcap-*.exe", "installed Npcap installer");
+        SetGameplayStatus("Built on launch");
+        AppendLog($"Installed app ready: {installedApp.FileCount:N0} files; no gameplay JSON dump was installed.");
         CreateDesktopShortcut(target);
     }
 
@@ -447,7 +482,13 @@ internal sealed class InstallerWindow : Window
             ?? throw new InvalidOperationException("Release payload manifest was empty or invalid.");
         manifest.Validate();
 
-        var payloadId = SanitizeFileName(string.IsNullOrWhiteSpace(manifest.PayloadId) ? manifest.ArchiveSha256[..16] : manifest.PayloadId);
+        var archiveHashToken = manifest.ArchiveSha256[..Math.Min(16, manifest.ArchiveSha256.Length)];
+        var manifestPayloadId = string.IsNullOrWhiteSpace(manifest.PayloadId) ? "payload" : manifest.PayloadId;
+        if (!manifestPayloadId.Contains(archiveHashToken[..Math.Min(12, archiveHashToken.Length)], StringComparison.OrdinalIgnoreCase))
+        {
+            manifestPayloadId = $"{manifestPayloadId}-{archiveHashToken}";
+        }
+        var payloadId = SanitizeFileName(manifestPayloadId);
         var cacheRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RevivalSideSetup", "payload-cache", payloadId);
         var extractedPayloadRoot = Path.Combine(cacheRoot, "extract", "payload");
         if (IsReleasePayloadReady(extractedPayloadRoot))
@@ -553,17 +594,158 @@ internal sealed class InstallerWindow : Window
     {
         try
         {
-            var status = ValidateGameplayJsons(Path.Combine(localPayloadRoot, "app"), "gameplay JSON payload");
-            gameplayText.Text = $"{status.FileCount:N0} files";
+            var status = ValidateReleasePayload(localPayloadRoot);
+            gameplayText.Text = "Client luac";
             payloadText.Text = "Ready";
+            AppendLog($"Local payload ready: {status.AppFileCount:N0} app files; gameplay tables build from CounterSide assets on first launch.");
         }
         catch (Exception ex)
         {
             var releaseUrl = ResolveReleaseManifestUrl();
             payloadText.Text = string.IsNullOrWhiteSpace(releaseUrl) ? "Missing" : "Download";
-            gameplayText.Text = string.IsNullOrWhiteSpace(releaseUrl) ? "Not ready" : "On install";
+            gameplayText.Text = string.IsNullOrWhiteSpace(releaseUrl) ? "Not ready" : "Client luac";
             AppendLog(string.IsNullOrWhiteSpace(releaseUrl) ? $"Payload check: {ex.Message}" : "Payload will download from GitHub release.");
         }
+    }
+
+    private async Task<bool> PromptInstallDotNet8IfMissingAsync(string target)
+    {
+        if (HasDotNet8Runtime())
+        {
+            AppendLog(".NET 8 Runtime detected.");
+            return true;
+        }
+
+        var installer = FindInstalledDotNetInstaller(target);
+        if (!File.Exists(installer))
+        {
+            AppendLog(".NET 8 Runtime is missing and no bundled installer was found.");
+            await ShowMessageAsync("RevivalSide Setup", ".NET 8 Runtime is required to launch RevivalSide, but the bundled installer was not found.");
+            return false;
+        }
+
+        var shouldInstall = await ShowConfirmAsync(
+            "Install .NET 8",
+            ".NET 8 Runtime is required to launch RevivalSide. Install the bundled runtime now?",
+            "Install",
+            "Later");
+        if (!shouldInstall)
+        {
+            AppendLog(".NET 8 Runtime install skipped.");
+            return false;
+        }
+
+        AppendLog($"Running .NET 8 Runtime installer: {Path.GetFileName(installer)}");
+        using var process = Process.Start(new ProcessStartInfo
+        {
+            FileName = installer,
+            Arguments = "/install /passive /norestart",
+            WorkingDirectory = Path.GetDirectoryName(installer),
+            UseShellExecute = true,
+            Verb = "runas",
+        });
+        if (process == null) throw new InvalidOperationException("Could not start .NET 8 Runtime installer.");
+        await process.WaitForExitAsync();
+        AppendLog($".NET 8 Runtime installer exited {process.ExitCode}.");
+        if (HasDotNet8Runtime())
+        {
+            AppendLog(".NET 8 Runtime detected after install.");
+            return true;
+        }
+        await ShowMessageAsync("RevivalSide Setup", ".NET 8 Runtime is still not detected. Run the bundled installer from runtime\\installers\\dotnet and then launch RevivalSide.");
+        return false;
+    }
+
+    private static string FindInstalledDotNetInstaller(string target)
+    {
+        var rid = GetWindowsRid();
+        var directory = Path.Combine(target, "runtime", "installers", "dotnet", rid);
+        if (!Directory.Exists(directory)) return "";
+        return Directory.EnumerateFiles(directory, "*.exe", SearchOption.TopDirectoryOnly)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault() ?? "";
+    }
+
+    private static bool HasDotNet8Runtime()
+    {
+        var dotnet = ResolveToolPath("dotnet.exe");
+        if (string.IsNullOrWhiteSpace(dotnet)) return false;
+        try
+        {
+            using var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = dotnet,
+                    Arguments = "--list-runtimes",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true,
+                },
+            };
+            var output = new StringBuilder();
+            process.OutputDataReceived += (_, e) => { if (e.Data != null) output.AppendLine(e.Data); };
+            process.ErrorDataReceived += (_, e) => { if (e.Data != null) output.AppendLine(e.Data); };
+            if (!process.Start()) return false;
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            if (!process.WaitForExit(15000))
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
+                return false;
+            }
+            return process.ExitCode == 0
+                && output.ToString().Replace("\r", "").Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                    .Any(line => line.Contains("Microsoft.NETCore.App 8.", StringComparison.OrdinalIgnoreCase));
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string ResolveToolPath(string toolName)
+    {
+        var fromPath = ResolveToolFromPath(toolName);
+        if (!string.IsNullOrWhiteSpace(fromPath)) return fromPath;
+        if (toolName.Equals("dotnet.exe", StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (var dotnetPath in new[]
+            {
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "dotnet.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "x64", "dotnet.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "dotnet", "dotnet.exe"),
+            })
+            {
+                if (File.Exists(dotnetPath)) return dotnetPath;
+            }
+        }
+        return toolName;
+    }
+
+    private static string ResolveToolFromPath(string toolName)
+    {
+        var pathVariable = Environment.GetEnvironmentVariable("PATH") ?? "";
+        var extensions = Path.HasExtension(toolName)
+            ? new[] { "" }
+            : (Environment.GetEnvironmentVariable("PATHEXT") ?? ".COM;.EXE;.BAT;.CMD").Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var directory in pathVariable.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            foreach (var extension in extensions)
+            {
+                try
+                {
+                    var candidate = Path.Combine(directory.Trim('"'), toolName + extension);
+                    if (File.Exists(candidate)) return candidate;
+                }
+                catch
+                {
+                    // Ignore malformed PATH entries.
+                }
+            }
+        }
+        return "";
     }
 
     private void LaunchInstalled()
@@ -587,6 +769,7 @@ internal sealed class InstallerWindow : Window
         foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
         {
             var relative = Path.GetRelativePath(source, directory);
+            if (ShouldNeverInstallPayloadPath(relative)) continue;
             if (preserveUserData && ShouldSkipUserDataPath(relative, isDirectory: true)) continue;
             Directory.CreateDirectory(Path.Combine(destination, relative));
         }
@@ -594,9 +777,17 @@ internal sealed class InstallerWindow : Window
         foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
         {
             var relative = Path.GetRelativePath(source, file);
+            if (ShouldNeverInstallPayloadPath(relative)) continue;
             if (preserveUserData && ShouldSkipUserDataPath(relative, isDirectory: false) && File.Exists(Path.Combine(destination, relative))) continue;
             CopyFile(file, Path.Combine(destination, relative));
         }
+    }
+
+    private static bool ShouldNeverInstallPayloadPath(string relativePath)
+    {
+        var normalized = relativePath.Replace('\\', '/').Trim('/');
+        return normalized.Equals(".cache", StringComparison.OrdinalIgnoreCase)
+            || normalized.StartsWith(".cache/", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool ShouldSkipUserDataPath(string relativePath, bool isDirectory)
@@ -615,6 +806,21 @@ internal sealed class InstallerWindow : Window
             or "server-data/server-time.json"
             || normalized.EndsWith(".pcap", StringComparison.OrdinalIgnoreCase)
             || normalized.EndsWith(".pcapng", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void ClearRuntimeCaches(string target)
+    {
+        var cacheDir = Path.Combine(target, ".cache");
+        if (!Directory.Exists(cacheDir)) return;
+        try
+        {
+            Directory.Delete(cacheDir, recursive: true);
+            AppendLog("Removed stale runtime cache; caches will rebuild from the installed CounterSide client.");
+        }
+        catch (Exception ex)
+        {
+            AppendLog($"Runtime cache cleanup skipped: {ex.Message}");
+        }
     }
 
     private void EnsureCleanUserDbSeed(string target)
@@ -697,13 +903,9 @@ internal sealed class InstallerWindow : Window
 
     private static bool IsReleasePayloadReady(string root)
     {
-        if (!Directory.Exists(root)) return false;
-        if (!Directory.Exists(Path.Combine(root, "app"))) return false;
-        if (!Directory.Exists(Path.Combine(root, "runtime-apps"))) return false;
-        if (!Directory.Exists(Path.Combine(root, "runtime-node"))) return false;
         try
         {
-            ValidateGameplayJsons(Path.Combine(root, "app"), "gameplay JSON payload");
+            ValidateReleasePayload(root);
             return true;
         }
         catch
@@ -759,21 +961,64 @@ internal sealed class InstallerWindow : Window
         if (!File.Exists(path)) throw new FileNotFoundException($"{name} was not found.", path);
     }
 
-    private static GameplayJsonStatus ValidateGameplayJsons(string root, string name)
+    private static void RequireMatchingFile(string directory, string pattern, string name)
     {
-        var directory = Path.Combine(root, "gameplay-jsons");
-        if (!Directory.Exists(directory)) throw new DirectoryNotFoundException($"{name} was not found: {directory}");
-        var assetbundles = Path.Combine(directory, "Assetbundles");
-        var streamingAssets = Path.Combine(directory, "StreamingAssets");
-        var defaults = Path.Combine(directory, "new-account-defaults.json");
-        if (!Directory.Exists(assetbundles)) throw new DirectoryNotFoundException($"{name} is missing Assetbundles: {assetbundles}");
-        if (!Directory.Exists(streamingAssets)) throw new DirectoryNotFoundException($"{name} is missing StreamingAssets: {streamingAssets}");
-        if (!File.Exists(defaults)) throw new FileNotFoundException($"{name} is missing new-account-defaults.json.", defaults);
+        RequireDirectory(directory, name);
+        if (!Directory.EnumerateFiles(directory, pattern, SearchOption.AllDirectories).Any())
+        {
+            throw new FileNotFoundException($"{name} was not found.", Path.Combine(directory, pattern));
+        }
+    }
 
-        var fileCount = 0;
-        foreach (var _ in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories)) fileCount++;
-        if (fileCount < 1000) throw new InvalidOperationException($"{name} looks incomplete: only {fileCount:N0} files were found at {directory}");
-        return new GameplayJsonStatus(directory, fileCount);
+    private static ReleasePayloadStatus ValidateReleasePayload(string root)
+    {
+        RequireDirectory(root, "release payload");
+        RequireDirectory(Path.Combine(root, "app"), "app payload");
+        RequireDirectory(Path.Combine(root, "runtime-apps"), "runtime payloads");
+        var rid = GetWindowsRid();
+        RequireFile(Path.Combine(root, "runtime-node", rid, "node.exe"), $"node.exe for {rid}");
+        RequireFile(Path.Combine(root, "runtime-node", rid, "npm.cmd"), $"npm.cmd for {rid}");
+        RequireFile(Path.Combine(root, "runtime-python", rid, "python.exe"), $"python.exe for {rid}");
+        RequireFile(Path.Combine(root, "runtime-wireshark", rid, "dumpcap.exe"), $"dumpcap.exe for {rid}");
+        RequireFile(Path.Combine(root, "runtime-wireshark", rid, "tshark.exe"), $"tshark.exe for {rid}");
+        RequireDirectory(Path.Combine(root, "runtime-installers", "dotnet"), ".NET runtime installers");
+        RequireDirectory(Path.Combine(root, "runtime-installers", "npcap"), "Npcap installer");
+        RequireMatchingFile(Path.Combine(root, "runtime-installers", "npcap"), "npcap-*.exe", "Npcap installer");
+        var app = ValidateAppPayload(Path.Combine(root, "app"), "app payload");
+        return new ReleasePayloadStatus(root, app.FileCount);
+    }
+
+    private static AppPayloadStatus ValidateAppPayload(string root, string name)
+    {
+        RequireDirectory(root, name);
+        foreach (var directory in new[] { "server", "modules", "packet-handlers", "combat-handler", "tools", "server-data" })
+        {
+            RequireDirectory(Path.Combine(root, directory), $"{name} {directory}");
+        }
+        foreach (var file in new[]
+        {
+            "cs-listener.js",
+            "package.json",
+            "packet-schema.json",
+            Path.Combine("modules", "gameplay-jsons", "index.js"),
+            Path.Combine("modules", "counterside-install", "index.js"),
+            Path.Combine("tools", "ensure-gameplay-assets.js"),
+            Path.Combine("tools", "ensure-cutscene-backgrounds.js"),
+            Path.Combine("tools", "cs_asset_decrypt.py"),
+            Path.Combine("tools", "cs_extract_decrypted_assets.py"),
+            Path.Combine("server-data", "captured-flows", "manifest.json"),
+        })
+        {
+            RequireFile(Path.Combine(root, file), $"{name} {file}");
+        }
+        return new AppPayloadStatus(root, CountFiles(root));
+    }
+
+    private static int CountFiles(string directory)
+    {
+        var count = 0;
+        foreach (var _ in Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories)) count++;
+        return count;
     }
 
     private void SetStatus(string text)
@@ -827,6 +1072,48 @@ internal sealed class InstallerWindow : Window
         await window.ShowDialog(this);
     }
 
+    private async Task<bool> ShowConfirmAsync(string title, string message, string confirmLabel, string cancelLabel)
+    {
+        var confirm = new Button { Content = confirmLabel, MinWidth = 104, Height = 36 };
+        var cancel = new Button { Content = cancelLabel, MinWidth = 92, Height = 36 };
+        StyleButton(confirm, primary: true);
+        StyleButton(cancel, primary: false);
+        var window = new Window
+        {
+            Title = title,
+            Width = 460,
+            Height = 230,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Background = Brush(12, 16, 23),
+            Content = new Border
+            {
+                Padding = new Thickness(22),
+                Child = new Grid
+                {
+                    RowDefinitions = new RowDefinitions("*,Auto"),
+                    Children =
+                    {
+                        new TextBlock { Text = message, Foreground = Brush(236, 242, 248), TextWrapping = TextWrapping.Wrap, FontSize = 15 },
+                        new StackPanel
+                        {
+                            Orientation = Orientation.Horizontal,
+                            HorizontalAlignment = HorizontalAlignment.Right,
+                            Spacing = 10,
+                            Children = { cancel, confirm },
+                        },
+                    },
+                },
+            },
+        };
+        var buttons = ((Grid)((Border)window.Content!).Child!).Children[1];
+        Grid.SetRow(buttons, 1);
+        var accepted = false;
+        confirm.Click += (_, _) => { accepted = true; window.Close(); };
+        cancel.Click += (_, _) => window.Close();
+        await window.ShowDialog(this);
+        return accepted;
+    }
+
     private static Border Glass(Thickness padding, Thickness margin, Color? fill = null)
     {
         return new Border
@@ -860,53 +1147,6 @@ internal sealed class InstallerWindow : Window
     {
         Grid.SetRow(control, row);
         grid.Children.Add(control);
-    }
-
-    private static (Bitmap? Image, string Name) LoadRandomCutsceneBackground(string appRoot)
-    {
-        var zipPath = Path.Combine(appRoot, "extracted-assets", "cutscene-bg-16x9.zip");
-        if (File.Exists(zipPath))
-        {
-            try
-            {
-                using var zip = ZipFile.OpenRead(zipPath);
-                var entries = zip.Entries.Where(entry => entry.Length > 100_000 && entry.FullName.EndsWith(".png", StringComparison.OrdinalIgnoreCase)).ToArray();
-                if (entries.Length > 0)
-                {
-                    var entry = entries[Random.Shared.Next(entries.Length)];
-                    using var stream = entry.Open();
-                    using var memory = new MemoryStream();
-                    stream.CopyTo(memory);
-                    memory.Position = 0;
-                    return (new Bitmap(memory), Path.GetFileNameWithoutExtension(entry.FullName));
-                }
-            }
-            catch
-            {
-                // Fall through to folder lookup.
-            }
-        }
-
-        var folder = Path.Combine(appRoot, "extracted-assets", "cutscene-bg-16x9");
-        if (Directory.Exists(folder))
-        {
-            try
-            {
-                var files = Directory.EnumerateFiles(folder, "*.png", SearchOption.AllDirectories).ToArray();
-                if (files.Length > 0)
-                {
-                    var file = files[Random.Shared.Next(files.Length)];
-                    using var stream = File.OpenRead(file);
-                    return (new Bitmap(stream), Path.GetFileNameWithoutExtension(file));
-                }
-            }
-            catch
-            {
-                // Use fallback gradient.
-            }
-        }
-
-        return (null, "");
     }
 
     private static IBrush Brush(byte r, byte g, byte b) => new SolidColorBrush(Color.FromRgb(r, g, b));
@@ -970,4 +1210,5 @@ internal sealed class ReleasePayloadChunk
     }
 }
 
-internal sealed record GameplayJsonStatus(string Path, int FileCount);
+internal sealed record AppPayloadStatus(string Path, int FileCount);
+internal sealed record ReleasePayloadStatus(string Path, int AppFileCount);

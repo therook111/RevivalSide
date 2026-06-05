@@ -459,7 +459,7 @@ function getMainStoryEpisodeCompleteMedalCount(user, episodeID, difficulty = 0) 
     if (isSuppressedStoryOpenTag(stage.openTag)) return total;
     const state = states[String(stage.stageId)] || {};
     if (state.completed !== true) return total;
-    return total + mainStoryStageMedalValue(stage, state);
+    return total + mainStoryEpisodeMedalValue(stage, state);
   }, 0);
 }
 
@@ -470,7 +470,7 @@ function getMainStoryEpisodeTotalMedalCount(episodeID, difficulty = 0) {
       Number(stage.episodeId || 0) === Number(episodeID || 0) &&
       Number(stage.difficulty || 0) === numericDifficulty &&
       !isSuppressedStoryOpenTag(stage.openTag)
-        ? total + mainStoryStageMedalValue(stage)
+        ? total + mainStoryEpisodeMedalValue(stage)
         : total,
     0
   );
@@ -483,6 +483,11 @@ function mainStoryStageMedalValue(stage, state = {}) {
     return 1 + (state.missionResult1 !== false ? 1 : 0) + (state.missionResult2 !== false ? 1 : 0);
   }
   return 3;
+}
+
+function mainStoryEpisodeMedalValue(stage, state = {}) {
+  if (!stage || stage.cutsceneOnly) return 0;
+  return mainStoryStageMedalValue(stage, state);
 }
 
 function isEpisodeRewardEligible(user, row, rewardIndex) {

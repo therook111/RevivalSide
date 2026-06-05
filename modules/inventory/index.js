@@ -240,13 +240,22 @@ function markInventoryTouched(inventory) {
 
 function normalizeMiscItem(value, fallbackItemId) {
   const item = value && typeof value === "object" ? value : {};
-  return {
+  const normalized = {
     itemId: Number(item.itemId || fallbackItemId) || 0,
     countFree: String(toBigInt(item.countFree != null ? item.countFree : item.count || 0)),
     countPaid: String(toBigInt(item.countPaid || 0)),
     bonusRatio: Number(item.bonusRatio || 0),
     regDate: String(item.regDate || "0"),
   };
+  for (const [key, fieldValue] of Object.entries(item)) {
+    if (Object.prototype.hasOwnProperty.call(normalized, key)) continue;
+    if (isInventoryTimingKey(key)) normalized[key] = fieldValue;
+  }
+  return normalized;
+}
+
+function isInventoryTimingKey(key) {
+  return /expire|expiration|validuntil|enddate|endtime|duration|period/i.test(String(key || ""));
 }
 
 function uniquePositiveInts(values) {

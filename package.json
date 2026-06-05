@@ -11,6 +11,7 @@
     "build:launcher": "dotnet build tools/RevivalSideLauncherApp/RevivalSideLauncherApp.csproj --nologo",
     "publish:installer": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/package-revivalside-universal-installer.ps1",
     "publish:github-release": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/package-revivalside-github-release.ps1",
+    "ensure:gameplay-assets": "node tools/ensure-gameplay-assets.js",
     "build:gameplay-jsons": "node tools/build-prepackaged-gameplay-jsons.js",
     "patch:counter-pass-client": "dotnet run --project tools/CounterPassClientPatcher/CounterPassClientPatcher.csproj -- --env-switch",
     "patch:counter-pass-client:restore": "dotnet run --project tools/CounterPassClientPatcher/CounterPassClientPatcher.csproj -- --restore",

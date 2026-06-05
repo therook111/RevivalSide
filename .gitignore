@@ -11,6 +11,7 @@ Desktop.ini
 # Node
 node_modules/
 npm-debug.log*
+.cache/
 
 # .NET build outputs
 **/bin/

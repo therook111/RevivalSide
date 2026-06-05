@@ -65,6 +65,7 @@ if (options.ApplyWorldMapRaidRefresh && PatchWorldMapRaidRefresh(module)) patche
 if (options.ApplyGearPresetSelectionFix && PatchGearPresetSelectionFix(module)) patches.Add("gear-preset-selection-fix");
 if (options.ApplyGearInventoryOkBindFix && PatchGearInventoryOkBindFix(module)) patches.Add("gear-inventory-ok-bind-fix");
 if (options.ApplyGearInventoryStateRepair && PatchGearInventoryStateRepair(module)) patches.Add("gear-inventory-state-repair");
+if (options.ApplyEpisodeProgressDifficultyFix && PatchEpisodeProgressDifficultyFix(module)) patches.Add("episode-progress-difficulty-fix");
 if (options.ApplySteamLocalLogin && PatchSteamLocalLogin(module)) patches.Add("steam-local-login");
 var changed = patches.Count > 0;
 if (!changed)
@@ -137,6 +138,7 @@ static int PrintStatus(string assemblyPath, string backupPath)
     Console.WriteLine($"[counter-pass-patch] gear-preset-selection-fix={HasGearPresetSelectionFix(module)}");
     Console.WriteLine($"[counter-pass-patch] gear-inventory-ok-bind-fix={HasGearInventoryOkBindFix(module)}");
     Console.WriteLine($"[counter-pass-patch] gear-inventory-state-repair={HasGearInventoryStateRepair(module)}");
+    Console.WriteLine($"[counter-pass-patch] episode-progress-difficulty-fix={HasEpisodeProgressDifficultyFix(module)}");
     Console.WriteLine($"[counter-pass-patch] steam-local-login={HasSteamLocalLoginPatch(module)}");
     return 0;
 }
@@ -200,6 +202,96 @@ static bool IsValidEnvKey(string key)
     if (string.IsNullOrWhiteSpace(key)) return false;
     if (!char.IsLetter(key[0]) && key[0] != '_') return false;
     return key.All(ch => char.IsLetterOrDigit(ch) || ch == '_');
+}
+
+static bool PatchEpisodeProgressDifficultyFix(ModuleDefinition module)
+{
+    var method = FindEpisodeProgressByEpisodeIdMethod(module)
+        ?? throw new InvalidOperationException("NKMEpisodeMgr.GetEPProgressClearCount(int) was not found.");
+    if (HasEpisodeProgressDifficultyFix(module)) return false;
+
+    var scenManagerType = FindTypeDefinition(module, "NKC.NKCScenManager")
+        ?? throw new InvalidOperationException("NKC.NKCScenManager was not found.");
+    var currentUserData = scenManagerType.Methods.FirstOrDefault(item => item.Name == "CurrentUserData" && item.Parameters.Count == 0)
+        ?? throw new InvalidOperationException("NKCScenManager.CurrentUserData was not found.");
+    var episodeTempletType = FindTypeDefinition(module, "NKM.Templet.NKMEpisodeTempletV2")
+        ?? throw new InvalidOperationException("NKM.Templet.NKMEpisodeTempletV2 was not found.");
+    var findEpisode = episodeTempletType.Methods.FirstOrDefault(item =>
+        item.Name == "Find"
+        && item.Parameters.Count == 2
+        && item.Parameters[0].ParameterType.MetadataType == MetadataType.Int32
+        && item.Parameters[1].ParameterType.FullName == "NKM.Templet.EPISODE_DIFFICULTY")
+        ?? throw new InvalidOperationException("NKMEpisodeTempletV2.Find(int, EPISODE_DIFFICULTY) was not found.");
+    var templateOverload = FindEpisodeProgressByTempletMethod(module)
+        ?? throw new InvalidOperationException("NKMEpisodeMgr.GetEPProgressClearCount(NKMUserData, NKMEpisodeTempletV2) was not found.");
+    var normalDifficulty = FindEnumConstant(module, "NKM.Templet.EPISODE_DIFFICULTY", "NORMAL");
+
+    ClearMethodBody(method, initLocals: true);
+    var userDataLocal = new VariableDefinition(module.ImportReference(currentUserData.ReturnType));
+    var episodeTempletLocal = new VariableDefinition(module.ImportReference(episodeTempletType));
+    method.Body.Variables.Add(userDataLocal);
+    method.Body.Variables.Add(episodeTempletLocal);
+
+    var il = method.Body.GetILProcessor();
+    var returnZero = il.Create(OpCodes.Ldc_I4_0);
+    il.Append(il.Create(OpCodes.Call, module.ImportReference(currentUserData)));
+    il.Append(il.Create(OpCodes.Stloc_0));
+    il.Append(il.Create(OpCodes.Ldarg_0));
+    il.Append(CreateLoadInt(il, normalDifficulty));
+    il.Append(il.Create(OpCodes.Call, module.ImportReference(findEpisode)));
+    il.Append(il.Create(OpCodes.Stloc_1));
+    il.Append(il.Create(OpCodes.Ldloc_1));
+    il.Append(il.Create(OpCodes.Brfalse_S, returnZero));
+    il.Append(il.Create(OpCodes.Ldloc_0));
+    il.Append(il.Create(OpCodes.Ldloc_1));
+    il.Append(il.Create(OpCodes.Call, module.ImportReference(templateOverload)));
+    il.Append(il.Create(OpCodes.Ret));
+    il.Append(returnZero);
+    il.Append(il.Create(OpCodes.Ret));
+    return true;
+}
+
+static bool HasEpisodeProgressDifficultyFix(ModuleDefinition module)
+{
+    var method = FindEpisodeProgressByEpisodeIdMethod(module);
+    if (method == null) return false;
+    var instructions = method.Body.Instructions;
+    return instructions.Count <= 16
+        && instructions.Any(instruction =>
+            instruction.Operand is MethodReference methodReference
+            && methodReference.DeclaringType.FullName == "NKM.Templet.NKMEpisodeTempletV2"
+            && methodReference.Name == "Find"
+            && methodReference.Parameters.Count == 2)
+        && instructions.Any(instruction =>
+            instruction.Operand is MethodReference methodReference
+            && methodReference.DeclaringType.FullName == "NKM.NKMEpisodeMgr"
+            && methodReference.Name == "GetEPProgressClearCount"
+            && methodReference.Parameters.Count == 2)
+        && instructions.Any(instruction => instruction.OpCode.Code == Code.Brfalse || instruction.OpCode.Code == Code.Brfalse_S)
+        && instructions.All(instruction => instruction.OpCode.Code != Code.Add);
+}
+
+static MethodDefinition? FindEpisodeProgressByEpisodeIdMethod(ModuleDefinition module)
+{
+    var episodeMgrType = FindTypeDefinition(module, "NKM.NKMEpisodeMgr");
+    return episodeMgrType?.Methods.FirstOrDefault(item =>
+        item.Name == "GetEPProgressClearCount"
+        && item.HasBody
+        && item.Parameters.Count == 1
+        && item.Parameters[0].ParameterType.MetadataType == MetadataType.Int32
+        && item.ReturnType.MetadataType == MetadataType.Int32);
+}
+
+static MethodDefinition? FindEpisodeProgressByTempletMethod(ModuleDefinition module)
+{
+    var episodeMgrType = FindTypeDefinition(module, "NKM.NKMEpisodeMgr");
+    return episodeMgrType?.Methods.FirstOrDefault(item =>
+        item.Name == "GetEPProgressClearCount"
+        && item.HasBody
+        && item.Parameters.Count == 2
+        && item.Parameters[0].ParameterType.FullName == "NKM.NKMUserData"
+        && item.Parameters[1].ParameterType.FullName == "NKM.Templet.NKMEpisodeTempletV2"
+        && item.ReturnType.MetadataType == MetadataType.Int32);
 }
 
 static bool PatchCounterPassUnlock(ModuleDefinition module)
@@ -2099,6 +2191,7 @@ sealed record PatchOptions(
     bool ApplyGearPresetSelectionFix,
     bool ApplyGearInventoryOkBindFix,
     bool ApplyGearInventoryStateRepair,
+    bool ApplyEpisodeProgressDifficultyFix,
     bool ApplySteamLocalLogin)
 {
     public static PatchOptions Parse(string[] args)
@@ -2130,6 +2223,7 @@ sealed record PatchOptions(
                 && !HasArg(args, "--no-gear-inventory-ok-bind-fix"),
             ApplyGearInventoryStateRepair: (legacyAll || HasArg(args, "--include-gear-inventory-state-repair"))
                 && !HasArg(args, "--no-gear-inventory-state-repair"),
+            ApplyEpisodeProgressDifficultyFix: !HasArg(args, "--no-episode-progress-difficulty-fix"),
             ApplySteamLocalLogin: (envSteamLocalLoginEnabled == true || HasArg(args, "--include-steam-local-login"))
                 && !HasArg(args, "--no-steam-local-login"));
     }

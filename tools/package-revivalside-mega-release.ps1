@@ -3,7 +3,10 @@ param(
   [ValidateSet("win-x64", "win-x86", "win-arm64")]
   [string]$RuntimeIdentifier = "",
   [string]$NodePath = "",
+  [string]$PythonPath = "",
   [switch]$SkipGameplayJsons,
+  [switch]$IncludeGameplayJsons,
+  [switch]$IncludeWikiAssets,
   [switch]$SkipWikiAssets,
   [switch]$Zip
 )
@@ -85,6 +88,49 @@ function Copy-DirectoryClean([string]$Source, [string]$Destination) {
   Copy-Item -LiteralPath $Source -Destination $Destination -Recurse -Force
 }
 
+function Resolve-PythonRuntimeRoot([string]$PythonExe) {
+  if (-not (Test-Path -LiteralPath $PythonExe -PathType Leaf)) {
+    throw "Python executable was not found: $PythonExe"
+  }
+  $pythonDir = Split-Path -Parent ([System.IO.Path]::GetFullPath($PythonExe))
+  $pythonParent = Split-Path -Parent $pythonDir
+  if ((Split-Path -Leaf $pythonDir).Equals("Scripts", [System.StringComparison]::OrdinalIgnoreCase) -and
+      (Test-Path -LiteralPath (Join-Path $pythonParent "pyvenv.cfg") -PathType Leaf)) {
+    return $pythonParent
+  }
+  return $pythonDir
+}
+
+function Get-PackagedPythonExe([string]$RuntimeRoot) {
+  foreach ($candidate in @(
+    (Join-Path $RuntimeRoot "python.exe"),
+    (Join-Path $RuntimeRoot "python3.exe"),
+    (Join-Path $RuntimeRoot "Scripts\python.exe")
+  )) {
+    if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+  }
+  return ""
+}
+
+function Assert-PythonUnityPy([string]$PythonExe, [string]$Name) {
+  & $PythonExe -c "import UnityPy; import PIL"
+  if ($LASTEXITCODE -ne 0) {
+    throw "$Name must be able to import UnityPy and Pillow: $PythonExe"
+  }
+}
+
+function Copy-PythonRuntime([string]$PythonExe, [string]$Destination) {
+  Assert-PythonUnityPy $PythonExe "Python runtime"
+  $sourceRoot = Resolve-PythonRuntimeRoot $PythonExe
+  Copy-DirectoryClean $sourceRoot $Destination
+  $packagedPython = Get-PackagedPythonExe $Destination
+  if (-not $packagedPython) {
+    throw "Packaged Python runtime did not contain python.exe under $Destination"
+  }
+  Assert-PythonUnityPy $packagedPython "Packaged Python runtime"
+  Write-Host "Bundled Python runtime with UnityPy: $Destination"
+}
+
 function Copy-FileRequired([string]$Source, [string]$Destination) {
   if (-not (Test-Path -LiteralPath $Source)) {
     throw "Required file was not found: $Source"
@@ -150,28 +196,6 @@ function Copy-CombatHostOriginalLayout([string]$Destination) {
     }
   }
   Write-Host "CombatHost original project layout: source + host-cache\$stamp"
-}
-
-function Assert-GameplayJsons([string]$GameplayRoot, [string]$Name) {
-  if (-not (Test-Path -LiteralPath $GameplayRoot -PathType Container)) {
-    throw "$Name was not found: $GameplayRoot"
-  }
-  foreach ($requiredDirectory in @("Assetbundles", "StreamingAssets")) {
-    $requiredPath = Join-Path $GameplayRoot $requiredDirectory
-    if (-not (Test-Path -LiteralPath $requiredPath -PathType Container)) {
-      throw "$Name is missing $requiredDirectory`: $requiredPath"
-    }
-  }
-  $defaultsPath = Join-Path $GameplayRoot "new-account-defaults.json"
-  if (-not (Test-Path -LiteralPath $defaultsPath -PathType Leaf)) {
-    throw "$Name is missing new-account-defaults.json: $defaultsPath"
-  }
-  $fileCount = (Get-ChildItem -LiteralPath $GameplayRoot -Recurse -File | Measure-Object).Count
-  if ($fileCount -lt 1000) {
-    throw "$Name looks incomplete: only $fileCount files were found at $GameplayRoot"
-  }
-  Write-Host "$Name`: $fileCount files at $GameplayRoot"
-  return $fileCount
 }
 
 function Write-CleanUsersJson([string]$Path, [string]$StarterUsersPath) {
@@ -310,10 +334,7 @@ $targetArch = Get-RidArchitecture $RuntimeIdentifier
 
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
 $rootPath = $root.Path
-if ($SkipGameplayJsons) {
-  throw "SkipGameplayJsons is no longer supported for launcher releases. The launcher must ship complete gameplay-jsons to match npm run listen."
-}
-Assert-GameplayJsons (Join-Path $rootPath "gameplay-jsons") "source gameplay-jsons" | Out-Null
+if ($SkipGameplayJsons) { Write-Host "SkipGameplayJsons is set; legacy gameplay-jsons will not be copied." }
 if (-not $OutputDir) {
   $OutputDir = Join-Path $rootPath "prebuilt\revivalside-mega-release-$RuntimeIdentifier"
 }
@@ -335,9 +356,15 @@ if (Test-Path -LiteralPath $outputPath) {
 }
 New-Item -ItemType Directory -Force -Path $outputPath | Out-Null
 
-& node (Join-Path $rootPath "tools\build-revivalside-wiki.js")
-if ($LASTEXITCODE -ne 0) {
-  throw "Wiki build failed"
+$wikiAssetsJson = Join-Path $rootPath "wiki\data\assets.json"
+$wikiRuntimeCache = Join-Path $rootPath ".cache\wiki-assets\all"
+if ((Test-Path -LiteralPath $wikiRuntimeCache -PathType Container) -or -not (Test-Path -LiteralPath $wikiAssetsJson -PathType Leaf)) {
+  & node (Join-Path $rootPath "tools\build-revivalside-wiki.js")
+  if ($LASTEXITCODE -ne 0) {
+    throw "Wiki build failed"
+  }
+} else {
+  Write-Host "Using existing wiki metadata; runtime wiki images will build from installed CounterSide encrypted assets."
 }
 
 dotnet publish (Join-Path $rootPath "tools\RevivalSideLauncherApp\RevivalSideLauncherApp.csproj") `
@@ -375,6 +402,22 @@ $combatHostExe = Join-Path $combatHostOut "CombatHost.exe"
 Assert-ExecutableArchitecture $combatHostExe $combatHostArch "CombatHost.exe"
 Copy-CombatHostOriginalLayout $combatHostOut
 
+$clientPatcherOut = Join-Path $outputPath "tools\CounterPassClientPatcher"
+dotnet publish (Join-Path $rootPath "tools\CounterPassClientPatcher\CounterPassClientPatcher.csproj") `
+  -c Release `
+  -r $RuntimeIdentifier `
+  --self-contained true `
+  -p:PublishSingleFile=true `
+  -p:IncludeNativeLibrariesForSelfExtract=true `
+  -p:EnableCompressionInSingleFile=true `
+  -p:DebugType=None `
+  -p:DebugSymbols=false `
+  --nologo `
+  -o $clientPatcherOut
+if ($LASTEXITCODE -ne 0) { throw "CounterSide client patcher publish failed" }
+Remove-PdbFiles $clientPatcherOut
+Assert-ExecutableArchitecture (Join-Path $clientPatcherOut "CounterPassClientPatcher.exe") $targetArch "CounterPassClientPatcher.exe"
+
 foreach ($fileName in @("cs-listener.js", "package.json", "package-lock.json", ".env", ".env.example", "README.md", "CONTRIBUTING.md", "packet-schema.json")) {
   Copy-FileIfPresent (Join-Path $rootPath $fileName) (Join-Path $outputPath $fileName)
 }
@@ -390,16 +433,25 @@ foreach ($toolName in @(
   "serve-revivalside-wiki.js",
   "build-revivalside-wiki.js",
   "copy-wiki-assets.js",
+  "ensure-gameplay-assets.js",
+  "ensure-wiki-assets.js",
+  "ensure-cutscene-backgrounds.js",
+  "cs_asset_decrypt.py",
+  "cs_extract_decrypted_assets.py",
   "event-manager-diagnostics.js",
+  "extract-cs-pcap-fixtures.js",
+  "import-official-join-lobby-profile.js",
   "import-official-event-schedules.js"
 )) {
   Copy-FileIfPresent (Join-Path $rootPath "tools\$toolName") (Join-Path $toolsOut $toolName)
 }
 
-Copy-DirectoryClean (Join-Path $rootPath "gameplay-jsons") (Join-Path $outputPath "gameplay-jsons")
-Assert-GameplayJsons (Join-Path $outputPath "gameplay-jsons") "packaged gameplay-jsons" | Out-Null
-if (Test-Path -LiteralPath (Join-Path $rootPath "gameplay-tables-decompiled")) {
-  Copy-DirectoryClean (Join-Path $rootPath "gameplay-tables-decompiled") (Join-Path $outputPath "gameplay-tables-decompiled")
+$sourceGameplayJsons = Join-Path $rootPath "gameplay-jsons"
+if ($IncludeGameplayJsons -and -not $SkipGameplayJsons -and (Test-Path -LiteralPath $sourceGameplayJsons -PathType Container)) {
+  Copy-DirectoryClean $sourceGameplayJsons (Join-Path $outputPath "gameplay-jsons")
+  Write-Host "Copied optional legacy gameplay-jsons."
+} else {
+  Write-Host "No packaged gameplay-jsons required; runtime tables load from installed CounterSide luac assets."
 }
 
 $serverDataOut = Join-Path $outputPath "server-data"
@@ -424,6 +476,17 @@ if (-not (Test-Path -LiteralPath (Join-Path $nodeOut "npm.cmd"))) {
   throw "Node runtime folder does not contain npm.cmd: $nodeOut"
 }
 
+if ($PythonPath) {
+  Copy-PythonRuntime ([System.IO.Path]::GetFullPath($PythonPath)) (Join-Path $outputPath "runtime\python")
+} else {
+  Write-Host "No bundled Python runtime requested; gameplay asset extraction will use Python from the user's PATH."
+}
+
+$runtimeCachePath = Join-Path $outputPath ".cache"
+if (Test-Path -LiteralPath $runtimeCachePath) {
+  Remove-Item -LiteralPath $runtimeCachePath -Recurse -Force
+}
+
 foreach ($runtimeCache in @("obj", "patched-managed")) {
   $cachePath = Join-Path $combatHostOut $runtimeCache
   if (Test-Path -LiteralPath $cachePath) {
@@ -433,7 +496,7 @@ foreach ($runtimeCache in @("obj", "patched-managed")) {
 Get-ChildItem -LiteralPath $outputPath -Recurse -Force -Filter "Assembly-CSharp.dll" -ErrorAction SilentlyContinue |
   Remove-Item -Force
 
-if (-not $SkipWikiAssets) {
+if ($IncludeWikiAssets -and -not $SkipWikiAssets) {
   & node (Join-Path $rootPath "tools\copy-wiki-assets.js") `
     --assets-json (Join-Path $rootPath "wiki\data\assets.json") `
     --source (Join-Path $rootPath "extracted-assets\all") `
@@ -441,12 +504,11 @@ if (-not $SkipWikiAssets) {
   if ($LASTEXITCODE -ne 0) {
     throw "Wiki asset packaging failed"
   }
+} else {
+  Write-Host "No full extracted wiki asset dump packaged."
 }
 
-$cutsceneBackgroundZip = Join-Path $rootPath "extracted-assets\cutscene-bg-16x9.zip"
-if (Test-Path -LiteralPath $cutsceneBackgroundZip -PathType Leaf) {
-  Copy-FileIfPresent $cutsceneBackgroundZip (Join-Path $outputPath "extracted-assets\cutscene-bg-16x9.zip")
-}
+Write-Host "No cutscene background asset pack packaged; launcher backgrounds are derived from installed CounterSide assets."
 
 Write-InstallScripts $outputPath
 
@@ -460,11 +522,14 @@ Included:
 - Local listener start/stop launcher.
 - User Manager at http://127.0.0.1:8088/user-manager while the listener is running.
 - Local wiki launcher.
-- Local wiki image assets used by the shipped catalog.
+- Optional wiki/cutscene image assets when present in the package.
 - Hosts patch/unpatch buttons with a Windows admin prompt.
+- Automatic CounterSide client patch check before listener start.
 - Server time controls.
 - Listener settings, ports, feature toggles, and advanced env overrides.
 - CounterSide Assembly-CSharp.dll path selector with Steam auto-detect.
+- Gameplay tables derived from installed encrypted CounterSide script assets; no gameplay-jsons or decompiled table dump is required.
+- Launcher cutscene backgrounds derived from installed encrypted CounterSide image assets; no cutscene asset pack is bundled.
 - Starter server-data/users.json profile based on the captured Admin_3114263075 account. Personal account databases are not bundled.
 - Small HTTP bootstrap fixtures for ServerInfo/PatchInfo mirroring.
 - Captured boot/content ACK fixture and sanitized login tag template for official login-screen parity.
@@ -472,6 +537,7 @@ Included:
 
 Requirements:
 - CounterSide must be installed locally. Select Data\Managed\Assembly-CSharp.dll if auto-detect fails.
+- If this package does not include runtime\python, Python with UnityPy and Pillow must be available to build first-run gameplay and cutscene caches.
 
 Ports:
 - Game listener: 22000

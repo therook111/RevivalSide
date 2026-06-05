@@ -1,6 +1,8 @@
 const fs = require("fs");
 const path = require("path");
 const { createCsharpCombatHost } = require("../combat-handler/csharpHost");
+const { findCounterSideManagedDir } = require("../modules/counterside-install");
+const { getDefaultGameplayTablesDir } = require("../modules/gameplay-jsons");
 
 const ROOT_DIR = path.resolve(__dirname, "..");
 const DEFAULT_PAYLOAD = path.join(ROOT_DIR, "server-data", "captured-game-flow", "server_008_205.payload.bin");
@@ -14,16 +16,23 @@ function main() {
   const payloadPath = path.resolve(args.payload || DEFAULT_PAYLOAD);
   if (!fs.existsSync(payloadPath)) throw new Error(`missing JOIN_LOBBY_ACK payload: ${payloadPath}`);
 
-  const managedDir = args.managed || process.env.CS_COUNTERSIDE_MANAGED_DIR || findDefaultCounterSideManagedDir();
+  const managedDir = args.managed || process.env.CS_COUNTERSIDE_MANAGED_DIR || findCounterSideManagedDir({ env: process.env });
   if (!managedDir || !fs.existsSync(path.join(managedDir, "Assembly-CSharp.dll"))) {
     throw new Error("missing CounterSide managed dir; set CS_COUNTERSIDE_MANAGED_DIR or pass --managed");
   }
+  const gameplayTablesDir =
+    args.tables ||
+    getDefaultGameplayTablesDir({
+      rootDir: ROOT_DIR,
+      env: process.env,
+      managedDir,
+    });
 
   const host = createCsharpCombatHost({
     enabled: true,
     projectPath: path.join(ROOT_DIR, "combat-host", "CombatHost.csproj"),
     managedDir,
-    gameplayTablesDir: args.tables || path.join(ROOT_DIR, "gameplay-tables"),
+    gameplayTablesDir,
     dotnetPath: process.env.CS_CSHARP_COMBAT_HOST_DOTNET || process.env.CS_DOTNET_PATH || undefined,
     timeoutMs: Number(process.env.CS_CSHARP_COMBAT_HOST_TIMEOUT_MS || 30000),
     responseBufferBytes: 32 * 1024 * 1024,
@@ -84,12 +93,8 @@ function intervalOutputPaths() {
   const roots = [
     path.join(ROOT_DIR, "gameplay-jsons", "Assetbundles"),
     path.join(ROOT_DIR, "gameplay-jsons", "StreamingAssets"),
-    path.join(ROOT_DIR, "gameplay-tables-json", "Assetbundles"),
-    path.join(ROOT_DIR, "gameplay-tables-json", "StreamingAssets"),
   ];
-  return roots
-    .map((root) => path.join(root, INTERVAL_TABLE_RELATIVE))
-    .filter((filePath) => filePath.includes(`${path.sep}gameplay-jsons${path.sep}`) || fs.existsSync(filePath));
+  return roots.map((root) => path.join(root, INTERVAL_TABLE_RELATIVE));
 }
 
 function parseArgs(argv) {
