@@ -6,9 +6,12 @@ Android companion app for running RevivalSide phone-side tooling beside the Andr
 
 - Runs as an Android `VpnService`.
 - Captures `JOIN_LOBBY_ACK` from the official Android client and exports the existing desktop import bundle.
+- Extracts the latest `JOIN_LOBBY_ACK` capture into the embedded listener data directory and imports it as the active local profile.
 - Starts a foreground RevivalSide listener service with bundled Node.js Mobile.
 - Serves the RevivalSide listener and launcher-compatible endpoints on `127.0.0.1:8088`:
   - `GET /launcher/api/health`
+  - `GET /launcher/api/official-profile/sources`
+  - `POST /launcher/api/official-profile/import-latest`
   - `GET /launcher/api/server-time`
   - `POST /launcher/api/server-time`
   - `POST /launcher/api/server-time/clear`
@@ -58,12 +61,12 @@ Then open **RevivalSide Android**.
 
 Recommended smoke flow:
 
-1. Tap **Start listener**.
-2. Tap **VPN redirect** and accept the Android VPN prompt.
-3. Tap **Launch CounterSide**.
+1. Tap **START**.
+2. Accept the Android VPN prompt if asked.
+3. CounterSide launches after listener warmup and VPN redirect are ready.
 4. Watch the Activity log and Android logcat.
 
-For official profile capture, tap **Capture ACK** instead of **VPN redirect**, open CounterSide, reach the lobby, then tap **Share export**.
+For official profile capture, tap **ACK JSON**, reach the official lobby, then return to RevivalSide Android and tap **EXTRACT**. The app copies the latest `JOIN_LOBBY_ACK` bundle into `server-data/captured-game-flow`, imports it through the embedded listener, and switches the imported profile active.
 
 ## Listener Payload
 

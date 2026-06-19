@@ -16,6 +16,7 @@ const {
   createCombatHandler,
   buildCapturedRespawnUnitPools: buildCombatCapturedRespawnUnitPools,
 } = require("../combat-handler");
+const { createOfficialProfileImporter } = require("../modules/official-profile-import");
 const {
   isTutorialDungeonId,
   isTutorialStageId,
@@ -821,6 +822,32 @@ async function serveLauncherApi(req, res) {
     return true;
   }
 
+  if (req.method === "GET" && url.pathname === "/launcher/api/official-profile/sources") {
+    sendJsonResponse(res, 200, { ok: true, sources: listOfficialProfileImportSources() });
+    return true;
+  }
+
+  if (req.method === "POST" && url.pathname === "/launcher/api/official-profile/import-latest") {
+    const body = await readJsonRequestBody(req);
+    try {
+      const imported = importLatestOfficialProfile(body || {});
+      sendJsonResponse(res, 200, {
+        ok: true,
+        userUid: imported.user && imported.user.userUid,
+        friendCode: imported.user && imported.user.friendCode,
+        nickname: imported.user && imported.user.nickname,
+        switched: imported.switched,
+        source: imported.source,
+        counts: imported.counts,
+        packetType: imported.packetType,
+        summary: imported.summary,
+      });
+    } catch (err) {
+      sendJsonResponse(res, 500, { ok: false, error: summarizeErrorLine(err) });
+    }
+    return true;
+  }
+
   if (req.method === "GET" && url.pathname === "/launcher/api/server-time") {
     sendJsonResponse(res, 200, serverTime.getSummary());
     return true;
@@ -901,6 +928,42 @@ function warmLauncherRuntime() {
       errors: failed,
     },
   };
+}
+
+function createOfficialProfileImporterForRuntime() {
+  return createOfficialProfileImporter({
+    rootDir: ROOT_DIR,
+    captureDir: CAPTURED_GAME_FLOW_DIR,
+    userDb,
+    combatHandler,
+    ensureUserDefaults,
+    makeAccessToken,
+    makeToken,
+  });
+}
+
+function listOfficialProfileImportSources() {
+  return createOfficialProfileImporterForRuntime().listSources();
+}
+
+function importLatestOfficialProfile(options = {}) {
+  const importer = createOfficialProfileImporterForRuntime();
+  const imported = importer.importLatest({
+    switchActive: options.switchActive !== false,
+    updateExisting: options.updateExisting !== false,
+    preserveOfficialUid: options.preserveOfficialUid === true,
+    preserveOfficialFriendCode: options.preserveOfficialFriendCode === true,
+    nicknameSuffix: typeof options.nicknameSuffix === "string" ? options.nicknameSuffix : undefined,
+  });
+  normalizeUserDb(userDb);
+  saveUserDb();
+  invalidateJoinLobbyAckPayloadCache("official-profile-import");
+  console.log(
+    `[official-profile-import] imported uid=${imported.user && imported.user.userUid} nickname=${JSON.stringify(
+      (imported.user && imported.user.nickname) || ""
+    )} switched=${imported.switched ? 1 : 0}`
+  );
+  return imported;
 }
 
 function getJoinLobbyWarmupUsers() {

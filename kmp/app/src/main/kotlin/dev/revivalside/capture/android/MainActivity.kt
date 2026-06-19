@@ -46,6 +46,7 @@ class MainActivity : Activity() {
     private lateinit var startButton: Button
     private lateinit var stopButton: Button
     private lateinit var captureButton: Button
+    private lateinit var extractButton: Button
     private val timeFormat = DateTimeFormatter.ofPattern("HH:mm:ss")
     private val handler = Handler(Looper.getMainLooper())
     private var pendingVpnMode = CounterSideVpnService.MODE_CAPTURE
@@ -261,7 +262,7 @@ class MainActivity : Activity() {
             }
             captureButton = Button(this@MainActivity).apply {
                 text = "ACK JSON"
-                textSize = 15f
+                textSize = 13f
                 typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                 setTextColor(0xffdbeafe.toInt())
                 background = rounded(0xff111827.toInt(), dp(10), 0xff60a5fa.toInt())
@@ -269,10 +270,23 @@ class MainActivity : Activity() {
                 minHeight = dp(58)
                 setOnClickListener { startJoinLobbyAckCapture() }
             }
+            extractButton = Button(this@MainActivity).apply {
+                text = "EXTRACT"
+                textSize = 13f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                setTextColor(0xffd1fae5.toInt())
+                background = rounded(0xff071a14.toInt(), dp(10), 0xff34d399.toInt())
+                setPadding(dp(8), 0, dp(8), 0)
+                minHeight = dp(58)
+                setOnClickListener { extractAndCopyLatestJoinLobbyAck() }
+            }
             controls.addView(stopButton, LinearLayout.LayoutParams(0, dp(62), 1f).apply {
                 rightMargin = dp(8)
             })
             controls.addView(captureButton, LinearLayout.LayoutParams(0, dp(62), 1f).apply {
+                rightMargin = dp(8)
+            })
+            controls.addView(extractButton, LinearLayout.LayoutParams(0, dp(62), 1f).apply {
                 rightMargin = dp(8)
             })
             controls.addView(startButton, LinearLayout.LayoutParams(0, dp(62), 1f))
@@ -307,6 +321,36 @@ class MainActivity : Activity() {
         beginVpnFlow(CounterSideVpnService.MODE_CAPTURE)
     }
 
+    private fun extractAndCopyLatestJoinLobbyAck() {
+        val settings = saveSettingsFromInputs()
+        val token = ++startFlowToken
+        launchAfterStart = false
+        launchAfterCapture = false
+        listenerReadyForLaunch = false
+        vpnReadyForLaunch = false
+        setExtractButtonBusy(true)
+        appendLog("Extract + copy requested")
+        Thread {
+            val extracted = runCatching {
+                CaptureRepository.extractLatestJoinLobbyAckToCapturedGameFlow(applicationContext)
+            }
+            runOnUiThread {
+                if (token != startFlowToken) return@runOnUiThread
+                val error = extracted.exceptionOrNull()
+                if (error != null) {
+                    appendLog("Extract + copy failed: ${error.message}")
+                    setExtractButtonBusy(false)
+                    return@runOnUiThread
+                }
+                val result = extracted.getOrThrow()
+                exportText.text = result.targetDir.absolutePath
+                appendLog("Copied JOIN_LOBBY_ACK bundle files=${result.copiedFiles} bytes=${result.copiedBytes}")
+                startListener(settings)
+                waitForListenerHealthForImport(settings, token, attempt = 0)
+            }
+        }.start()
+    }
+
     private fun stopOperation() {
         startFlowToken += 1
         launchAfterStart = false
@@ -317,9 +361,16 @@ class MainActivity : Activity() {
             startButton.isEnabled = true
             startButton.text = "START"
         }
+        setExtractButtonBusy(false)
         appendLog("Stop requested")
         stopVpnService()
         stopListener()
+    }
+
+    private fun setExtractButtonBusy(busy: Boolean) {
+        if (!::extractButton.isInitialized) return
+        extractButton.isEnabled = !busy
+        extractButton.text = if (busy) "COPYING" else "EXTRACT"
     }
 
     private fun tryLaunchAfterStart() {
@@ -392,6 +443,53 @@ class MainActivity : Activity() {
         }.start()
     }
 
+    private fun waitForListenerHealthForImport(settings: RevivalSideSettings, token: Int, attempt: Int) {
+        if (token != startFlowToken) return
+        if (attempt == 0) {
+            listenerStatusText.text = "Waiting for listener import API"
+            appendLog("Waiting for listener import API on 127.0.0.1:${settings.httpPort}")
+        }
+        Thread {
+            val ready = isListenerHealthReady(settings)
+            runOnUiThread {
+                if (token != startFlowToken) return@runOnUiThread
+                if (ready) {
+                    listenerStatusText.text = "Listener ready"
+                    importLatestOfficialProfile(settings, token)
+                    return@runOnUiThread
+                }
+                if (attempt >= LISTENER_HEALTH_MAX_ATTEMPTS) {
+                    appendLog("Listener import API timed out")
+                    setExtractButtonBusy(false)
+                    return@runOnUiThread
+                }
+                if (attempt > 0 && attempt % 10 == 0) {
+                    appendLog("Still waiting for listener import API (${attempt}s)")
+                }
+                handler.postDelayed({
+                    waitForListenerHealthForImport(settings, token, attempt + 1)
+                }, LISTENER_HEALTH_INTERVAL_MS)
+            }
+        }.start()
+    }
+
+    private fun importLatestOfficialProfile(settings: RevivalSideSettings, token: Int) {
+        if (token != startFlowToken) return
+        appendLog("Importing copied JOIN_LOBBY_ACK profile")
+        Thread {
+            val result = requestOfficialProfileImport(settings)
+            runOnUiThread {
+                if (token != startFlowToken) return@runOnUiThread
+                if (result.ok) {
+                    appendLog("Imported profile${result.summary.takeIf { it.isNotBlank() }?.let { ": $it" } ?: ""}")
+                } else {
+                    appendLog("Official profile import failed${result.summary.takeIf { it.isNotBlank() }?.let { ": $it" } ?: ""}")
+                }
+                setExtractButtonBusy(false)
+            }
+        }.start()
+    }
+
     private fun isListenerHealthReady(settings: RevivalSideSettings): Boolean {
         var connection: HttpURLConnection? = null
         return try {
@@ -437,6 +535,35 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun requestOfficialProfileImport(settings: RevivalSideSettings): ImportResult {
+        var connection: HttpURLConnection? = null
+        return try {
+            connection = (URL("http://127.0.0.1:${settings.httpPort}/launcher/api/official-profile/import-latest").openConnection() as HttpURLConnection).apply {
+                connectTimeout = LISTENER_WARMUP_CONNECT_TIMEOUT_MS
+                readTimeout = LISTENER_WARMUP_READ_TIMEOUT_MS
+                requestMethod = "POST"
+                doOutput = true
+                useCaches = false
+                setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            }
+            val body = """{"switchActive":true}""".toByteArray(Charsets.UTF_8)
+            connection.outputStream.use { it.write(body) }
+            val status = connection.responseCode
+            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+            val response = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            val compact = response.filterNot { it.isWhitespace() }
+            if (status in 200..299 && compact.contains("\"ok\":true")) {
+                ImportResult(true, extractImportSummary(compact))
+            } else {
+                ImportResult(false, extractJsonString(compact, "error").ifBlank { "HTTP $status" })
+            }
+        } catch (error: Exception) {
+            ImportResult(false, error.message.orEmpty())
+        } finally {
+            connection?.disconnect()
+        }
+    }
+
     private fun extractWarmupSummary(compactJson: String): String {
         val warmed = Regex("\"warmed\":(\\d+)").find(compactJson)?.groupValues?.getOrNull(1)
         val duration = Regex("\"durationMs\":(\\d+)").find(compactJson)?.groupValues?.getOrNull(1)
@@ -444,6 +571,27 @@ class MainActivity : Activity() {
             warmed?.let { "$it profile(s)" },
             duration?.let { "${it}ms" },
         ).joinToString(" ")
+    }
+
+    private fun extractImportSummary(compactJson: String): String {
+        val nickname = extractJsonString(compactJson, "nickname")
+        val userUid = extractJsonString(compactJson, "userUid")
+        val units = Regex("\"units\":(\\d+)").find(compactJson)?.groupValues?.getOrNull(1)
+        return listOfNotNull(
+            nickname.takeIf { it.isNotBlank() },
+            userUid.takeIf { it.isNotBlank() }?.let { "uid=$it" },
+            units?.let { "units=$it" },
+        ).joinToString(" ")
+    }
+
+    private fun extractJsonString(compactJson: String, key: String): String {
+        return Regex("\"${Regex.escape(key)}\":\"((?:\\\\.|[^\"])*)\"")
+            .find(compactJson)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.replace("\\\"", "\"")
+            ?.replace("\\\\", "\\")
+            .orEmpty()
     }
 
     private fun startListener(settings: RevivalSideSettings = saveSettingsFromInputs()) {
@@ -722,4 +870,6 @@ class MainActivity : Activity() {
     }
 
     private data class WarmupResult(val ok: Boolean, val summary: String = "")
+
+    private data class ImportResult(val ok: Boolean, val summary: String = "")
 }
