@@ -1050,7 +1050,7 @@ internal static class ManagedCombatBridge
             var setupPackets = runtime.DrainClientPackets($"managed-setup-{dynamicGame.GameUID}");
 
             var sessionId = dynamicGame.GameUID.ToString(CultureInfo.InvariantCulture);
-            var session = new ManagedCombatSession(sessionId, runtime, server, setupPackets);
+            var session = new ManagedCombatSession(sessionId, runtime, server, setupPackets, dynamicGame);
             session.RememberBattleState(battleState);
             session.CaptureRaidBossState(dynamicGame, battleState);
             Sessions[sessionId] = session;
@@ -1333,7 +1333,8 @@ internal static class ManagedCombatBridge
                 Ok = true,
                 BattleState = data.BattleState,
                 Packets = packets,
-                PayloadBase64 = sync
+                PayloadBase64 = sync,
+                Summary = session.DescribeCombatSnapshot()
             };
             // NKCGameServerLocal does not emit a GAME_SYNC every host tick. An
             // empty drain means "no client packet this frame", not a combat-host
@@ -1382,18 +1383,22 @@ internal static class ManagedCombatBridge
         private bool finishStateFlushedWithGameEnd;
         private float initialRemainGameTime = -1f;
         private float playStartClientGameTime = -1f;
+        private DynamicGameState? latestDynamicGame;
         private BattleState? latestBattleState;
         private List<BattleUnitRecord>? latestGameEndBattleRecords;
         private bool? latestGameEndBattleWin;
         private int latestGameEndBattleWinTeam;
         private float latestGameEndBattlePlayTime = -1f;
+        private int latestGameEndFiercePoint = -1;
+        private int latestGameEndFiercePenaltyPoint = -1;
 
-        public ManagedCombatSession(string sessionId, ManagedRuntime runtime, object server, List<HostPacket> setupPackets)
+        public ManagedCombatSession(string sessionId, ManagedRuntime runtime, object server, List<HostPacket> setupPackets, DynamicGameState? dynamicGame)
         {
             this.sessionId = sessionId;
             this.runtime = runtime;
             this.server = server;
             this.setupPackets = setupPackets;
+            latestDynamicGame = dynamicGame;
             forceSyncDataPackFlushThisFrame = runtime.GetMethod(server.GetType(), "ForceSyncDataPackFlushThisFrame");
             syncDataPackFlush = runtime.GetMethod(server.GetType(), "SyncDataPackFlush");
         }
@@ -1408,8 +1413,17 @@ internal static class ManagedCombatBridge
             }
         }
 
+        private void RememberDynamicGame(DynamicGameState? dynamicGame)
+        {
+            if (dynamicGame != null)
+            {
+                latestDynamicGame = dynamicGame;
+            }
+        }
+
         public void ApplyRuntimeControls(DynamicGameState? dynamicGame)
         {
+            RememberDynamicGame(dynamicGame);
             if (dynamicGame == null) return;
             var runtimeData = runtime.Invoke(server, "GetGameRuntimeData");
             if (runtimeData == null) return;
@@ -1663,9 +1677,115 @@ internal static class ManagedCombatBridge
             return DrainCombatPackets($"managed-forced-sync-{sessionId}");
         }
 
+        public string DescribeCombatSnapshot()
+        {
+            try
+            {
+                var runtimeData = runtime.Invoke(server, "GetGameRuntimeData");
+                var gameData = runtime.Invoke(server, "GetGameData");
+                if (runtimeData == null || gameData == null) return "runtime=null";
+                return string.Join(" ", new[]
+                {
+                    $"state={runtime.GetField(runtimeData, "m_NKM_GAME_STATE")}",
+                    $"time={ReadFloat(runtime.GetField(runtimeData, "m_GameTime"), 0f).ToString("0.###", CultureInfo.InvariantCulture)}",
+                    $"play={ReadFloat(runtime.Invoke(runtimeData, "GetGamePlayTime"), 0f).ToString("0.###", CultureInfo.InvariantCulture)}",
+                    $"live={DescribeUnitDictionary(runtime.GetField(server, "m_dicNKMUnit"))}",
+                    $"pool={DescribeUnitDictionary(runtime.GetField(server, "m_dicNKMUnitPool"))}",
+                    $"pending={DescribePendingRespawns()}",
+                    $"teamAEvents={DescribeEventUnits(runtime.GetField(gameData, "m_NKMGameTeamDataA"))}",
+                    $"teamBEvents={DescribeEventUnits(runtime.GetField(gameData, "m_NKMGameTeamDataB"))}",
+                    $"damage={DescribeDamageTakenMap()}"
+                });
+            }
+            catch (Exception ex)
+            {
+                return $"snapshotError={ex.GetType().Name}";
+            }
+        }
+
+        private string DescribeUnitDictionary(object? dictionary)
+        {
+            if (dictionary is not IDictionary units) return "0[]";
+            var values = new List<string>();
+            foreach (DictionaryEntry entry in units)
+            {
+                var unit = entry.Value;
+                if (unit == null) continue;
+                var unitData = runtime.Invoke(unit, "GetUnitData");
+                var unitDataGame = runtime.Invoke(unit, "GetUnitDataGame");
+                var gameUnitUid = ReadShort(runtime.Invoke(unit, "GetUnitGameUID"), ReadShort(entry.Key, 0));
+                var unitId = ReadInt(unitData == null ? null : runtime.GetField(unitData, "m_UnitID"), 0);
+                var team = Convert.ToString(runtime.Invoke(unit, "GetTeam"), CultureInfo.InvariantCulture) ?? "";
+                var hp = ReadFloat(runtime.Invoke(unit, "GetHP"), 0f);
+                var maxHp = ReadFloat(runtime.Invoke(unit, "GetMaxHP"), 0f);
+                var syncData = runtime.Invoke(unit, "GetUnitSyncData");
+                var playState = Convert.ToString(syncData == null ? null : runtime.GetField(syncData, "m_NKM_UNIT_PLAY_STATE"), CultureInfo.InvariantCulture) ?? "";
+                var summon = ReadBool(unitDataGame == null ? null : runtime.GetField(unitDataGame, "m_bSummonUnit"), false)
+                    || ReadBool(unitData == null ? null : runtime.GetField(unitData, "m_bSummonUnit"), false);
+                values.Add($"{gameUnitUid}:{unitId}:{team}:hp={hp:0}/{maxHp:0}:state={playState}:summon={summon}");
+            }
+            return $"{units.Count}[{string.Join(";", values.Take(16))}]";
+        }
+
+        private string DescribePendingRespawns()
+        {
+            if (runtime.GetField(server, "m_listNKMGameUnitRespawnData") is not IEnumerable respawns) return "0[]";
+            var values = new List<string>();
+            foreach (var respawn in respawns.Cast<object>())
+            {
+                values.Add(string.Join(":",
+                    Convert.ToString(runtime.GetField(respawn, "m_UnitUID"), CultureInfo.InvariantCulture),
+                    Convert.ToString(runtime.GetField(respawn, "m_fRespawnCoolTime"), CultureInfo.InvariantCulture),
+                    Convert.ToString(runtime.GetField(respawn, "m_fRespawnPosX"), CultureInfo.InvariantCulture)));
+            }
+            return $"{values.Count}[{string.Join(";", values.Take(16))}]";
+        }
+
+        private string DescribeShortList(object? items)
+        {
+            if (items is not IEnumerable enumerable) return "";
+            return string.Join(",", enumerable.Cast<object>().Take(16).Select(item => Convert.ToString(item, CultureInfo.InvariantCulture)));
+        }
+
+        private string DescribeEventUnits(object? teamData)
+        {
+            if (teamData == null || runtime.GetField(teamData, "m_listEvevtUnitData") is not IEnumerable units) return "0[]";
+            var values = new List<string>();
+            foreach (var unitData in units.Cast<object>())
+            {
+                var templet = runtime.GetField(unitData, "m_DungeonRespawnUnitTemplet");
+                var timing = templet == null ? null : runtime.GetField(templet, "m_NKMDungeonEventTiming");
+                values.Add(string.Join(":",
+                    Convert.ToString(runtime.GetField(unitData, "m_UnitUID"), CultureInfo.InvariantCulture),
+                    Convert.ToString(runtime.GetField(unitData, "m_UnitID"), CultureInfo.InvariantCulture),
+                    $"uids=[{DescribeShortList(runtime.GetField(unitData, "m_listGameUnitUID"))}]",
+                    $"templet={Convert.ToString(runtime.GetField(unitData, "m_DungeonRespawnUnitTempletUID"), CultureInfo.InvariantCulture)}",
+                    $"has={templet != null}",
+                    $"last={Convert.ToString(runtime.GetField(unitData, "m_fLastRespawnTime"), CultureInfo.InvariantCulture)}",
+                    $"start={Convert.ToString(runtime.GetField(timing!, "m_fEventTimeStart"), CultureInfo.InvariantCulture)}",
+                    $"gap={Convert.ToString(runtime.GetField(timing!, "m_fEventTimeGap"), CultureInfo.InvariantCulture)}"));
+            }
+            return $"{values.Count}[{string.Join(";", values.Take(16))}]";
+        }
+
+        private string DescribeDamageTakenMap()
+        {
+            if (runtime.GetField(server, "m_dicDamageTakenByUnit") is not IDictionary damageMap) return "0[]";
+            var values = new List<string>();
+            foreach (DictionaryEntry defender in damageMap)
+            {
+                if (defender.Value is not IDictionary attackers) continue;
+                foreach (DictionaryEntry attacker in attackers)
+                {
+                    values.Add($"{Convert.ToString(defender.Key, CultureInfo.InvariantCulture)}<-{Convert.ToString(attacker.Key, CultureInfo.InvariantCulture)}:{Convert.ToString(attacker.Value, CultureInfo.InvariantCulture)}");
+                }
+            }
+            return $"{values.Count}[{string.Join(";", values.Take(16))}]";
+        }
+
         private List<HostPacket> NormalizeTimerSyncs(List<HostPacket> packets)
         {
-            if (initialRemainGameTime <= 0)
+            if (initialRemainGameTime <= 0 && !IsFierceGame(latestDynamicGame))
             {
                 return packets;
             }
@@ -1690,8 +1810,9 @@ internal static class ManagedCombatBridge
                 if (syncItems is not IEnumerable enumerable) return packet;
 
                 var syncBases = enumerable.Cast<object>().ToList();
+                var normalizeTimer = initialRemainGameTime > 0;
                 var firstPlayPacket = false;
-                if (playStartClientGameTime < 0f)
+                if (normalizeTimer && playStartClientGameTime < 0f)
                 {
                     foreach (var syncBase in syncBases)
                     {
@@ -1706,6 +1827,7 @@ internal static class ManagedCombatBridge
                 var changed = false;
                 foreach (var syncBase in syncBases)
                 {
+                    if (!normalizeTimer) continue;
                     var baseGameTime = Math.Max(0f, ReadFloat(runtime.GetField(syncBase, "m_fGameTime"), 0f));
                     var clientGameTime = baseGameTime + ClientSyncLeadSeconds;
                     var currentRemain = ReadFloat(runtime.GetField(syncBase, "m_fRemainGameTime"), initialRemainGameTime);
@@ -1719,12 +1841,97 @@ internal static class ManagedCombatBridge
                         changed = true;
                     }
                 }
+                changed |= TryApplyFierceScoreSync(syncBases);
 
                 return changed ? runtime.SerializePacket(managedPacket, GameSync, packet.Label ?? "managed-timer-sync") : packet;
             }
             catch
             {
                 return packet;
+            }
+        }
+
+        private bool TryApplyFierceScoreSync(IEnumerable<object> syncBases)
+        {
+            var dynamicGame = latestDynamicGame;
+            if (!IsFierceGame(dynamicGame)) return false;
+
+            var score = CalculateCurrentFiercePoint(dynamicGame!, includeTime: false);
+            if (score.Point < 0) return false;
+
+            SetManagedFiercePoint(score.Point, score.PenaltyPoint);
+            var changed = false;
+            foreach (var syncBase in syncBases)
+            {
+                var gamePoint = runtime.GetField(syncBase, "m_NKMGameSyncData_GamePoint");
+                if (gamePoint == null)
+                {
+                    gamePoint = runtime.Create("NKM.NKMGameSyncData_GamePoint");
+                    runtime.SetField(syncBase, "m_NKMGameSyncData_GamePoint", gamePoint);
+                    changed = true;
+                }
+
+                var currentPoint = ReadInt(runtime.GetField(gamePoint, "m_fGamePoint"), int.MinValue);
+                if (currentPoint == score.Point) continue;
+                runtime.SetField(gamePoint, "m_fGamePoint", score.Point);
+                changed = true;
+            }
+
+            return changed;
+        }
+
+        private (int Point, int PenaltyPoint) CalculateCurrentFiercePoint(DynamicGameState dynamicGame, bool includeTime)
+        {
+            if (!IsFierceGame(dynamicGame)) return (-1, 0);
+            if (latestBattleState != null)
+            {
+                CaptureRaidBossState(dynamicGame, latestBattleState);
+            }
+
+            var damageRatio = latestBattleState == null
+                ? 0.0
+                : Math.Clamp(
+                    latestBattleState.BossDamageRatio > 0 ? latestBattleState.BossDamageRatio : latestBattleState.RaidBossDamageRatio,
+                    0.0,
+                    1.0);
+            var killed = latestBattleState?.BossKilled == true || latestBattleState?.RaidBossKilled == true;
+            var basePoint = Math.Max(0, dynamicGame.FierceBasePoint);
+            var damagePoint = (int)Math.Round(Math.Max(0, dynamicGame.FierceMaxDamagePoint) * damageRatio);
+            var timePoint = 0;
+            if (includeTime && killed && dynamicGame.FierceMaxTimePoint > 0)
+            {
+                var runtimeData = runtime.Invoke(server, "GetGameRuntimeData");
+                var remainTime = ReadFloat(runtimeData == null ? null : runtime.GetField(runtimeData, "m_fRemainGameTime"), 0f);
+                var maxTime = Math.Max(1f, initialRemainGameTime > 0 ? initialRemainGameTime : remainTime);
+                timePoint = (int)Math.Round(Math.Max(0, dynamicGame.FierceMaxTimePoint) * Math.Clamp(remainTime / maxTime, 0f, 1f));
+            }
+
+            var rawPoint = basePoint + damagePoint + timePoint;
+            var penaltyPoint = (int)Math.Round(rawPoint * Math.Max(0, dynamicGame.FiercePenaltyRate) / 10000.0);
+            return (Math.Max(0, rawPoint + penaltyPoint), Math.Max(0, penaltyPoint));
+        }
+
+        private void SetManagedFiercePoint(int point, int penaltyPoint)
+        {
+            try
+            {
+                var gameRecord = runtime.GetField(server, "m_GameRecord");
+                if (gameRecord == null) return;
+                runtime.Invoke(gameRecord, "SetTotalFiercePoint", (float)Math.Max(0, point), (float)Math.Max(0, penaltyPoint));
+            }
+            catch
+            {
+                try
+                {
+                    var gameRecord = runtime.GetField(server, "m_GameRecord");
+                    if (gameRecord == null) return;
+                    runtime.SetField(gameRecord, "totalFiercePoint", (float)Math.Max(0, point));
+                    runtime.SetField(gameRecord, "fiercePenaltyPoint", (float)Math.Max(0, penaltyPoint));
+                }
+                catch
+                {
+                    // If the installed client shape differs, keep the sync packet patch above authoritative.
+                }
             }
         }
 
@@ -1747,6 +1954,14 @@ internal static class ManagedCombatBridge
             {
                 return false;
             }
+        }
+
+        private static bool IsFierceGame(DynamicGameState? dynamicGame)
+        {
+            return dynamicGame != null &&
+                (dynamicGame.GameType == 14 ||
+                 dynamicGame.FierceBossId > 0 ||
+                 string.Equals(dynamicGame.MiscMode, "fierce", StringComparison.OrdinalIgnoreCase));
         }
 
         private bool IsRuntimeInPlayState()
@@ -1777,7 +1992,10 @@ internal static class ManagedCombatBridge
 
         public void CaptureRaidBossState(DynamicGameState? dynamicGame, BattleState? battleState)
         {
-            if (dynamicGame == null || battleState == null || dynamicGame.RaidUID <= 0) return;
+            RememberDynamicGame(dynamicGame);
+            if (dynamicGame == null || battleState == null) return;
+            var tracksBoss = dynamicGame.RaidUID > 0 || IsFierceGame(dynamicGame);
+            if (!tracksBoss) return;
             var snapshot = ReadTeamBossSnapshot(teamA: false, battleState);
             if (snapshot.MaxHp <= 0) return;
 
@@ -1794,6 +2012,9 @@ internal static class ManagedCombatBridge
             battleState.RaidBossDamage = damage;
             battleState.RaidBossDamageRatio = damage / initHp;
             battleState.RaidBossKilled = currentHp <= 0;
+            battleState.BossHpPercent = Math.Clamp(currentHp / initHp * 100.0, 0.0, 100.0);
+            battleState.BossDamageRatio = Math.Clamp(damage / initHp, 0.0, 1.0);
+            battleState.BossKilled = currentHp <= 0;
         }
 
         private (float CurHp, float MaxHp) ReadTeamBossSnapshot(bool teamA, BattleState battleState)
@@ -1890,6 +2111,8 @@ internal static class ManagedCombatBridge
             latestGameEndBattleWin = null;
             latestGameEndBattleWinTeam = 0;
             latestGameEndBattlePlayTime = -1f;
+            latestGameEndFiercePoint = -1;
+            latestGameEndFiercePenaltyPoint = -1;
             var packets = runtime.DrainClientPackets(label, PatchManagedGameEndPacket);
             foreach (var packet in packets)
             {
@@ -1905,6 +2128,11 @@ internal static class ManagedCombatBridge
                 if (latestGameEndBattlePlayTime >= 0f)
                 {
                     packet.BattlePlayTime = latestGameEndBattlePlayTime;
+                }
+                if (latestGameEndFiercePoint >= 0)
+                {
+                    packet.FiercePoint = latestGameEndFiercePoint;
+                    packet.FiercePenaltyPoint = Math.Max(0, latestGameEndFiercePenaltyPoint);
                 }
                 if (latestGameEndBattleRecords is { Count: > 0 } records)
                 {
@@ -1942,6 +2170,17 @@ internal static class ManagedCombatBridge
             {
                 runtime.SetField(packet, "totalPlayTime", playTime);
                 latestGameEndBattlePlayTime = playTime;
+            }
+            var dynamicGame = latestDynamicGame;
+            if (IsFierceGame(dynamicGame))
+            {
+                var fierce = CalculateCurrentFiercePoint(dynamicGame!, includeTime: true);
+                if (fierce.Point >= 0)
+                {
+                    SetManagedFiercePoint(fierce.Point, fierce.PenaltyPoint);
+                    latestGameEndFiercePoint = fierce.Point;
+                    latestGameEndFiercePenaltyPoint = fierce.PenaltyPoint;
+                }
             }
         }
 
@@ -2035,10 +2274,11 @@ internal static class ManagedCombatBridge
                 ApplyManagedDamageTakenMap(managedRecords);
             }
 
-            if (!ManagedRecordsHaveDamage(managedRecords))
-            {
-                ApplyManagedHpDelta(records: managedRecords, units);
-            }
+            ApplyManagedHpDelta(records: managedRecords, units);
+            ApplyManagedMissingDamageAttribution(
+                records: managedRecords,
+                liveUnits: CollectManagedLiveUnitsByGameUid(),
+                allUnits: units);
 
             UpdateManagedGameRecordTotals(gameRecord, managedRecords);
             return gameRecord;
@@ -2048,6 +2288,13 @@ internal static class ManagedCombatBridge
         {
             var units = new SortedDictionary<short, object>();
             CollectManagedUnitsByGameUid(units, "m_dicNKMUnitPool");
+            CollectManagedUnitsByGameUid(units, "m_dicNKMUnit");
+            return units;
+        }
+
+        private SortedDictionary<short, object> CollectManagedLiveUnitsByGameUid()
+        {
+            var units = new SortedDictionary<short, object>();
             CollectManagedUnitsByGameUid(units, "m_dicNKMUnit");
             return units;
         }
@@ -2094,6 +2341,7 @@ internal static class ManagedCombatBridge
             UpsertManagedUnitDataListRecords(managedRecords, runtime.GetField(teamData, "m_listAssistUnitData"), teamData, teamType, isAssistUnit: true, leaderUnitUid, playTime);
             UpsertManagedUnitDataListRecords(managedRecords, runtime.GetField(teamData, "m_listEvevtUnitData"), teamData, teamType, isAssistUnit: false, leaderUnitUid, playTime);
             UpsertManagedUnitDataListRecords(managedRecords, runtime.GetField(teamData, "m_listEnvUnitData"), teamData, teamType, isAssistUnit: false, leaderUnitUid, playTime);
+            UpsertManagedDynamicRespawnUnitDataListRecords(managedRecords, runtime.GetField(teamData, "m_listDynamicRespawnUnitData"), teamData, teamType, leaderUnitUid, playTime);
         }
 
         private void UpsertManagedUnitDataListRecords(
@@ -2109,6 +2357,23 @@ internal static class ManagedCombatBridge
             foreach (var unitData in units)
             {
                 UpsertManagedUnitDataRecords(managedRecords, unitData, teamData, teamType, isAssistUnit, leaderUnitUid, playTime);
+            }
+        }
+
+        private void UpsertManagedDynamicRespawnUnitDataListRecords(
+            IDictionary managedRecords,
+            object? dynamicUnitList,
+            object teamData,
+            int teamType,
+            long leaderUnitUid,
+            int playTime)
+        {
+            if (dynamicUnitList is not IEnumerable dynamicUnits) return;
+            foreach (var dynamicUnit in dynamicUnits)
+            {
+                if (dynamicUnit == null) continue;
+                var unitData = runtime.GetField(dynamicUnit, "m_NKMUnitData") ?? dynamicUnit;
+                UpsertManagedUnitDataRecords(managedRecords, unitData, teamData, teamType, isAssistUnit: false, leaderUnitUid, playTime);
             }
         }
 
@@ -2254,7 +2519,7 @@ internal static class ManagedCombatBridge
                 var maxHp = Math.Max(0f, ReadFloat(runtime.Invoke(unitEntry.Value, "GetMaxHP"), 0f));
                 var damageTaken = Math.Max(0f, maxHp - currentHp);
                 if (damageTaken <= 0f) continue;
-                AddManagedRecordFloat(records, unitEntry.Key, "recordTakeDamage", damageTaken);
+                EnsureManagedRecordFloatAtLeast(records, unitEntry.Key, "recordTakeDamage", damageTaken);
             }
         }
 
@@ -2264,6 +2529,146 @@ internal static class ManagedCombatBridge
             var record = records[gameUnitUid];
             if (record == null) return;
             runtime.SetField(record, fieldName, ReadFloat(runtime.GetField(record, fieldName), 0f) + value);
+        }
+
+        private void EnsureManagedRecordFloatAtLeast(IDictionary records, short gameUnitUid, string fieldName, float value)
+        {
+            if (!records.Contains(gameUnitUid) || value <= 0f) return;
+            var record = records[gameUnitUid];
+            if (record == null) return;
+            var current = ReadFloat(runtime.GetField(record, fieldName), 0f);
+            if (current >= value) return;
+            runtime.SetField(record, fieldName, value);
+        }
+
+        private void ApplyManagedMissingDamageAttribution(
+            IDictionary records,
+            SortedDictionary<short, object> liveUnits,
+            SortedDictionary<short, object> allUnits)
+        {
+            ApplyManagedMissingDamageAttribution(records, liveUnits, allUnits, defenderTeamA: true);
+            ApplyManagedMissingDamageAttribution(records, liveUnits, allUnits, defenderTeamA: false);
+        }
+
+        private void ApplyManagedMissingDamageAttribution(
+            IDictionary records,
+            SortedDictionary<short, object> liveUnits,
+            SortedDictionary<short, object> allUnits,
+            bool defenderTeamA)
+        {
+            var attackerTeamA = !defenderTeamA;
+            var damageTaken = SumManagedRecordFloatByTeam(records, defenderTeamA, "recordTakeDamage");
+            var damageGiven = SumManagedRecordFloatByTeam(records, attackerTeamA, "recordGiveDamage");
+            var missingDamage = damageTaken - damageGiven;
+            if (missingDamage <= 0.5f) return;
+
+            var attackers = CollectManagedDamageAttributionAttackers(records, liveUnits, attackerTeamA, preferredOnly: true);
+            if (attackers.Count == 0)
+            {
+                attackers = CollectManagedDamageAttributionAttackers(records, allUnits, attackerTeamA, preferredOnly: true);
+            }
+            if (attackers.Count == 0)
+            {
+                attackers = CollectManagedDamageAttributionAttackers(records, liveUnits, attackerTeamA, preferredOnly: false);
+            }
+            if (attackers.Count == 0)
+            {
+                attackers = CollectManagedDamageAttributionAttackers(records, allUnits, attackerTeamA, preferredOnly: false);
+            }
+            if (attackers.Count == 0) return;
+
+            var share = missingDamage / attackers.Count;
+            var assigned = 0f;
+            for (var index = 0; index < attackers.Count; index += 1)
+            {
+                var damage = index == attackers.Count - 1 ? missingDamage - assigned : share;
+                assigned += damage;
+                AddManagedRecordFloat(records, attackers[index], "recordGiveDamage", damage);
+            }
+        }
+
+        private float SumManagedRecordFloatByTeam(IDictionary records, bool teamA, string fieldName)
+        {
+            var total = 0f;
+            foreach (DictionaryEntry entry in records)
+            {
+                var record = entry.Value;
+                if (record == null) continue;
+                if (IsRecordTeamA(ReadInt(runtime.GetField(record, "teamType"), 1)) != teamA) continue;
+                total += Math.Max(0f, ReadFloat(runtime.GetField(record, fieldName), 0f));
+            }
+
+            return total;
+        }
+
+        private List<short> CollectManagedDamageAttributionAttackers(
+            IDictionary records,
+            SortedDictionary<short, object> candidateUnits,
+            bool teamA,
+            bool preferredOnly)
+        {
+            if (candidateUnits.Count == 0) return [];
+
+            var mainShipGameUnitUids = CollectManagedMainShipGameUnitUids(teamA);
+            var attackers = new List<short>();
+            foreach (var unitEntry in candidateUnits)
+            {
+                if (!records.Contains(unitEntry.Key)) continue;
+                var record = records[unitEntry.Key];
+                if (record == null) continue;
+                if (IsRecordTeamA(ReadInt(runtime.GetField(record, "teamType"), 1)) != teamA) continue;
+                if (!IsManagedUnitEligibleForDamageAttribution(unitEntry.Value)) continue;
+                if (preferredOnly && !IsPreferredManagedDamageAttributionUnit(unitEntry.Key, unitEntry.Value, record, mainShipGameUnitUids)) continue;
+                attackers.Add(unitEntry.Key);
+            }
+
+            return attackers.Distinct().OrderBy(gameUnitUid => gameUnitUid).ToList();
+        }
+
+        private HashSet<short> CollectManagedMainShipGameUnitUids(bool teamA)
+        {
+            var output = new HashSet<short>();
+            var gameData = runtime.Invoke(server, "GetGameData");
+            var teamData = gameData == null ? null : runtime.GetField(gameData, teamA ? "m_NKMGameTeamDataA" : "m_NKMGameTeamDataB");
+            var mainShip = teamData == null ? null : runtime.GetField(teamData, "m_MainShip");
+            if (mainShip == null || runtime.GetField(mainShip, "m_listGameUnitUID") is not IEnumerable gameUnitUids) return output;
+
+            foreach (var value in gameUnitUids)
+            {
+                var gameUnitUid = ReadShort(value, 0);
+                if (gameUnitUid > 0) output.Add(gameUnitUid);
+            }
+
+            return output;
+        }
+
+        private bool IsManagedUnitEligibleForDamageAttribution(object unit)
+        {
+            try
+            {
+                if (ReadFloat(runtime.Invoke(unit, "GetHP"), 0f) <= 0f) return false;
+                var syncData = runtime.Invoke(unit, "GetUnitSyncData");
+                var playState = Convert.ToString(syncData == null ? null : runtime.GetField(syncData, "m_NKM_UNIT_PLAY_STATE"), CultureInfo.InvariantCulture) ?? "";
+                return playState.IndexOf("DIE", StringComparison.OrdinalIgnoreCase) < 0;
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
+        private bool IsPreferredManagedDamageAttributionUnit(
+            short gameUnitUid,
+            object unit,
+            object record,
+            HashSet<short> mainShipGameUnitUids)
+        {
+            if (!mainShipGameUnitUids.Contains(gameUnitUid)) return true;
+            if (ReadBool(runtime.GetField(record, "isSummonee"), false)) return true;
+
+            var unitData = runtime.Invoke(unit, "GetUnitData");
+            var unitDataGame = runtime.Invoke(unit, "GetUnitDataGame");
+            return unitData != null && IsManagedSummonedUnit(unitData, unitDataGame);
         }
 
         private bool ManagedRecordsHaveDamage(IDictionary records)
@@ -4026,6 +4431,13 @@ internal static class ManagedCombatBridge
                     ClearUnitRuntimeIds(unit);
                 }
             }
+
+            if (GetField(teamData, "m_listDynamicRespawnUnitData") is not IEnumerable dynamicUnits) return;
+            foreach (var dynamicUnit in dynamicUnits)
+            {
+                if (dynamicUnit == null) continue;
+                ClearUnitRuntimeIds(GetField(dynamicUnit, "m_NKMUnitData") ?? dynamicUnit);
+            }
         }
 
         private void ClearUnitRuntimeIds(object? unitData)
@@ -5307,14 +5719,27 @@ internal static class ManagedCombatBridge
         {
             var dataDir = Directory.GetParent(managedDir)?.FullName ?? managedDir;
             var gameDir = Directory.GetParent(dataDir)?.FullName ?? dataDir;
+            var androidNativeDir = Environment.GetEnvironmentVariable("REVIVALSIDE_NATIVE_LIBRARY_DIR");
+            var dotnetNativeDir = Environment.GetEnvironmentVariable("REVIVALSIDE_DOTNET_NATIVE_ROOT");
             return new[]
             {
+                androidNativeDir,
+                dotnetNativeDir,
                 managedDir,
+                Path.Combine(dataDir, "Plugins", "arm64-v8a"),
+                Path.Combine(dataDir, "Plugins", "armeabi-v7a"),
                 Path.Combine(dataDir, "Plugins", "x86_64"),
                 Path.Combine(dataDir, "Plugins"),
+                Path.Combine(dataDir, "lib", "arm64-v8a"),
+                Path.Combine(dataDir, "lib", "armeabi-v7a"),
+                Path.Combine(dataDir, "lib", "x86_64"),
                 dataDir,
                 gameDir
-            }.Where(Directory.Exists).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            }
+                .Where(path => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
+                .Select(path => path!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
         }
 
         private static IEnumerable<string> NativeLibraryFileNames(string libraryName)
@@ -5324,10 +5749,31 @@ internal static class ManagedCombatBridge
             {
                 yield return libraryName + ".dll";
             }
+            if (!libraryName.EndsWith(".so", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return libraryName + ".so";
+                if (!libraryName.StartsWith("lib", StringComparison.OrdinalIgnoreCase))
+                {
+                    yield return "lib" + libraryName + ".so";
+                }
+            }
+            if (!libraryName.EndsWith(".dylib", StringComparison.OrdinalIgnoreCase))
+            {
+                yield return libraryName + ".dylib";
+                if (!libraryName.StartsWith("lib", StringComparison.OrdinalIgnoreCase))
+                {
+                    yield return "lib" + libraryName + ".dylib";
+                }
+            }
         }
 
         private static void PrimeNativeSearchPath(IEnumerable<string> nativeSearchDirs)
         {
+            if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                return;
+            }
+
             foreach (var directory in nativeSearchDirs)
             {
                 if (File.Exists(Path.Combine(directory, "lua54.dll")))

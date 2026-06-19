@@ -3,18 +3,17 @@ module.exports = {
   name: "CONTENTS_VERSION_REQ",
   handle(ctx, socket, packet) {
     const official = ctx.capturedTcpProfiles.contentsVersionAck;
+    const useOfficial = Boolean(ctx.config.REPLAY_CAPTURED_CONTENTS_VERSION && official);
     const requiredTags = ctx.getRequiredContentsTags
       ? ctx.getRequiredContentsTags()
       : ctx.config.REQUIRED_CONTENTS_TAGS || [];
     const contentsTags = ctx.getEffectiveContentsTags
-      ? ctx.getEffectiveContentsTags(official ? official.contentsTag : ctx.config.CONTENTS_TAGS)
-      : official
+      ? ctx.getEffectiveContentsTags(useOfficial ? official.contentsTag : ctx.config.CONTENTS_TAGS)
+      : useOfficial
         ? mergeTags(official.contentsTag, requiredTags)
         : ctx.config.CONTENTS_TAGS;
-    ctx.setLastAckContents(
-      official ? official.contentsVersion : ctx.config.CONTENTS_VERSION,
-      contentsTags
-    );
+    const contentsVersion = useOfficial ? official.contentsVersion : ctx.config.CONTENTS_VERSION;
+    ctx.setLastAckContents(contentsVersion, contentsTags);
     ctx.sendResponse(socket, packet.sequence, ctx.constants.CONTENTS_VERSION_ACK, () => {
       const captured = ctx.capturedTcpResponses.get(ctx.constants.CONTENTS_VERSION_ACK);
       if (ctx.config.REPLAY_CAPTURED_CONTENTS_VERSION && captured) {
@@ -23,7 +22,7 @@ module.exports = {
           (!hasAllTags(official.contentsTag, requiredTags) || !hasSameTags(official.contentsTag, contentsTags))
         ) {
           console.log("[capture-replay] CONTENTS_VERSION_ACK using event contents-tag override");
-          return ctx.buildContentsVersionAck(packet.sequence, contentsTags, official.contentsVersion);
+          return ctx.buildContentsVersionAck(packet.sequence, contentsTags, contentsVersion);
         }
         console.log(
           `[capture-replay] packetId=${ctx.constants.CONTENTS_VERSION_ACK} compressed=${captured.compressed ? 1 : 0} payloadSize=${captured.payload.length}`
@@ -31,7 +30,7 @@ module.exports = {
         if (captured.raw && captured.sequence === packet.sequence) return captured.raw;
         return ctx.buildFramedPacket(packet.sequence, ctx.constants.CONTENTS_VERSION_ACK, captured.payload, captured.compressed);
       }
-      return ctx.buildContentsVersionAck(packet.sequence, contentsTags, official ? official.contentsVersion : ctx.config.CONTENTS_VERSION);
+      return ctx.buildContentsVersionAck(packet.sequence, contentsTags, contentsVersion);
     });
     return true;
   },

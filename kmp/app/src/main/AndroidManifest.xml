@@ -11,8 +11,9 @@
 
     <application
         android:allowBackup="false"
-        android:label="RevivalSide Capture"
+        android:label="RevivalSide Android"
         android:resizeableActivity="true"
+        android:usesCleartextTraffic="true"
         android:theme="@style/AppTheme">
         <activity
             android:name="dev.revivalside.capture.android.MainActivity"
@@ -34,6 +35,15 @@
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Local packet capture and forwarding for user-selected app traffic" />
+        </service>
+
+        <service
+            android:name="dev.revivalside.capture.android.RevivalSideListenerService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Local RevivalSide listener control service" />
         </service>
 
         <provider

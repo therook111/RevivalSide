@@ -15,6 +15,8 @@ const {
   writeObjectList,
   buildRewardData,
   dateTimeBinaryNow,
+  readSignedVarInt,
+  readString,
   toBigInt,
 } = require("../packet-codec");
 const { buildMissionDataEntries, ensureAccountProgress } = require("../account-progression");
@@ -120,16 +122,31 @@ function createLoginLikeHydratedHandler(packetId, options = {}) {
     packetId,
     name,
     handle(ctx, socket, packet) {
-      const user = getOrCreateHydratedLoginUser(ctx, socket);
+      const user = getOrCreateHydratedLoginUser(ctx, socket, packet, { ...options, name, ackPacketId });
       ctx.setLastEffectiveAccessToken && ctx.setLastEffectiveAccessToken(user.accessToken || "");
+      if (typeof ctx.prepareUserLobbySession === "function") {
+        ctx.prepareUserLobbySession(user, { source: name, force: true });
+      }
       console.log(`[hydrate:${name}] login-like ACK packetId=${ackPacketId} uid=${user.userUid || "(ephemeral)"}`);
       ctx.sendResponse(socket, packet.sequence, ackPacketId, () => {
-        const capturedLoginAck =
+        const capturedAck =
           ctx.capturedTcpResponses && typeof ctx.capturedTcpResponses.get === "function"
-            ? ctx.capturedTcpResponses.get(203)
+            ? ctx.capturedTcpResponses.get(ackPacketId)
             : null;
-        const officialLoginTemplate = ctx.capturedTcpProfiles && ctx.capturedTcpProfiles.loginAck;
-        if (ackPacketId === 203 && ctx.config && ctx.config.REPLAY_CAPTURED_LOGIN_ACK && (capturedLoginAck || officialLoginTemplate)) {
+        const officialLoginTemplate =
+          ackPacketId === 230
+            ? ctx.capturedTcpProfiles && ctx.capturedTcpProfiles.gamebaseLoginAck
+            : ctx.capturedTcpProfiles && ctx.capturedTcpProfiles.loginAck;
+        if (
+          ackPacketId === 230 &&
+          ctx.config &&
+          ctx.config.REPLAY_CAPTURED_LOGIN_ACK &&
+          (capturedAck || officialLoginTemplate) &&
+          typeof ctx.buildCapturedGamebaseLoginAck === "function"
+        ) {
+          return ctx.buildCapturedGamebaseLoginAck(packet.sequence, user);
+        }
+        if (ackPacketId === 203 && ctx.config && ctx.config.REPLAY_CAPTURED_LOGIN_ACK && (capturedAck || officialLoginTemplate)) {
           return ctx.buildCapturedLoginAck(packet.sequence, user);
         }
         const payload = ctx.buildLoginLikePayload ? ctx.buildLoginLikePayload(user) : buildHydratedAckPayload(ctx, socket, ackPacket);
@@ -222,10 +239,22 @@ function getSocketUser(ctx, socket) {
   return ctx && typeof ctx.createEphemeralUser === "function" ? ctx.createEphemeralUser() : {};
 }
 
-function getOrCreateHydratedLoginUser(ctx, socket) {
+function getOrCreateHydratedLoginUser(ctx, socket, packet, options = {}) {
   if (socket && socket.session && socket.session.user) return socket.session.user;
   let user = null;
-  if (ctx.config && ctx.config.USE_LOCAL_USER_DB && typeof ctx.getOrCreateUserForSteam === "function") {
+  const isGamebaseLogin = options.ackPacketId === 230 || options.authSource === "guest";
+  if (ctx.config && ctx.config.USE_LOCAL_USER_DB && isGamebaseLogin && typeof ctx.getOrCreateUserForGuest === "function") {
+    const loginReq = decodeGamebaseLoginReq(ctx, packet && packet.payload);
+    user = ctx.getOrCreateUserForGuest(loginReq);
+    if (typeof ctx.issueUserTokens === "function") ctx.issueUserTokens(user, loginReq.accessToken || "");
+    if (typeof ctx.prepareTutorialLogin === "function") ctx.prepareTutorialLogin(user);
+    if (typeof ctx.saveUserDb === "function") ctx.saveUserDb();
+    console.log(
+      `[hydrate:${options.name || "GAMEBASE_LOGIN_REQ"}] guest login deviceUid=${JSON.stringify(
+        loginReq.deviceUid || ""
+      )} userId=${JSON.stringify(loginReq.userId || "")} idp=${JSON.stringify(loginReq.idpCode || "guest")}`
+    );
+  } else if (ctx.config && ctx.config.USE_LOCAL_USER_DB && typeof ctx.getOrCreateUserForSteam === "function") {
     user = ctx.getOrCreateUserForSteam({
       accountId: "hydrated-login:default",
       deviceUid: "hydrated-login:default",
@@ -239,6 +268,57 @@ function getOrCreateHydratedLoginUser(ctx, socket) {
   }
   if (socket && socket.session) socket.session.user = user;
   return user;
+}
+
+function decodeGamebaseLoginReq(ctx, payload) {
+  const fallback = {
+    protocolVersion: 0,
+    mobileData: {},
+    deviceUid: "gamebase-guest:default",
+    userId: "",
+    accessToken: "",
+    idpCode: "guest",
+  };
+  try {
+    const decrypted = ctx && typeof ctx.decryptCopy === "function" ? ctx.decryptCopy(payload) : Buffer.from(payload || []);
+    let offset = 0;
+    const protocolVersion = readSignedVarInt(decrypted, offset);
+    offset = protocolVersion.offset;
+    const mobileData = readNkmUserMobileData(decrypted, offset);
+    offset = mobileData.offset;
+    const deviceUid = readString(decrypted, offset);
+    offset = deviceUid.offset;
+    const userId = readString(decrypted, offset);
+    offset = userId.offset;
+    const accessToken = readString(decrypted, offset);
+    offset = accessToken.offset;
+    const idpCode = readString(decrypted, offset);
+    return {
+      protocolVersion: protocolVersion.value,
+      mobileData: mobileData.value,
+      deviceUid: deviceUid.value || fallback.deviceUid,
+      userId: userId.value || "",
+      accessToken: accessToken.value || "",
+      idpCode: idpCode.value || "guest",
+    };
+  } catch (err) {
+    console.log(`[hydrate:GAMEBASE_LOGIN_REQ] decode failed: ${err.message}`);
+    return fallback;
+  }
+}
+
+function readNkmUserMobileData(buffer, offset) {
+  const hasValue = offset < buffer.length ? buffer.readUInt8(offset) !== 0 : false;
+  offset += 1;
+  if (!hasValue) return { value: {}, offset };
+  const names = ["marketId", "country", "language", "authPlatform", "platform", "osVersion", "adId", "clientVersion"];
+  const value = {};
+  for (const name of names) {
+    const field = readString(buffer, offset);
+    offset = field.offset;
+    value[name] = field.value || "";
+  }
+  return { value, offset };
 }
 
 function buildUserProfileData(user) {

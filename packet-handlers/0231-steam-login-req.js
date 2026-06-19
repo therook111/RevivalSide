@@ -15,19 +15,27 @@ module.exports = {
       socket.session.user = user;
       ctx.setLastEffectiveAccessToken(user.accessToken || "");
       ctx.prepareTutorialLogin(user);
-      const missionClock = ctx.getMissionClockOptions
-        ? ctx.getMissionClockOptions()
-        : { now: ctx.dateTimeBinaryNow ? ctx.dateTimeBinaryNow() : undefined };
-      try {
-        ctx.recordMissionLogin(user, missionClock);
-      } catch (error) {
-        console.log(`[mission-login] skipped steam login update: ${error && error.message ? error.message : error}`);
-      }
       const cleanup = applyLocalAccountCleanup(user, ctx.config);
-      const rewardPosts = ensureLoginRewardPosts(user);
-      const serverNow = ctx.getServerNowDate ? ctx.getServerNowDate() : new Date();
-      const attendancePosts = ensureAttendanceRewardPosts(user, { now: serverNow, clockNow: serverNow });
-      ctx.saveUserDb();
+      let rewardPosts = 0;
+      let attendancePosts = 0;
+      if (typeof ctx.prepareUserLobbySession === "function") {
+        const prepared = ctx.prepareUserLobbySession(user, { source: "steam-login", force: true });
+        rewardPosts = Number(prepared.rewardPosts || 0);
+        attendancePosts = Number(prepared.attendancePosts || 0);
+      } else {
+        const missionClock = ctx.getMissionClockOptions
+          ? ctx.getMissionClockOptions()
+          : { now: ctx.dateTimeBinaryNow ? ctx.dateTimeBinaryNow() : undefined };
+        try {
+          ctx.recordMissionLogin(user, missionClock);
+        } catch (error) {
+          console.log(`[mission-login] skipped steam login update: ${error && error.message ? error.message : error}`);
+        }
+        const serverNow = ctx.getServerNowDate ? ctx.getServerNowDate() : new Date();
+        rewardPosts = ensureLoginRewardPosts(user, { now: serverNow });
+        attendancePosts = ensureAttendanceRewardPosts(user, { now: serverNow, clockNow: serverNow });
+        ctx.saveUserDb();
+      }
       if (cleanup.changed) {
         console.log(
           `[user-db] cleanup uid=${user.userUid} missionStatus=${cleanup.missionStatus || 0} unitsLevel1=${cleanup.unitsLevel1} gearUnenhanced=${cleanup.gearUnenhanced} shipsLevel1=${cleanup.shipsLevel1} operatorsLevel1=${cleanup.operatorsLevel1}`

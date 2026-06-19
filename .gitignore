@@ -69,7 +69,9 @@ exports/
 logs/
 launcher-settings.json
 prebuilt/revivalside-*/
+prebuilt/android-combat-host-*/
 prebuilt/local-launcher-test/
+prebuilt/logs/
 prebuilt/syntax-probe/
 download-service/NUL
 

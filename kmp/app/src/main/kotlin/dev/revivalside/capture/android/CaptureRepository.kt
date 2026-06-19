@@ -47,6 +47,47 @@ internal object CaptureRepository {
         return zipFile
     }
 
+    @Synchronized
+    fun saveOfficialLoginPackets(
+        context: Context,
+        frames: Collection<CapturedCounterSideFrame>,
+        connectionLabel: String,
+    ): File {
+        val selected = frames
+            .filter { it.packetId == LOGIN_ACK || it.packetId == GAMEBASE_LOGIN_ACK || it.packetId == CONTENTS_VERSION_ACK }
+            .distinctBy { it.packetId }
+            .sortedBy { it.sequence }
+        require(selected.isNotEmpty()) { "No official login packets were captured." }
+
+        val exportDir = File(context.filesDir, "exports")
+        exportDir.mkdirs()
+        val stamp = stampFormat.format(Instant.now())
+        val zipFile = File(exportDir, "official-login-packets-$stamp.zip")
+        val manifest = buildCapturedTcpManifest(selected, connectionLabel)
+
+        ZipOutputStream(zipFile.outputStream().buffered()).use { zip ->
+            zip.putNextEntry(ZipEntry("manifest.json"))
+            zip.write(manifest.toByteArray(Charsets.UTF_8))
+            zip.closeEntry()
+
+            for (frame in selected) {
+                zip.putNextEntry(ZipEntry("${frame.packetId}.packet.bin"))
+                zip.write(frame.raw)
+                zip.closeEntry()
+
+                zip.putNextEntry(ZipEntry("${frame.packetId}.payload.bin"))
+                zip.write(frame.payload)
+                zip.closeEntry()
+            }
+        }
+
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_LATEST_EXPORT, zipFile.absolutePath)
+            .apply()
+        return zipFile
+    }
+
     fun latestExport(context: Context): File? {
         val path = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_LATEST_EXPORT, "") ?: ""
         val file = File(path)
@@ -85,4 +126,32 @@ internal object CaptureRepository {
             }
         """.trimIndent() + "\n"
     }
+
+    private fun buildCapturedTcpManifest(frames: List<CapturedCounterSideFrame>, connectionLabel: String): String {
+        val escapedConnection = connectionLabel.replace("\\", "\\\\").replace("\"", "\\\"")
+        val entries = frames.mapIndexed { index, frame ->
+            val sha256 = MessageDigest.getInstance("SHA-256").digest(frame.raw).toLowerHex()
+            """
+              "${frame.packetId}": {
+                "packetId": ${frame.packetId},
+                "stream": "$escapedConnection",
+                "sequence": ${frame.sequence},
+                "compressed": ${frame.compressed},
+                "payloadSize": ${frame.payloadSize},
+                "payloadFile": "${frame.packetId}.payload.bin",
+                "rawFile": "${frame.packetId}.packet.bin",
+                "totalLength": ${frame.totalLength},
+                "tail": 287454020,
+                "frame": $index,
+                "time": 0,
+                "sha256": "$sha256"
+              }
+            """.trimIndent()
+        }
+        return "{\n${entries.joinToString(",\n")}\n}\n"
+    }
+
+    private const val LOGIN_ACK = 203
+    private const val GAMEBASE_LOGIN_ACK = 230
+    private const val CONTENTS_VERSION_ACK = 217
 }

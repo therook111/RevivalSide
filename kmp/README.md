@@ -1,48 +1,95 @@
-# RevivalSide Android Profile Capture
+# RevivalSide Android
 
-Kotlin Multiplatform Android companion app for capturing the Android client `JOIN_LOBBY_ACK`.
+Android companion app for running RevivalSide phone-side tooling beside the Android CounterSide client.
 
-## What It Does
+## Current Capabilities
 
-- Runs as an Android `VpnService` packet capture app.
-- Captures traffic from the selected CounterSide Android package.
-- Forwards TCP/UDP traffic so the game can still log in normally.
-- Scans server-to-client TCP payloads for packet `205` (`JOIN_LOBBY_ACK`).
-- Exports a zip bundle with:
-  - `manifest.json`
-  - `server_001_205.packet.bin`
-  - `server_001_205.payload.bin`
+- Runs as an Android `VpnService`.
+- Captures `JOIN_LOBBY_ACK` from the official Android client and exports the existing desktop import bundle.
+- Starts a foreground RevivalSide listener service with bundled Node.js Mobile.
+- Serves the RevivalSide listener and launcher-compatible endpoints on `127.0.0.1:8088`:
+  - `GET /launcher/api/health`
+  - `GET /launcher/api/server-time`
+  - `POST /launcher/api/server-time`
+  - `POST /launcher/api/server-time/clear`
+  - `POST /user-manager/api/reload`
+- Redirects selected CounterSide TCP ports through the VPN to the local phone listener port.
+- Persists target package, ports, redirect ports, JOIN_LOBBY_ACK mode, and optional Android node path.
 
-The Android app does not convert the packet into `users.json` on-device. Use the desktop RevivalSide capture/import tooling to convert the exported bundle.
+The Android app intentionally replaces Windows-only setup pieces with Android equivalents. Npcap/Wireshark becomes VPN capture, hosts patching becomes VPN redirect, and the setup wizard becomes in-app controls.
 
-## Install And Run
+## MuMu CounterSide Install
 
-1. Connect an Android phone or emulator with USB debugging enabled.
-2. Run:
+Start MuMu and make sure ADB is reachable, then run:
 
-   ```bat
-   build-and-install.bat
-   ```
-
-3. Open **RevivalSide Capture**.
-4. Leave the target package as `com.studiobside.CounterSide`, or change it if your installed build uses another package name.
-5. Tap **Start** and accept the Android VPN prompt.
-6. Open CounterSide and reach the lobby.
-7. When the app shows `Captured JOIN_LOBBY_ACK`, tap **Share export** and send the zip to the desktop.
-
-## Desktop Import
-
-Unzip the exported bundle into a folder, then run the existing desktop importer against that folder:
-
-```bat
-node tools\import-official-join-lobby-profile.js --capture-dir <unzipped-bundle-folder> --copy-to exports\users-android.json
+```powershell
+.\install-counterside-xapk.ps1
 ```
 
-Then open User Manager and use **Import copied JSON**.
+By default this connects to `10.0.2.240:5555` and installs:
+
+- `com.studiobside.CounterSide.apk`
+- `config.armeabi_v7a.apk`
+
+from `C:\Users\moemy\Downloads\CounterSide_9.21.3352381_APKPure.xapk`.
+
+## Build And Run
+
+Refresh the bundled Node runtime and JS listener payload when needed:
+
+```powershell
+.\vendor-nodejs-mobile.ps1
+.\build-android-listener-assets.ps1
+```
+
+For a standalone phone build that matches the v0.3.0 setup+launcher payload, stage the release payload archive too:
+
+```powershell
+.\build-android-listener-assets.ps1 -PayloadZip ..\prebuilt\revivalside-github-release-v0.3.0\RevivalSidePayload-v0.3.0.zip
+```
+
+Then build/install:
+
+```bat
+build-and-install.bat
+```
+
+Then open **RevivalSide Android**.
+
+Recommended smoke flow:
+
+1. Tap **Start listener**.
+2. Tap **VPN redirect** and accept the Android VPN prompt.
+3. Tap **Launch CounterSide**.
+4. Watch the Activity log and Android logcat.
+
+For official profile capture, tap **Capture ACK** instead of **VPN redirect**, open CounterSide, reach the lobby, then tap **Share export**.
+
+## Listener Payload
+
+The debug APK bundles:
+
+- Node.js Mobile `v18.20.4` native libraries for `armeabi-v7a`, `arm64-v8a`, and `x86_64`.
+- A small JNI bridge library that starts Node in a background thread.
+- Either the compact RevivalSide JS listener payload under `assets/revivalside-listener`, or a full release archive under `assets/revivalside-payload.zip`.
+- Compact seed tables from `server-data` for diagnostic builds, excluding local users, logs, captures, backups, and large optional string/cache data.
+
+When `revivalside-payload.zip` is present, the Android service extracts only `payload/app` into app-private storage. It preserves `server-data/users.json`, `server-data/server-time.json`, logs, captures, and exports across app starts, and it runs the listener in packaged-only mode with desktop `Assembly-CSharp.dll` discovery disabled.
+
+Stage the JS files with:
+
+```powershell
+.\build-android-listener-assets.ps1
+```
+
+Use `-IncludeGameplayJsons` or `-IncludeLargeServerData` only for oversized diagnostic APKs.
+
+The fallback Kotlin control API is used only if the bundled Node runtime or listener payload is missing.
 
 ## Notes
 
-- This is local-only. It does not upload captures.
-- It needs Android VPN permission and cannot run alongside another VPN.
-- It captures only IPv4 traffic. If the Android client uses IPv6-only networking on a device/network, use an IPv4-capable network or emulator.
-- If the Android client moves the lobby payload inside TLS, this app can forward traffic but will not be able to read `JOIN_LOBBY_ACK`.
+- The app does not patch the CounterSide APK.
+- The app does not require root.
+- It cannot run alongside another Android VPN.
+- IPv4 is required for the current VPN packet bridge.
+- The desktop C# combat host and CounterPass patcher are not Android binaries; they need separate Android-native replacements if literal parity is required later.

@@ -51,6 +51,8 @@ public sealed class HostPacket
     public bool? BattleWin { get; set; }
     public int? BattleWinTeam { get; set; }
     public double? BattlePlayTime { get; set; }
+    public int? FiercePoint { get; set; }
+    public int? FiercePenaltyPoint { get; set; }
     public List<BattleUnitRecord>? BattleRecords { get; set; }
 }
 

@@ -2652,10 +2652,69 @@ internal sealed class LauncherWindow : Window
     private static string ExtractJsonObject(string text)
     {
         var trimmed = (text ?? "").Trim();
-        var start = trimmed.IndexOf('{');
-        var end = trimmed.LastIndexOf('}');
-        if (start < 0 || end <= start) throw new InvalidOperationException("Cross Save importer did not return JSON.");
-        return trimmed[start..(end + 1)];
+        if (string.IsNullOrWhiteSpace(trimmed)) throw new InvalidOperationException("Cross Save importer did not return JSON.");
+        if (IsValidJsonObject(trimmed)) return trimmed;
+
+        string? best = null;
+        for (var start = 0; start < trimmed.Length; start++)
+        {
+            if (trimmed[start] != '{') continue;
+            var end = FindJsonObjectEnd(trimmed, start);
+            if (end <= start) continue;
+            var candidate = trimmed[start..(end + 1)];
+            if (IsValidJsonObject(candidate)) best = candidate;
+        }
+
+        return best ?? throw new InvalidOperationException("Cross Save importer did not return JSON.");
+    }
+
+    private static bool IsValidJsonObject(string text)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(text);
+            return document.RootElement.ValueKind == JsonValueKind.Object;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static int FindJsonObjectEnd(string text, int start)
+    {
+        var depth = 0;
+        var inString = false;
+        var escaped = false;
+        for (var index = start; index < text.Length; index++)
+        {
+            var ch = text[index];
+            if (escaped)
+            {
+                escaped = false;
+                continue;
+            }
+            if (inString)
+            {
+                if (ch == '\\') escaped = true;
+                else if (ch == '"') inString = false;
+                continue;
+            }
+            if (ch == '"')
+            {
+                inString = true;
+                continue;
+            }
+            if (ch == '{')
+            {
+                depth += 1;
+                continue;
+            }
+            if (ch != '}') continue;
+            depth -= 1;
+            if (depth == 0) return index;
+        }
+        return -1;
     }
 
     private async Task ReloadRunningUserManagerAsync()

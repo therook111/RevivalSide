@@ -428,7 +428,7 @@ function createCombatHandler(options = {}) {
       }
       if (outboundEndIndex >= 0) {
         replay.dynamicBattleResultSent = true;
-        if (replay.dynamicBattleTimer) clearInterval(replay.dynamicBattleTimer);
+        if (replay.dynamicBattleTimer) clearTimeout(replay.dynamicBattleTimer);
         replay.dynamicBattleTimer = null;
         if (typeof callbacks.onGameEndPacketSent === "function") {
           callbacks.onGameEndPacketSent(socket);
@@ -439,7 +439,7 @@ function createCombatHandler(options = {}) {
       const finishedState = replay.battleState && replay.battleState.finished ? replay.battleState : null;
       if (finishedState && finishedState.finished && !replay.dynamicBattleResultSent) {
         replay.dynamicBattleResultSent = true;
-        if (replay.dynamicBattleTimer) clearInterval(replay.dynamicBattleTimer);
+        if (replay.dynamicBattleTimer) clearTimeout(replay.dynamicBattleTimer);
         replay.dynamicBattleTimer = null;
         const resultSent =
           typeof callbacks.sendBattleResult === "function"
@@ -487,10 +487,16 @@ function createCombatHandler(options = {}) {
       if (!result.running) return true;
       if (result.sent) break;
     }
-    replay.dynamicBattleTimer = setInterval(() => {
-      pump();
-    }, syncInterval);
-    if (typeof replay.dynamicBattleTimer.unref === "function") replay.dynamicBattleTimer.unref();
+    const scheduleNextPump = () => {
+      if (!replay.dynamicBattleTimer || socket.destroyed) return;
+      replay.dynamicBattleTimer = setTimeout(() => {
+        const result = pump();
+        if (result.running) scheduleNextPump();
+      }, syncInterval);
+      if (typeof replay.dynamicBattleTimer.unref === "function") replay.dynamicBattleTimer.unref();
+    };
+    replay.dynamicBattleTimer = true;
+    scheduleNextPump();
     return true;
   }
 
@@ -707,6 +713,8 @@ function createCombatHandler(options = {}) {
     const battleWinTeam = packet.battleWinTeam ?? packet.BattleWinTeam;
     const battleRecords = packet.battleRecords || packet.BattleRecords;
     const battlePlayTime = packet.battlePlayTime ?? packet.BattlePlayTime;
+    const fiercePoint = packet.fiercePoint ?? packet.FiercePoint;
+    const fiercePenaltyPoint = packet.fiercePenaltyPoint ?? packet.FiercePenaltyPoint;
     if (battleWin != null) {
       output.battleWin = battleWin;
     }
@@ -715,6 +723,12 @@ function createCombatHandler(options = {}) {
     }
     if (battlePlayTime != null) {
       output.battlePlayTime = battlePlayTime;
+    }
+    if (fiercePoint != null) {
+      output.fiercePoint = fiercePoint;
+    }
+    if (fiercePenaltyPoint != null) {
+      output.fiercePenaltyPoint = fiercePenaltyPoint;
     }
     if (Array.isArray(battleRecords) && battleRecords.length > 0) {
       output.battleRecords = battleRecords;

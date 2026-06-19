@@ -21,6 +21,13 @@ function normalizeManagedDir(value) {
   return fullPath;
 }
 
+function isManagedDirDiscoveryDisabled(env = process.env) {
+  const value = String(env.CS_DISABLE_COUNTERSIDE_MANAGED_DIR || env.CS_DISABLE_MANAGED_DIR_DISCOVERY || "")
+    .trim()
+    .toLowerCase();
+  return value === "1" || value === "true" || value === "yes" || value === "on";
+}
+
 function buildManagedDirCandidates(root) {
   const candidates = [root, path.join(root, "Data", "Managed"), path.join(root, "Managed")];
   if (path.basename(root).toLowerCase() === "data") candidates.push(path.join(root, "Managed"));
@@ -32,6 +39,8 @@ function buildManagedDirCandidates(root) {
 }
 
 function findCounterSideManagedDir(options = {}) {
+  const env = options.env || process.env;
+  if (isManagedDirDiscoveryDisabled(env)) return "";
   for (const candidate of findCounterSideManagedDirCandidates(options)) {
     const managed = normalizeManagedDir(candidate);
     if (managed && fs.existsSync(path.join(managed, "Assembly-CSharp.dll"))) return managed;
@@ -41,6 +50,7 @@ function findCounterSideManagedDir(options = {}) {
 
 function findCounterSideManagedDirCandidates(options = {}) {
   const env = options.env || process.env;
+  if (isManagedDirDiscoveryDisabled(env)) return [];
   const candidates = [
     options.managedDir,
     env.CS_COUNTERSIDE_MANAGED_DIR,
@@ -192,5 +202,6 @@ module.exports = {
   findCounterSideScriptBundleRoots,
   findCounterSideStreamingAssetsDir,
   hasScriptBundles,
+  isManagedDirDiscoveryDisabled,
   normalizeManagedDir,
 };

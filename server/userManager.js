@@ -1520,7 +1520,7 @@ function buildUserManagerHtml(basePath) {
         const imported = await readImportedUsersJson();
         const payload = await requestJson("/users/import-json-profile", {
           method: "POST",
-          body: JSON.stringify({ db: imported.db })
+          body: JSON.stringify(imported.db)
         });
         state.db = null;
         state.users = payload.users || [];

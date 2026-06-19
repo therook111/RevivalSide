@@ -9,11 +9,14 @@ import android.content.pm.PackageManager
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
+import android.util.Log
+import dev.revivalside.capture.protocol.CapturedCounterSideFrame
 import dev.revivalside.capture.protocol.CounterSideFrameScanner
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.net.DatagramPacket
 import java.net.DatagramSocket
+import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -24,16 +27,22 @@ import kotlin.random.Random
 
 class CounterSideVpnService : VpnService() {
     private val running = AtomicBoolean(false)
-    private val ackCaptured = AtomicBoolean(false)
+    private val joinLobbyCaptured = AtomicBoolean(false)
+    private val officialLoginCaptureLock = Any()
+    private val officialLoginFrames = linkedMapOf<Int, CapturedCounterSideFrame>()
     private val sessions = ConcurrentHashMap<TcpKey, TcpSession>()
     private var vpnInterface: ParcelFileDescriptor? = null
     private var worker: Thread? = null
     private var output: FileOutputStream? = null
     private val outputLock = Any()
+    private var vpnMode: String = MODE_CAPTURE
+    private var listenerPort: Int = DEFAULT_GAME_PORT
+    private var httpMirrorPort: Int = DEFAULT_HTTP_PORT
+    private var redirectPorts: Set<Int> = setOf(DEFAULT_GAME_PORT)
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_START -> startCapture(intent.getStringExtra(EXTRA_TARGET_PACKAGE).orEmpty())
+            ACTION_START -> startCapture(intent)
             ACTION_STOP -> stopCapture()
         }
         return START_STICKY
@@ -44,20 +53,38 @@ class CounterSideVpnService : VpnService() {
         super.onDestroy()
     }
 
-    private fun startCapture(targetPackage: String) {
+    private fun startCapture(intent: Intent) {
         if (!running.compareAndSet(false, true)) {
-            publishStatus("Capture is already running")
-            return
+            publishStatus("Restarting VPN")
+            stopCapture()
+            if (!running.compareAndSet(false, true)) {
+                publishStatus("Failed: VPN is still stopping")
+                return
+            }
         }
 
         try {
-            startForeground(NOTIFICATION_ID, buildNotification("Capturing CounterSide traffic"))
+            val targetPackage = intent.getStringExtra(EXTRA_TARGET_PACKAGE).orEmpty()
+            vpnMode = intent.getStringExtra(EXTRA_MODE)?.takeIf { it == MODE_LISTENER } ?: MODE_CAPTURE
+            listenerPort = intent.getIntExtra(EXTRA_LISTENER_PORT, DEFAULT_GAME_PORT).coercePort(DEFAULT_GAME_PORT)
+            httpMirrorPort = intent.getIntExtra(EXTRA_HTTP_PORT, DEFAULT_HTTP_PORT).coercePort(DEFAULT_HTTP_PORT)
+            redirectPorts = RevivalSideSettingsStore.parsePorts(
+                intent.getStringExtra(EXTRA_REDIRECT_PORTS).orEmpty(),
+                setOf(listenerPort),
+            )
+            joinLobbyCaptured.set(false)
+            synchronized(officialLoginCaptureLock) {
+                officialLoginFrames.clear()
+            }
+
+            val modeText = if (vpnMode == MODE_LISTENER) "Redirecting CounterSide traffic" else "Capturing CounterSide traffic"
+            startForeground(NOTIFICATION_ID, buildNotification(modeText))
             val builder = Builder()
-                .setSession("RevivalSide Capture")
+                .setSession(if (vpnMode == MODE_LISTENER) "RevivalSide Redirect" else "RevivalSide Capture")
                 .setMtu(1500)
                 .addAddress("10.79.0.2", 32)
-                .addRoute("0.0.0.0", 0)
                 .addDnsServer("1.1.1.1")
+            val routeLabels = configureRoutes(builder)
 
             val scopedTarget = tryAddTargetApplication(builder, targetPackage)
 
@@ -66,7 +93,13 @@ class CounterSideVpnService : VpnService() {
             worker = thread(name = "revivalside-vpn", isDaemon = true) {
                 runPacketLoop(vpnInterface!!)
             }
-            publishStatus("Recording ${scopedTarget.ifBlank { "all routed apps" }}")
+            if (vpnMode == MODE_LISTENER) {
+                publishStatus(
+                    "Redirecting ${scopedTarget.ifBlank { "all routed apps" }} routes $routeLabels game=${redirectPorts.sorted()}->$listenerPort http=80->$httpMirrorPort",
+                )
+            } else {
+                publishStatus("Recording ${scopedTarget.ifBlank { "all routed apps" }}")
+            }
         } catch (ex: Exception) {
             publishStatus("Failed: ${ex.message}")
             stopCapture()
@@ -133,6 +166,9 @@ class CounterSideVpnService : VpnService() {
             val payload = packet.copyOfRange(tcp.payloadOffset, tcp.payloadOffset + tcp.payloadLength)
             session.writeFromClient(tcp.sequence, payload)
             writePacket(session.buildAck())
+            if (vpnMode == MODE_LISTENER && redirectPorts.contains(key.remotePort)) {
+                Log.i(TAG, "client ${payload.size} bytes -> ${key.remoteLabel}")
+            }
         }
 
         if ((tcp.flags and TcpFlags.FIN) != 0) {
@@ -147,8 +183,9 @@ class CounterSideVpnService : VpnService() {
         val socket = Socket()
         protect(socket)
         try {
+            val endpoint = resolveTcpEndpoint(key)
             socket.tcpNoDelay = true
-            socket.connect(InetSocketAddress(intToAddress(key.remoteIp), key.remotePort), CONNECT_TIMEOUT_MS)
+            socket.connect(endpoint, CONNECT_TIMEOUT_MS)
             val session = TcpSession(
                 key = key,
                 socket = socket,
@@ -160,6 +197,10 @@ class CounterSideVpnService : VpnService() {
             writePacket(session.buildSynAck())
             session.serverNext = incrementSequence(session.serverNext, 1)
             startServerReader(session)
+            if (vpnMode == MODE_LISTENER && endpoint.address.isLoopbackAddress) {
+                Log.i(TAG, "redirected ${key.remoteLabel} to ${endpoint.hostString}:${endpoint.port}")
+                publishStatus("Redirected ${key.remoteLabel} to ${endpoint.hostString}:${endpoint.port}")
+            }
         } catch (ex: Exception) {
             try {
                 socket.close()
@@ -176,8 +217,51 @@ class CounterSideVpnService : VpnService() {
                     flags = TcpFlags.RST or TcpFlags.ACK,
                 ),
             )
+            Log.w(TAG, "connect failed ${key.remoteLabel}: ${ex.message}")
             publishStatus("Connect failed ${key.remoteLabel}: ${ex.message}")
         }
+    }
+
+    private fun resolveTcpEndpoint(key: TcpKey): InetSocketAddress {
+        if (vpnMode == MODE_LISTENER && shouldRedirectToHttpMirror(key)) {
+            return InetSocketAddress(InetAddress.getByName("127.0.0.1"), httpMirrorPort)
+        }
+        if (vpnMode == MODE_LISTENER && redirectPorts.contains(key.remotePort)) {
+            return InetSocketAddress(InetAddress.getByName("127.0.0.1"), listenerPort)
+        }
+        return InetSocketAddress(intToAddress(key.remoteIp), key.remotePort)
+    }
+
+    private fun shouldRedirectToHttpMirror(key: TcpKey): Boolean {
+        return key.remotePort in HTTP_MIRROR_REMOTE_PORTS
+    }
+
+    private fun configureRoutes(builder: Builder): List<String> {
+        if (vpnMode != MODE_LISTENER) {
+            builder.addRoute("0.0.0.0", 0)
+            return listOf("0.0.0.0/0")
+        }
+
+        val routes = resolveListenerRoutes()
+        for (address in routes) {
+            builder.addRoute(address.hostAddress, 32)
+        }
+        return routes.map { "${it.hostAddress}/32" }
+    }
+
+    private fun resolveListenerRoutes(): List<Inet4Address> {
+        val ordered = linkedMapOf<String, Inet4Address>()
+        for (host in LISTENER_ROUTE_HOSTS) {
+            val addresses = runCatching { InetAddress.getAllByName(host).toList() }.getOrDefault(emptyList())
+            for (address in addresses) {
+                if (address is Inet4Address) ordered[address.hostAddress] = address
+            }
+        }
+        for (fallback in LISTENER_ROUTE_FALLBACK_IPV4) {
+            val address = runCatching { InetAddress.getByName(fallback) }.getOrNull()
+            if (address is Inet4Address) ordered[address.hostAddress] = address
+        }
+        return ordered.values.toList()
     }
 
     private fun startServerReader(session: TcpSession) {
@@ -190,9 +274,7 @@ class CounterSideVpnService : VpnService() {
                     if (read < 0) break
                     if (read == 0) continue
                     inspectServerPayload(session, buffer, read)
-                    val payload = buffer.copyOfRange(0, read)
-                    writePacket(session.buildServerData(payload))
-                    session.serverNext = incrementSequence(session.serverNext, read)
+                    forwardServerPayload(session, buffer, read)
                 }
                 if (!session.closed.get()) {
                     writePacket(session.buildFin())
@@ -205,13 +287,59 @@ class CounterSideVpnService : VpnService() {
         }
     }
 
+    private fun forwardServerPayload(session: TcpSession, buffer: ByteArray, length: Int) {
+        if (vpnMode == MODE_LISTENER && redirectPorts.contains(session.key.remotePort)) {
+            Log.i(TAG, "server $length bytes <- ${session.key.remoteLabel}")
+        }
+        var offset = 0
+        while (offset < length) {
+            val size = minOf(TCP_MSS, length - offset)
+            val payload = buffer.copyOfRange(offset, offset + size)
+            writePacket(session.buildServerData(payload))
+            session.serverNext = incrementSequence(session.serverNext, size)
+            offset += size
+        }
+    }
+
     private fun inspectServerPayload(session: TcpSession, bytes: ByteArray, length: Int) {
-        if (ackCaptured.get()) return
         val frames = session.scanner.push(bytes, length)
+        if (frames.isEmpty()) return
+
+        if (vpnMode == MODE_CAPTURE) {
+            inspectOfficialLoginPackets(session, frames)
+        }
+
+        if (joinLobbyCaptured.get()) return
         val lobbyAck = frames.firstOrNull { it.packetId == JOIN_LOBBY_ACK } ?: return
-        if (!ackCaptured.compareAndSet(false, true)) return
+        if (!joinLobbyCaptured.compareAndSet(false, true)) return
         val export = CaptureRepository.saveJoinLobbyAck(this, lobbyAck, session.key.remoteLabel)
         publishStatus("Captured JOIN_LOBBY_ACK", export)
+    }
+
+    private fun inspectOfficialLoginPackets(session: TcpSession, frames: List<CapturedCounterSideFrame>) {
+        val interesting = frames.filter {
+            it.packetId == LOGIN_ACK || it.packetId == GAMEBASE_LOGIN_ACK || it.packetId == CONTENTS_VERSION_ACK
+        }
+        if (interesting.isEmpty()) return
+
+        var export: java.io.File? = null
+        var summary = ""
+        synchronized(officialLoginCaptureLock) {
+            var changed = false
+            for (frame in interesting) {
+                if (!officialLoginFrames.containsKey(frame.packetId)) {
+                    officialLoginFrames[frame.packetId] = frame
+                    changed = true
+                }
+            }
+            if (changed) {
+                export = CaptureRepository.saveOfficialLoginPackets(this, officialLoginFrames.values, session.key.remoteLabel)
+                summary = officialLoginFrames.keys.sorted().joinToString(",")
+            }
+        }
+        if (export != null) {
+            publishStatus("Captured official login packets [$summary]", export)
+        }
     }
 
     private fun handleUdp(packet: ByteArray, ip: Ipv4Packet) {
@@ -275,6 +403,7 @@ class CounterSideVpnService : VpnService() {
     }
 
     private fun publishStatus(message: String, export: java.io.File? = null) {
+        Log.i(TAG, message)
         sendBroadcast(Intent(ACTION_STATUS).apply {
             setPackage(packageName)
             putExtra(EXTRA_MESSAGE, message)
@@ -298,17 +427,40 @@ class CounterSideVpnService : VpnService() {
     }
 
     companion object {
+        const val LOGIN_ACK = 203
         const val JOIN_LOBBY_ACK = 205
+        const val CONTENTS_VERSION_ACK = 217
+        const val GAMEBASE_LOGIN_ACK = 230
         const val CHANNEL_ID = "revivalside_capture"
         const val NOTIFICATION_ID = 6001
         const val CONNECT_TIMEOUT_MS = 10_000
         const val UDP_TIMEOUT_MS = 5_000
+        const val TCP_MSS = 1200
         const val ACTION_START = "dev.revivalside.capture.START"
         const val ACTION_STOP = "dev.revivalside.capture.STOP"
         const val ACTION_STATUS = "dev.revivalside.capture.STATUS"
         const val EXTRA_TARGET_PACKAGE = "targetPackage"
+        const val EXTRA_MODE = "mode"
+        const val EXTRA_LISTENER_PORT = "listenerPort"
+        const val EXTRA_HTTP_PORT = "httpPort"
+        const val EXTRA_REDIRECT_PORTS = "redirectPorts"
         const val EXTRA_MESSAGE = "message"
         const val EXTRA_EXPORT_PATH = "exportPath"
+        const val MODE_CAPTURE = "capture"
+        const val MODE_LISTENER = "listener"
+        const val TAG = "RevivalSideVpn"
+        val HTTP_MIRROR_REMOTE_PORTS = setOf(80)
+        val LISTENER_ROUTE_HOSTS = listOf(
+            "ctsglobal-login.sbside.com",
+            "ctskorea-login.sbside.com",
+            "ctsglobal-cdndown.sbside.com",
+        )
+        val LISTENER_ROUTE_FALLBACK_IPV4 = listOf(
+            "172.65.251.9",
+            "172.65.237.240",
+            "104.18.22.191",
+            "104.18.23.191",
+        )
     }
 }
 
@@ -399,3 +551,5 @@ private fun intToAddress(value: Int): InetAddress {
 }
 
 private fun Long.toUInt32(): Long = this and 0xffffffffL
+
+private fun Int.coercePort(fallback: Int): Int = if (this in 1..65535) this else fallback

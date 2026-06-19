@@ -14,6 +14,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "RevivalSideOfficialProfileCaptureKmp"
+rootProject.name = "RevivalSideAndroid"
 include(":shared")
 include(":app")

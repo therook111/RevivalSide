@@ -101,6 +101,7 @@ loadDotEnv(path.join(ROOT_DIR, ".env"));
 const {
   buildAttendanceData: buildSerializedAttendanceData,
   buildAttendanceIntervalDataList: buildSerializedAttendanceIntervalDataList,
+  ensureAttendanceRewardPosts,
 } = require("../modules/attendance");
 const {
   loadShopCatalog,
@@ -130,6 +131,7 @@ const simulation = require("../modules/simulation");
 const stamina = require("../modules/stamina");
 const collection = require("../modules/collection");
 const worldMap = require("../modules/world-map");
+const { ensureLoginRewardPosts } = require("../modules/admin");
 const {
   ensureStageFavorites,
   buildFavoritesStageAckPayload: buildStageFavoritesAckPayload,
@@ -248,6 +250,7 @@ const RECONNECT_REQ = 213;
 const RECONNECT_ACK = 214;
 const CONTENTS_VERSION_REQ = 216;
 const CONTENTS_VERSION_ACK = 217;
+const GAMEBASE_LOGIN_ACK = 230;
 const STEAM_LOGIN_REQ = 231;
 const HEART_BIT_REQ = 600;
 const HEART_BIT_ACK = 601;
@@ -346,7 +349,7 @@ const CSHARP_COMBAT_HOST_PROJECT = process.env.CS_CSHARP_COMBAT_HOST_PROJECT || 
 const CSHARP_COMBAT_HOST_DLL =
   process.env.CS_CSHARP_COMBAT_HOST_DLL || process.env.CS_COMBAT_HOST_PATH || findDefaultCombatHostExecutable(CSHARP_COMBAT_HOST_PROJECT);
 const CSHARP_COMBAT_HOST_TIMEOUT_MS = Number(process.env.CS_CSHARP_COMBAT_HOST_TIMEOUT_MS || 20000);
-const CSHARP_COMBAT_HOST_DOTNET = process.env.CS_DOTNET_PATH || findDefaultDotnetRuntime();
+const CSHARP_COMBAT_HOST_DOTNET = process.env.CS_CSHARP_COMBAT_HOST_DOTNET || process.env.CS_DOTNET_PATH || findDefaultDotnetRuntime();
 const COUNTERSIDE_MANAGED_DIR = process.env.CS_COUNTERSIDE_MANAGED_DIR || findCounterSideManagedDir({ env: process.env });
 const GAMEPLAY_TABLES_DIR = getDefaultGameplayTablesDir({ rootDir: ROOT_DIR, env: process.env, managedDir: COUNTERSIDE_MANAGED_DIR });
 const OFFICIAL_COMBAT_REPLAY = process.env.CS_OFFICIAL_COMBAT_REPLAY === "1";
@@ -428,7 +431,11 @@ const POST_TUTORIAL_GUIDE_REQUIREMENT_STAGE_IDS = Object.freeze({
 const GAME_SERVER_IP = process.env.CS_GAME_SERVER_IP || "127.0.0.1";
 const GAME_SERVER_PORT = Number(process.env.CS_GAME_SERVER_PORT || PORT);
 const CONTENTS_VERSION = process.env.CS_CONTENTS_VERSION || "9.2.c";
-const REQUIRED_CONTENTS_TAGS = Object.freeze(["TAG_COMMON_SHOP_TAB_SUPPLY", "SYSTEM_TRANSCENDENCE_LV120"]);
+const REQUIRED_CONTENTS_TAGS = Object.freeze([
+  "TAG_COMMON_SHOP_TAB_SUPPLY",
+  "TAG_COMMON_SHOP_TAB_PACKAGE_SUPER_PACK",
+  "SYSTEM_TRANSCENDENCE_LV120",
+]);
 const REQUIRED_STORY_OPEN_TAGS = Object.freeze(getStoryOpenTags());
 const SUPPRESSED_STORY_OPEN_TAGS = Object.freeze(getSuppressedStoryOpenTags());
 const SUPPRESSED_STORY_OPEN_TAG_SET = new Set(SUPPRESSED_STORY_OPEN_TAGS.map((tag) => String(tag || "").toUpperCase()));
@@ -504,6 +511,8 @@ if (repairedDeckReferenceProfiles > 0 && USE_LOCAL_USER_DB) {
 }
 const packetHandlers = loadPacketHandlers([PACKET_HANDLER_DIR, MODULE_HANDLER_ROOT], { rootDir: ROOT_DIR });
 const joinLobbyAckPayloadCache = new Map();
+const lobbySessionPreparationCache = new Map();
+const prewarmedJoinLobbyAckPayloads = new Map();
 const localProgressResetUsers = new Set();
 let cachedDungeonCatalog = null;
 let cachedStageCatalog = null;
@@ -707,6 +716,11 @@ function logRuntimeConfig() {
       `[cfg] officialLoginAck=on version=${capturedTcpProfiles.loginAck.contentsVersion} tags=${capturedTcpProfiles.loginAck.contentsTag.length} openTags=${capturedTcpProfiles.loginAck.openTag.length}`
     );
   }
+  if (capturedTcpProfiles.gamebaseLoginAck) {
+    console.log(
+      `[cfg] officialGamebaseLoginAck=on version=${capturedTcpProfiles.gamebaseLoginAck.contentsVersion} tags=${capturedTcpProfiles.gamebaseLoginAck.contentsTag.length} openTags=${capturedTcpProfiles.gamebaseLoginAck.openTag.length}`
+    );
+  }
   console.log(`[cfg] gameServer=${GAME_SERVER_IP}:${GAME_SERVER_PORT}`);
   console.log(`[cfg] accessTokenSource=${USE_STEAM_TOKEN_AS_ACCESS_TOKEN ? "steam" : "server-issued"}`);
   console.log(
@@ -802,6 +816,11 @@ async function serveLauncherApi(req, res) {
     return true;
   }
 
+  if ((req.method === "POST" || req.method === "GET") && url.pathname === "/launcher/api/warmup") {
+    sendJsonResponse(res, 200, warmLauncherRuntime());
+    return true;
+  }
+
   if (req.method === "GET" && url.pathname === "/launcher/api/server-time") {
     sendJsonResponse(res, 200, serverTime.getSummary());
     return true;
@@ -828,6 +847,228 @@ async function serveLauncherApi(req, res) {
 function sendJsonResponse(res, statusCode, body) {
   res.writeHead(statusCode, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
   res.end(`${JSON.stringify(body || {})}\n`);
+}
+
+function warmLauncherRuntime() {
+  const startedAt = Date.now();
+  const users = getJoinLobbyWarmupUsers();
+  const warmed = [];
+  const failed = [];
+
+  for (const user of users) {
+    const userUid = String((user && user.userUid) || "(ephemeral)");
+    try {
+      const preparedUser = ensureUserDefaults(user);
+      prepareTutorialLogin(preparedUser);
+      prepareUserLobbySession(preparedUser, { source: "launcher-warmup", force: true });
+      const payload = prewarmJoinLobbyAckPayload(preparedUser, { source: "launcher-warmup" });
+      warmed.push({
+        userUid,
+        bytes: Buffer.isBuffer(payload) ? payload.length : 0,
+      });
+    } catch (error) {
+      failed.push({
+        userUid,
+        error: summarizeErrorLine(error && error.stack ? error.stack : error),
+      });
+    }
+  }
+
+  if (USE_LOCAL_USER_DB && warmed.length > 0) {
+    try {
+      saveUserDb();
+    } catch (error) {
+      failed.push({
+        userUid: "(save)",
+        error: summarizeErrorLine(error && error.stack ? error.stack : error),
+      });
+    }
+  }
+
+  const durationMs = Date.now() - startedAt;
+  console.log(
+    `[launcher-warmup] joinLobby warmed=${warmed.length} failed=${failed.length} cache=${joinLobbyAckPayloadCache.size} durationMs=${durationMs}`
+  );
+
+  return {
+    ok: failed.length === 0,
+    joinLobbyAck: {
+      warmed: warmed.length,
+      failed: failed.length,
+      cacheEntries: joinLobbyAckPayloadCache.size,
+      durationMs,
+      users: warmed,
+      errors: failed,
+    },
+  };
+}
+
+function getJoinLobbyWarmupUsers() {
+  const maxUsers = clampInt(process.env.CS_LAUNCHER_WARMUP_JOIN_LOBBY_USERS, 1, 16, 4);
+  const selected = [];
+  const seen = new Set();
+  const addUser = (user) => {
+    if (!user || typeof user !== "object") return;
+    const key = String(user.userUid || user.accessToken || selected.length);
+    if (seen.has(key)) return;
+    seen.add(key);
+    selected.push(user);
+  };
+
+  if (userDb.activeUserUid && userDb.users[userDb.activeUserUid]) addUser(userDb.users[userDb.activeUserUid]);
+
+  Object.values(userDb.users || {})
+    .filter((user) => user && typeof user === "object")
+    .sort(compareWarmupUsers)
+    .forEach(addUser);
+
+  if (selected.length === 0) addUser(createEphemeralUser());
+  return selected.slice(0, maxUsers);
+}
+
+function compareWarmupUsers(left, right) {
+  const leftTime = getWarmupUserTime(left);
+  const rightTime = getWarmupUserTime(right);
+  if (leftTime !== rightTime) return rightTime - leftTime;
+  return String(left && left.userUid ? left.userUid : "").localeCompare(String(right && right.userUid ? right.userUid : ""));
+}
+
+function getWarmupUserTime(user) {
+  for (const field of ["lastJoinAt", "lastLoginAt", "lastTokenIssuedAt", "createdAt"]) {
+    const value = user && user[field] ? Date.parse(user[field]) : 0;
+    if (Number.isFinite(value) && value > 0) return value;
+  }
+  return 0;
+}
+
+function prepareUserLobbySession(user, options = {}) {
+  const result = {
+    skipped: false,
+    changed: false,
+    rewardPosts: 0,
+    attendancePosts: 0,
+    loginMissionChanged: false,
+  };
+  if (!USE_LOCAL_USER_DB || !user || typeof user !== "object") return result;
+
+  const source = String(options.source || "join-lobby");
+  const nowDate = options.now instanceof Date ? options.now : getServerNowDate();
+  const missionClock =
+    options.missionClock && typeof options.missionClock === "object" ? options.missionClock : getMissionClockOptions();
+  const cacheKey = getLobbyPreparationCacheKey(user);
+  const stateKey = getLobbyPreparationStateKey(nowDate, missionClock);
+  const previous = cacheKey ? lobbySessionPreparationCache.get(cacheKey) : null;
+  const ttlMs = clampInt(process.env.CS_LOBBY_SESSION_PREP_TTL_MS, 1000, 600000, 300000);
+
+  if (
+    options.force !== true &&
+    previous &&
+    previous.stateKey === stateKey &&
+    Date.now() - Number(previous.preparedAtMs || 0) <= ttlMs
+  ) {
+    result.skipped = true;
+    return result;
+  }
+
+  try {
+    result.loginMissionChanged = recordMissionLogin ? recordMissionLogin(user, missionClock) : false;
+  } catch (error) {
+    console.log(`[mission-login] skipped ${source} update: ${error && error.message ? error.message : error}`);
+  }
+
+  const previousLastJoinAt = String(user.lastJoinAt || "");
+  user.lastJoinAt = nowDate.toISOString();
+  result.changed = result.changed || previousLastJoinAt !== user.lastJoinAt || result.loginMissionChanged;
+  result.rewardPosts = ensureLoginRewardPosts(user, { now: nowDate });
+  result.attendancePosts = ensureAttendanceRewardPosts(user, { now: nowDate, clockNow: nowDate });
+
+  if (result.rewardPosts > 0 || result.attendancePosts > 0) {
+    console.log(
+      `[user-db] queued inbox rewards uid=${user.userUid || "(ephemeral)"} loginPosts=${result.rewardPosts} attendancePosts=${result.attendancePosts}`
+    );
+  }
+  if (result.loginMissionChanged) {
+    console.log(`[user-db] login missions updated uid=${user.userUid || "(ephemeral)"} day=${String(missionClock.eventDateKey || "")}`);
+  }
+
+  if (cacheKey) {
+    lobbySessionPreparationCache.set(cacheKey, {
+      stateKey,
+      preparedAtMs: Date.now(),
+      source,
+    });
+  }
+
+  if (options.save !== false) saveUserDb();
+  return result;
+}
+
+function getLobbyPreparationCacheKey(user) {
+  if (!user || typeof user !== "object") return "";
+  return String(user.userUid || user.accessToken || user.reconnectKey || "ephemeral");
+}
+
+function getLobbyPreparationStateKey(nowDate, missionClock) {
+  const serverDate = nowDate instanceof Date && !Number.isNaN(nowDate.getTime()) ? nowDate.toISOString().slice(0, 10) : "";
+  const eventDate = missionClock && missionClock.eventDateKey ? String(missionClock.eventDateKey) : "";
+  return `${serverDate}:${eventDate}`;
+}
+
+function prewarmJoinLobbyAckPayload(user, options = {}) {
+  const startedAt = Date.now();
+  const payload = buildJoinLobbyAckPayload(ensureUserDefaults(user));
+  rememberPrewarmedJoinLobbyAckPayload(user, payload, options.source || "login");
+  const durationMs = Date.now() - startedAt;
+  if (durationMs >= Number(options.logThresholdMs || 250)) {
+    console.log(
+      `[JOIN_LOBBY_ACK warm-cache] source=${options.source || "login"} uid=${
+        user && user.userUid ? user.userUid : "(ephemeral)"
+      } bytes=${Buffer.isBuffer(payload) ? payload.length : 0} durationMs=${durationMs}`
+    );
+  }
+  return payload;
+}
+
+function rememberPrewarmedJoinLobbyAckPayload(user, payload, source = "warmup") {
+  if (!user || typeof user !== "object" || !Buffer.isBuffer(payload)) return false;
+  const cacheKey = getLobbyPreparationCacheKey(user);
+  if (!cacheKey) return false;
+  if (prewarmedJoinLobbyAckPayloads.size >= 16) {
+    const oldestKey = prewarmedJoinLobbyAckPayloads.keys().next().value;
+    if (oldestKey) prewarmedJoinLobbyAckPayloads.delete(oldestKey);
+  }
+  prewarmedJoinLobbyAckPayloads.set(cacheKey, {
+    payload,
+    source,
+    preparedAtMs: Date.now(),
+    stateKey: getLobbyPreparationStateKey(getServerNowDate(), getMissionClockOptions()),
+  });
+  return true;
+}
+
+function takePrewarmedJoinLobbyAckPayload(user, options = {}) {
+  const cacheKey = getLobbyPreparationCacheKey(user);
+  if (!cacheKey) return null;
+  const entry = prewarmedJoinLobbyAckPayloads.get(cacheKey);
+  if (!entry || !Buffer.isBuffer(entry.payload)) return null;
+  const ttlMs = clampInt(process.env.CS_PREWARMED_JOIN_LOBBY_ACK_TTL_MS, 1000, 600000, 300000);
+  if (Date.now() - Number(entry.preparedAtMs || 0) > ttlMs) {
+    prewarmedJoinLobbyAckPayloads.delete(cacheKey);
+    return null;
+  }
+  if (options.consume !== false) prewarmedJoinLobbyAckPayloads.delete(cacheKey);
+  console.log(
+    `[JOIN_LOBBY_ACK prewarm] hit source=${entry.source || "warmup"} uid=${
+      user && user.userUid ? user.userUid : "(ephemeral)"
+    } bytes=${entry.payload.length}`
+  );
+  return entry.payload;
+}
+
+function clampInt(value, min, max, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, Math.trunc(parsed)));
 }
 
 function readJsonRequestBody(req) {
@@ -1014,6 +1255,7 @@ function createPacketContext() {
       JOIN_LOBBY_ACK,
       RECONNECT_ACK,
       CONTENTS_VERSION_ACK,
+      GAMEBASE_LOGIN_ACK,
       HEART_BIT_ACK,
       CONNECT_CHECK_ACK,
       SERVER_TIME_ACK,
@@ -1154,12 +1396,16 @@ function createPacketContext() {
     buildEncryptedPacket,
     buildContentsVersionAck,
     buildCapturedLoginAck,
+    buildCapturedGamebaseLoginAck,
     buildCapturedReconnectAck,
     buildLoginAck,
     buildLoginLikePayload,
     buildJoinLobbyAckPayload,
     buildMinimalJoinLobbyPayload,
     invalidateJoinLobbyAckPayloadCache,
+    prepareUserLobbySession,
+    prewarmJoinLobbyAckPayload,
+    takePrewarmedJoinLobbyAckPayload,
     hasTutorialProgress,
     shouldUseLocalJoinLobbyAck,
     ensureTutorialCompletionProgress,
@@ -1231,6 +1477,7 @@ function createPacketContext() {
     getEffectiveContentsTags,
     getRequiredContentsTags,
     getOrCreateUserForSteam,
+    getOrCreateUserForGuest,
     issueUserTokens,
     saveUserDb,
     findUserByAccessToken,
@@ -2400,10 +2647,14 @@ function normalizeManagedCombatPayload(socket, packetId, payload, label, meta = 
   const managedBattleRecords = extractManagedBattleRecords(meta);
   const managedBattleWin = extractManagedBattleWin(meta);
   const managedBattlePlayTime = extractManagedBattlePlayTime(meta);
+  const managedFiercePoint = extractManagedFiercePoint(meta, "point");
+  const managedFiercePenaltyPoint = extractManagedFiercePoint(meta, "penalty");
   const gameRecordOverride = {
     ...(managedBattleRecords.length > 0 ? { managedBattleRecords } : {}),
     ...(typeof managedBattleWin === "boolean" ? { managedBattleWin, win: managedBattleWin } : {}),
     ...(managedBattlePlayTime > 0 ? { managedBattlePlayTime } : {}),
+    ...(managedFiercePoint >= 0 ? { managedFiercePoint, fiercePoint: managedFiercePoint } : {}),
+    ...(managedFiercePenaltyPoint >= 0 ? { managedFiercePenaltyPoint, fiercePenaltyPoint: managedFiercePenaltyPoint } : {}),
   };
   if (managedBattleRecords.length > 0) {
     console.log(
@@ -2459,6 +2710,15 @@ function extractManagedBattlePlayTime(meta = {}) {
   return getBattleRecordMaxPlayTime(extractManagedBattleRecords(meta));
 }
 
+function extractManagedFiercePoint(meta = {}, kind = "point") {
+  const explicit =
+    kind === "penalty"
+      ? meta && (meta.fiercePenaltyPoint ?? meta.FiercePenaltyPoint ?? meta.managedFiercePenaltyPoint ?? meta.ManagedFiercePenaltyPoint)
+      : meta && (meta.fiercePoint ?? meta.FiercePoint ?? meta.managedFiercePoint ?? meta.ManagedFiercePoint);
+  const numeric = finiteNumber(explicit, -1);
+  return numeric >= 0 ? Math.round(numeric) : -1;
+}
+
 function startSyntheticGameSync(socket, label) {
   const replay = socket.session && socket.session.gameReplay;
   if (!replay || replay.syntheticSyncTimer) return;
@@ -2499,7 +2759,7 @@ function stopGameSyncTimers(socket) {
   const replay = socket.session && socket.session.gameReplay;
   if (!replay) return;
   if (replay.dynamicBattleTimer) {
-    clearInterval(replay.dynamicBattleTimer);
+    clearTimeout(replay.dynamicBattleTimer);
     replay.dynamicBattleTimer = null;
   }
   if (replay.syntheticSyncTimer) {
@@ -2751,6 +3011,13 @@ function buildDynamicGameLoadPayload(socket, req, stage) {
     Number(activeStage.gameType || 0) === NGT_FIERCE ||
     positiveInt(req.fierceBossId || req.fierceBossID || req.bossId) > 0;
   const seedGameLoadTemplate = !nativeTutorialLoad && (!usesEventDeck || fierceLoad);
+  const battleConditionIds = resolveGameLoadBattleConditionIds(activeStage, req, user);
+  const fierceScorePlan = buildFierceScorePlanForStage(activeStage, req, user);
+  const stageForBattle = {
+    ...activeStage,
+    ...(Array.isArray(battleConditionIds) ? { battleConditionIds } : {}),
+    ...fierceScorePlan,
+  };
   // Stage data enters combat-handler here, then the listener wraps the resulting
   // state in a managed GAME_LOAD_ACK when possible. Tutorial battles no longer
   // seed the managed bridge from captured 804; the bridge builds NKMGameData
@@ -2758,8 +3025,8 @@ function buildDynamicGameLoadPayload(socket, req, stage) {
   const dynamicGame = combatHandler.startBattle({
     replay,
     req,
-    stage: activeStage,
-    gameUID: activeStage.gameUID || activeStage.gameUid || req.gameUID || req.gameUid,
+    stage: stageForBattle,
+    gameUID: stageForBattle.gameUID || stageForBattle.gameUid || req.gameUID || req.gameUid,
     gameLoadAckPayloadBase64: seedGameLoadTemplate && gameLoadAckTemplate ? gameLoadAckTemplate.toString("base64") : "",
   });
   if (!dynamicGame || !replay.dynamicGame) {
@@ -2777,8 +3044,8 @@ function buildDynamicGameLoadPayload(socket, req, stage) {
     if (activeStage.worldmapEventID) replay.dynamicGame.worldmapEventID = Number(activeStage.worldmapEventID || 0);
     if (activeStage.diveStageID || (req && req.diveStageID)) replay.dynamicGame.diveStageID = Number(activeStage.diveStageID || req.diveStageID || 0);
     if (activeStage.miscMode) replay.dynamicGame.miscMode = String(activeStage.miscMode || "");
-    const battleConditionIds = resolveGameLoadBattleConditionIds(activeStage, req, user);
     if (Array.isArray(battleConditionIds)) replay.dynamicGame.battleConditionIds = battleConditionIds;
+    Object.assign(replay.dynamicGame, fierceScorePlan);
     replay.dynamicGame.isTryAssist = Boolean(req && req.isTryAssist);
   }
   applySavedCombatControls(socket);
@@ -2802,7 +3069,7 @@ function buildDynamicGameLoadPayload(socket, req, stage) {
     payload = patchGameLoadAckBattleConditionIds(payload, replay.dynamicGame.battleConditionIds);
     if (replay.managedGameLoadAckPayload) replay.managedGameLoadAckPayload = payload;
   }
-  combatHandler.attachGameLoadUnitPools(replay, activeStage, payload);
+  combatHandler.attachGameLoadUnitPools(replay, stageForBattle, payload);
   return {
     replay,
     payload,
@@ -3666,7 +3933,7 @@ function buildDynamicGameEndNotPayload(replay, override = {}) {
   const isRaidGame = isRaidDynamicGame(dynamicGame);
   const gameRecordState = buildBattleGameRecordState(battleState, override);
   const playTime = getBattleEndPlayTime(battleState, override);
-  const missionBattleState = buildBattleMissionState(battleState, { playTime });
+  const missionBattleState = buildBattleMissionState(gameRecordState, { playTime });
   const win = resolveBattleWin(
     missionBattleState,
     isRaidGame && override.giveup !== true
@@ -3727,6 +3994,8 @@ function buildDynamicGameEndNotPayload(replay, override = {}) {
     battleState: missionBattleState,
     user: override.user,
     win,
+    fiercePoint: override.fiercePoint ?? override.managedFiercePoint,
+    fiercePenaltyPoint: override.fiercePenaltyPoint ?? override.managedFiercePenaltyPoint,
   });
   return Buffer.concat([
     writeBool(win), // win
@@ -4053,8 +4322,12 @@ function buildFierceResultState(options = {}) {
     };
   }
   const saved = getFierceSavedBossState(options.user, bossId);
-  const penaltyIds = normalizeFiercePenaltyIdsForBoss(bossId, options.penaltyIds || saved.penaltyIds || []);
-  const win = options.win === true || resolveBattleWin(battleState, { fallbackWin: true, preferFallbackWin: false });
+  const plannedPenaltyIds = uniquePositiveIntList(dynamicGame.fiercePenaltyIds || dynamicGame.FiercePenaltyIds);
+  const penaltyIds = normalizeFiercePenaltyIdsForBoss(bossId, options.penaltyIds || plannedPenaltyIds || saved.penaltyIds || []);
+  const win =
+    typeof options.win === "boolean"
+      ? options.win
+      : resolveBattleWin(battleState, { fallbackWin: true, preferFallbackWin: false });
   const playTime = getBattlePlayTime(battleState);
   const maxTime = Math.max(
     1,
@@ -4070,17 +4343,44 @@ function buildFierceResultState(options = {}) {
     ) || 180
   );
   const restTime = win ? Math.max(0, Number(battleState.restTime ?? battleState.RestTime ?? maxTime - playTime) || 0) : 0;
-  const hpPercent = win ? 0 : Math.max(0, Math.min(100, Math.round(Number(battleState.bossHpPercent ?? battleState.BossHpPercent ?? 100) || 100)));
-  const basePoint = Math.max(0, Math.trunc(Number(boss.BasePoint || 0) || 0));
+  const explicitHpPercent = finiteNumber(battleState.bossHpPercent ?? battleState.BossHpPercent, NaN);
+  const hpPercent = win
+    ? 0
+    : Number.isFinite(explicitHpPercent)
+      ? Math.max(0, Math.min(100, Math.round(explicitHpPercent)))
+      : 100;
+  const explicitDamageRatio = finiteNumber(
+    battleState.bossDamageRatio ??
+      battleState.BossDamageRatio ??
+      battleState.raidBossDamageRatio ??
+      battleState.RaidBossDamageRatio,
+    NaN
+  );
+  const damageRatio = win
+    ? 1
+    : Number.isFinite(explicitDamageRatio)
+      ? Math.max(0, Math.min(1, explicitDamageRatio))
+      : Math.max(0, Math.min(1, (100 - hpPercent) / 100));
+  const basePoint = Math.max(0, Math.trunc(Number((dynamicGame.fierceBasePoint ?? dynamicGame.FierceBasePoint ?? boss.BasePoint) || 0) || 0));
+  const maxDamagePoint = Math.max(
+    0,
+    Math.trunc(Number((dynamicGame.fierceMaxDamagePoint ?? dynamicGame.FierceMaxDamagePoint ?? boss.MaxDamagePoint) || 0) || 0)
+  );
   const damagePoint = win
-    ? Math.max(0, Math.trunc(Number(boss.MaxDamagePoint || 0) || 0))
-    : Math.round(Math.max(0, Math.trunc(Number(boss.MaxDamagePoint || 0) || 0)) * (100 - hpPercent) / 100);
-  const maxTimePoint = Math.max(0, Math.trunc(Number(boss.MaxTimePoint || 0) || 0));
+    ? maxDamagePoint
+    : Math.round(maxDamagePoint * damageRatio);
+  const maxTimePoint = Math.max(0, Math.trunc(Number((dynamicGame.fierceMaxTimePoint ?? dynamicGame.FierceMaxTimePoint ?? boss.MaxTimePoint) || 0) || 0));
   const timePoint = win ? Math.round(maxTimePoint * Math.min(1, restTime / maxTime)) : 0;
   const rawPoint = basePoint + damagePoint + timePoint;
-  const penaltyRate = getFiercePenaltyRate(penaltyIds);
-  const penaltyPoint = Math.round(rawPoint * penaltyRate / 10000);
-  const accquirePoint = Math.max(0, rawPoint + penaltyPoint);
+  const penaltyRate = Math.max(
+    0,
+    Math.trunc(Number(dynamicGame.fiercePenaltyRate ?? dynamicGame.FiercePenaltyRate ?? getFiercePenaltyRate(penaltyIds)) || 0)
+  );
+  const calculatedPenaltyPoint = Math.round(rawPoint * penaltyRate / 10000);
+  const managedPoint = Math.round(finiteNumber(options.fiercePoint ?? options.managedFiercePoint, -1));
+  const managedPenaltyPoint = Math.round(finiteNumber(options.fiercePenaltyPoint ?? options.managedFiercePenaltyPoint, -1));
+  const accquirePoint = managedPoint >= 0 ? managedPoint : Math.max(0, rawPoint + calculatedPenaltyPoint);
+  const penaltyPoint = managedPoint >= 0 && managedPenaltyPoint >= 0 ? managedPenaltyPoint : calculatedPenaltyPoint;
   const previousBest = Math.max(0, Number(saved.point || 0) || 0);
   return {
     hpPercent,
@@ -4192,6 +4492,11 @@ function resolveGameLoadBattleConditionIds(stage = {}, req = {}, user = null) {
   if (String(stage.miscMode || "") !== "fierce" && gameType !== NGT_FIERCE && !bossId) return null;
   let resolvedBossId = bossId;
   if (!resolvedBossId) {
+    const dungeonId = positiveInt(stage.dungeonID || stage.dungeonId || req.dungeonID || req.dungeonId);
+    const bossByDungeon = dungeonId ? loadMiscStageCatalog().fierceBossByDungeonId.get(dungeonId) : null;
+    resolvedBossId = positiveInt(bossByDungeon && bossByDungeon.FierceBossID);
+  }
+  if (!resolvedBossId) {
     const miscStage = resolveMiscStageRequest(req);
     resolvedBossId = positiveInt(miscStage && miscStage.fierceBossId);
   }
@@ -4200,6 +4505,33 @@ function resolveGameLoadBattleConditionIds(stage = {}, req = {}, user = null) {
   const penaltyIds = Array.isArray(saved.penaltyIds) ? saved.penaltyIds : [];
   const ids = getFierceBattleConditionIdsForBoss(resolvedBossId, penaltyIds);
   return ids.length ? ids : uniquePositiveIntList(stage.battleConditionIds);
+}
+
+function buildFierceScorePlanForStage(stage = {}, req = {}, user = null) {
+  const gameType = Number(stage.gameType || (req && req.gameType) || 0);
+  const catalog = loadMiscStageCatalog();
+  let bossId = positiveInt(stage.fierceBossId || stage.fierceBossID || req.fierceBossId || req.fierceBossID || req.bossId);
+  if (!bossId) {
+    const dungeonId = positiveInt(stage.dungeonID || stage.dungeonId || req.dungeonID || req.dungeonId);
+    const bossByDungeon = dungeonId ? catalog.fierceBossByDungeonId.get(dungeonId) : null;
+    bossId = positiveInt(bossByDungeon && bossByDungeon.FierceBossID);
+  }
+  if (String(stage.miscMode || "").toLowerCase() !== "fierce" && gameType !== NGT_FIERCE && !bossId) return {};
+
+  const boss = bossId ? catalog.fierceBossById.get(bossId) : null;
+  if (!boss) return {};
+
+  const saved = getFierceSavedBossState(user, bossId);
+  const penaltyIds = normalizeFiercePenaltyIdsForBoss(bossId, saved.penaltyIds || []);
+  return {
+    fierceBossId: bossId,
+    fierceBossGroupId: positiveInt(boss.FierceBossGroupID),
+    fierceBasePoint: Math.max(0, Math.trunc(Number(boss.BasePoint || 0) || 0)),
+    fierceMaxDamagePoint: Math.max(0, Math.trunc(Number(boss.MaxDamagePoint || 0) || 0)),
+    fierceMaxTimePoint: Math.max(0, Math.trunc(Number(boss.MaxTimePoint || 0) || 0)),
+    fiercePenaltyIds: penaltyIds,
+    fiercePenaltyRate: getFiercePenaltyRate(penaltyIds),
+  };
 }
 
 function buildRespawnAck(data = {}) {
@@ -8029,6 +8361,13 @@ function buildCapturedLoginAck(sequence, user) {
   return buildCapturedLoginLikeAck(sequence, LOGIN_ACK, user, "LOGIN_ACK", () => buildLoginAck(sequence, user));
 }
 
+function buildCapturedGamebaseLoginAck(sequence, user) {
+  return buildCapturedLoginLikeAck(sequence, GAMEBASE_LOGIN_ACK, user, "GAMEBASE_LOGIN_ACK", () => {
+    const payload = Buffer.concat([buildLoginLikePayload(user), writeSignedVarInt(0)]);
+    return buildEncryptedPacket(sequence, GAMEBASE_LOGIN_ACK, payload);
+  });
+}
+
 function buildCapturedReconnectAck(sequence, user) {
   return buildCapturedLoginLikeAck(sequence, RECONNECT_ACK, user, "RECONNECT_ACK", () =>
     buildEncryptedPacket(sequence, RECONNECT_ACK, buildLoginLikePayload(user))
@@ -8036,7 +8375,10 @@ function buildCapturedReconnectAck(sequence, user) {
 }
 
 function buildCapturedLoginLikeAck(sequence, packetId, user, label, fallbackBuilder) {
-  const template = capturedTcpProfiles.loginAck;
+  const template =
+    packetId === GAMEBASE_LOGIN_ACK && capturedTcpProfiles.gamebaseLoginAck
+      ? capturedTcpProfiles.gamebaseLoginAck
+      : capturedTcpProfiles.loginAck;
   if (!template) {
     console.log(`[${label} official-template] unavailable; using local fallback`);
     return fallbackBuilder();
@@ -8051,7 +8393,7 @@ function buildCapturedLoginLikeAck(sequence, packetId, user, label, fallbackBuil
     "local-access-token";
   lastEffectiveAccessToken = token;
   if (user && token) user.accessToken = token;
-  const contentsTag = getEffectiveContentsTags(template.contentsTag);
+  const contentsTag = getEffectiveContentsTags(lastAckContentsTags.length ? lastAckContentsTags : template.contentsTag);
   const openTag = getEffectiveOpenTags(template.openTag);
 
   const rawPayload = buildLoginAckRaw({
@@ -8062,6 +8404,7 @@ function buildCapturedLoginLikeAck(sequence, packetId, user, label, fallbackBuil
     contentsVersion: template.contentsVersion,
     contentsTag,
     openTag,
+    resultCode: packetId === GAMEBASE_LOGIN_ACK ? template.resultCode || 0 : template.resultCode,
   });
 
   const compressedPayload = lz4StreamWrapUncompressed(rawPayload);
@@ -8072,7 +8415,7 @@ function buildCapturedLoginLikeAck(sequence, packetId, user, label, fallbackBuil
 }
 
 function buildLoginAckRaw(fields) {
-  return Buffer.concat([
+  const parts = [
     writeSignedVarInt(fields.errorCode || 0),
     writeString(fields.accessToken || ""),
     writeString(fields.gameServerIP || ""),
@@ -8080,7 +8423,9 @@ function buildLoginAckRaw(fields) {
     writeString(fields.contentsVersion || ""),
     writeStringList(fields.contentsTag || []),
     writeStringList(fields.openTag || []),
-  ]);
+  ];
+  if (fields.resultCode != null) parts.push(writeSignedVarInt(fields.resultCode || 0));
+  return Buffer.concat(parts);
 }
 
 function buildLoginLikePayload(user) {
@@ -8094,10 +8439,10 @@ function buildLoginLikePayload(user) {
   if (user && token) user.accessToken = token;
 
   const version = (user && user.contentsVersion) || lastAckContentsVersion || CONTENTS_VERSION;
-  const baseTags = user && user.contentsTags && user.contentsTags.length
-    ? user.contentsTags
-    : lastAckContentsTags.length
-      ? lastAckContentsTags
+  const baseTags = lastAckContentsTags.length
+    ? lastAckContentsTags
+    : user && user.contentsTags && user.contentsTags.length
+      ? user.contentsTags
       : CONTENTS_TAGS;
   const tags = getEffectiveContentsTags(baseTags);
   const openTags = getEffectiveOpenTags(user && user.openTags ? user.openTags : OPEN_TAGS);
@@ -8155,7 +8500,13 @@ function getEventContentsTagsForContentsVersion() {
 
 function getEffectiveContentsTags(baseTags) {
   const eventTags = getEventContentsTagsForContentsVersion();
-  return mergeTags(baseTags, REQUIRED_CONTENTS_TAGS, eventTags);
+  return mergeTags(getCapturedContentsVersionTags(), baseTags, REQUIRED_CONTENTS_TAGS, eventTags);
+}
+
+function getCapturedContentsVersionTags() {
+  return capturedTcpProfiles && capturedTcpProfiles.contentsVersionAck
+    ? capturedTcpProfiles.contentsVersionAck.contentsTag
+    : [];
 }
 
 function stripInactiveEventContentsTags(baseTags, activeEventTags) {
@@ -8205,7 +8556,7 @@ function filterInactiveCustomOperatorOpenTags(tags, activeOpenTags) {
 }
 
 function getRequiredContentsTags() {
-  return mergeTags(REQUIRED_CONTENTS_TAGS, getEventContentsTagsForContentsVersion());
+  return mergeTags(getCapturedContentsVersionTags(), REQUIRED_CONTENTS_TAGS, getEventContentsTagsForContentsVersion());
 }
 
 function getActiveEventShopTags() {
@@ -8505,7 +8856,12 @@ function buildJoinLobbyAckPayload(user) {
       sha1Buffer(localPayload),
     ].join(":");
     const cached = joinLobbyAckPayloadCache.get(cacheKey);
-    if (cached) return cached;
+    if (cached) {
+      console.log(
+        `[JOIN_LOBBY_ACK cache] hit mode=merge uid=${user && user.userUid ? user.userUid : "(ephemeral)"} bytes=${cached.length}`
+      );
+      return cached;
+    }
 
     const merged = combatHandler.mergeJoinLobbyAck
       ? combatHandler.mergeJoinLobbyAck(officialPayload, localPayload, {
@@ -8564,7 +8920,12 @@ function buildJoinLobbyAckPayload(user) {
       sha1Buffer(localPayload),
     ].join(":");
     const cached = joinLobbyAckPayloadCache.get(cacheKey);
-    if (cached) return cached;
+    if (cached) {
+      console.log(
+        `[JOIN_LOBBY_ACK cache] hit mode=normalize uid=${user && user.userUid ? user.userUid : "(ephemeral)"} bytes=${cached.length}`
+      );
+      return cached;
+    }
     const normalized = combatHandler.normalizeJoinLobbyAck
       ? combatHandler.normalizeJoinLobbyAck(localPayload)
       : { ok: false, error: "combat handler normalize unavailable" };
@@ -9706,6 +10067,55 @@ function getOrCreateUserForSteam(loginReq) {
   return user;
 }
 
+function getOrCreateUserForGuest(loginReq) {
+  const guestLoginKey = resolveGuestLoginKey(loginReq);
+  const activeUser = getActiveUserForLogin();
+  if (activeUser) {
+    attachGuestLoginIdentity(activeUser, loginReq, guestLoginKey);
+    activeUser.lastLoginAt = new Date().toISOString();
+    return ensureUserDefaults(activeUser);
+  }
+
+  const existingUid = findExistingUserUidForGuestLogin(loginReq, guestLoginKey);
+  if (existingUid && userDb.users[existingUid]) {
+    const user = userDb.users[existingUid];
+    attachGuestLoginIdentity(user, loginReq, guestLoginKey);
+    user.lastLoginAt = new Date().toISOString();
+    return ensureUserDefaults(user);
+  }
+
+  const userUid = userDb.nextUserUid;
+  const friendCode = userDb.nextFriendCode;
+  userDb.nextUserUid = String(BigInt(userDb.nextUserUid) + 1n);
+  userDb.nextFriendCode = String(BigInt(userDb.nextFriendCode) + 1n);
+
+  const user = ensureUserDefaults({
+    userUid,
+    friendCode,
+    guestLoginKey,
+    loginProvider: "gamebase_guest",
+    deviceUid: loginReq && loginReq.deviceUid ? loginReq.deviceUid : "",
+    mobileUserId: loginReq && loginReq.userId ? loginReq.userId : "",
+    mobileIdpCode: loginReq && loginReq.idpCode ? loginReq.idpCode : "guest",
+    nickname: process.env.CS_DEFAULT_NICKNAME || "LocalAdmin",
+    createdAt: new Date().toISOString(),
+    lastLoginAt: new Date().toISOString(),
+  });
+  const bootstrap = ensureOfficialNewAccountDefaults(user, {
+    rosterMode: NEW_ACCOUNT_ROSTER_MODE,
+    includeTrophies: SEED_NEW_ACCOUNT_TROPHIES,
+  });
+  ensureUserDefaults(user);
+  if (bootstrap.changed) {
+    console.log(
+      `[user-db] new-account-defaults uid=${userUid} units=${bootstrap.units} ships=${bootstrap.ships} operators=${bootstrap.operators} trophies=${bootstrap.trophies}`
+    );
+  }
+
+  userDb.users[userUid] = user;
+  return user;
+}
+
 function getActiveUserForLogin() {
   const activeUid = nonEmpty(userDb.activeUserUid);
   return activeUid && userDb.users[activeUid] ? userDb.users[activeUid] : null;
@@ -9752,6 +10162,42 @@ function attachSteamLoginIdentity(user, loginReq, steamAccountId) {
   indexSteamLoginUser(userDb, user);
 }
 
+function findExistingUserUidForGuestLogin(loginReq, guestLoginKey) {
+  const key = nonEmpty(guestLoginKey);
+  if (key) {
+    const user = chooseNewestUser(
+      Object.values(userDb.users).filter((entry) => entry && entry.guestLoginKey === key)
+    );
+    if (user) return user.userUid;
+  }
+
+  const userId = nonEmpty(loginReq && loginReq.userId);
+  if (userId) {
+    const user = chooseNewestUser(
+      Object.values(userDb.users).filter((entry) => entry && entry.mobileUserId === userId)
+    );
+    if (user) return user.userUid;
+  }
+
+  const deviceUid = nonEmpty(loginReq && loginReq.deviceUid);
+  if (deviceUid) {
+    const user = chooseNewestUser(
+      Object.values(userDb.users).filter((entry) => entry && entry.deviceUid === deviceUid)
+    );
+    if (user) return user.userUid;
+  }
+
+  return "";
+}
+
+function attachGuestLoginIdentity(user, loginReq, guestLoginKey) {
+  user.guestLoginKey = guestLoginKey;
+  user.loginProvider = "gamebase_guest";
+  user.deviceUid = loginReq && loginReq.deviceUid ? loginReq.deviceUid : user.deviceUid || "";
+  user.mobileUserId = loginReq && loginReq.userId ? loginReq.userId : user.mobileUserId || "";
+  user.mobileIdpCode = loginReq && loginReq.idpCode ? loginReq.idpCode : user.mobileIdpCode || "guest";
+}
+
 function indexSteamLoginUser(db, user) {
   if (!db || !user || !user.userUid) return;
   for (const key of [user.steamAccountId, user.steamLoginKey]) {
@@ -9772,6 +10218,20 @@ function resolveSteamLoginKey(loginReq) {
   const accountId = nonEmpty(loginReq && loginReq.accountId);
   if (accountId && accountId.length <= 96) return `account:${accountId}`;
   return accountId ? `ticket:${hashLoginTicket(accountId)}` : "local:default";
+}
+
+function resolveGuestLoginKey(loginReq) {
+  const forcedIdentity = nonEmpty(process.env.CS_LOCAL_USER_IDENTITY_KEY || process.env.CS_LOCAL_USER_IDENTITY);
+  if (forcedIdentity) return `local:${forcedIdentity}`;
+
+  const idpCode = nonEmpty(loginReq && loginReq.idpCode).toLowerCase() || "guest";
+  const userId = nonEmpty(loginReq && loginReq.userId);
+  if (userId && userId.length <= 128) return `gamebase:${idpCode}:${userId}`;
+
+  const deviceUid = nonEmpty(loginReq && loginReq.deviceUid);
+  if (deviceUid) return `gamebase:${idpCode}:device:${deviceUid}`;
+
+  return "gamebase:guest:default";
 }
 
 function extractStableSteamId(loginReq) {
@@ -9896,13 +10356,19 @@ function ensureLocalShopInventory(user) {
 }
 
 function issueUserTokens(user, preferredAccessToken) {
+  const previousAccessToken = nonEmpty(user.accessToken);
+  const previousReconnectKey = nonEmpty(user.reconnectKey);
   removeUserTokenIndexes(user);
   const envToken = nonEmpty(process.env.CS_LOGIN_ACCESS_TOKEN);
   const preferredToken = USE_STEAM_TOKEN_AS_ACCESS_TOKEN ? nonEmpty(preferredAccessToken) : "";
   const existingToken = nonEmpty(user.accessToken && user.accessToken.length >= 32 ? user.accessToken : "");
-  user.accessToken = envToken || existingToken || preferredToken || makeAccessToken();
-  user.reconnectKey = nonEmpty(user.reconnectKey) || makeToken("rck");
-  user.lastTokenIssuedAt = new Date().toISOString();
+  const nextAccessToken = envToken || existingToken || preferredToken || makeAccessToken();
+  const nextReconnectKey = nonEmpty(user.reconnectKey) || makeToken("rck");
+  user.accessToken = nextAccessToken;
+  user.reconnectKey = nextReconnectKey;
+  if (nextAccessToken !== previousAccessToken || nextReconnectKey !== previousReconnectKey || !user.lastTokenIssuedAt) {
+    user.lastTokenIssuedAt = new Date().toISOString();
+  }
   userDb.accessTokens[user.accessToken] = user.userUid;
   userDb.reconnectKeys[user.reconnectKey] = user.userUid;
 }
@@ -10101,6 +10567,7 @@ function buildCapturedTcpProfiles(responses, captureDir) {
   return {
     contentsVersionAck: parseCapturedContentsVersionAck(responses.get(CONTENTS_VERSION_ACK)),
     loginAck: parseCapturedLoginAck(responses.get(LOGIN_ACK)) || loadCapturedLoginTemplate(captureDir),
+    gamebaseLoginAck: parseCapturedLoginAck(responses.get(GAMEBASE_LOGIN_ACK), "GAMEBASE_LOGIN_ACK", true),
   };
 }
 
@@ -10127,7 +10594,7 @@ function parseCapturedContentsVersionAck(entry) {
   }
 }
 
-function parseCapturedLoginAck(entry) {
+function parseCapturedLoginAck(entry, label = "LOGIN_ACK", hasResultCode = false) {
   if (!entry) return null;
   try {
     const raw = decodeCapturedPayload(entry);
@@ -10146,6 +10613,8 @@ function parseCapturedLoginAck(entry) {
     offset = contentsTag.offset;
     const openTag = readStringList(raw, offset);
     offset = openTag.offset;
+    const resultCode = hasResultCode && offset < raw.length ? readSignedVarInt(raw, offset) : { value: undefined, offset };
+    offset = resultCode.offset;
     return {
       errorCode: errorCode.value,
       accessToken: accessToken.value || "",
@@ -10154,10 +10623,11 @@ function parseCapturedLoginAck(entry) {
       contentsVersion: contentsVersion.value || "",
       contentsTag: contentsTag.value,
       openTag: openTag.value,
+      resultCode: resultCode.value,
       rawPayload: raw,
     };
   } catch (err) {
-    console.log(`[capture-replay] failed to parse official ${LOGIN_ACK}: ${err.message}`);
+    console.log(`[capture-replay] failed to parse official ${label}: ${err.message}`);
     return null;
   }
 }

@@ -85,10 +85,12 @@ public static class ManagedLuaFileLoader
         if (IsLuaBytecode(bytes))
         {
             luaDoByteString?.Invoke(luaServer, new object?[] { bytes, chunkName, "b" });
+            ApplyHostTablePatch(luaServer, fileName, Path.GetFileNameWithoutExtension(fileName));
         }
         else
         {
             luaDoTextString?.Invoke(luaServer, new object?[] { File.ReadAllText(candidate), chunkName });
+            ApplyHostTablePatch(luaServer, fileName, Path.GetFileNameWithoutExtension(fileName));
         }
 
         return true;
@@ -183,6 +185,7 @@ public static class ManagedLuaFileLoader
                 AppendLuaValue(globalsBuilder, property.Value);
                 globalsBuilder.AppendLine();
             }
+            AppendHostTablePatch(globalsBuilder, fileName, rootName);
             return globalsBuilder.ToString();
         }
 
@@ -204,7 +207,71 @@ public static class ManagedLuaFileLoader
         AppendLuaGlobal(builder, rootName);
         builder.Append(" = ");
         AppendLuaValue(builder, tableElement);
+        AppendHostTablePatch(builder, fileName, rootName);
         return builder.ToString();
+    }
+
+    private static void ApplyHostTablePatch(object luaServer, string fileName, string rootName)
+    {
+        if (!IsThagirionDollUnitTemplet(fileName))
+        {
+            return;
+        }
+
+        var builder = new StringBuilder(1024);
+        AppendHostTablePatch(builder, fileName, rootName);
+        if (!string.Equals(rootName, "NKMUnitTemplet", StringComparison.Ordinal))
+        {
+            AppendThagirionDollAttackPatch(builder, "NKMUnitTemplet");
+        }
+        luaDoTextString?.Invoke(luaServer, new object?[] { builder.ToString(), $"{rootName}_HostPatch" });
+    }
+
+    private static void AppendHostTablePatch(StringBuilder builder, string fileName, string rootName)
+    {
+        if (!IsThagirionDollUnitTemplet(fileName))
+        {
+            return;
+        }
+
+        AppendThagirionDollAttackPatch(builder, rootName);
+    }
+
+    private static void AppendThagirionDollAttackPatch(StringBuilder builder, string rootName)
+    {
+        builder.AppendLine();
+        builder.AppendLine("do");
+        builder.Append("  local templet = ");
+        AppendLuaGlobal(builder, rootName);
+        builder.AppendLine();
+        builder.AppendLine("  if templet and templet.m_dicNKMUnitState then");
+        builder.AppendLine("    for _, state in pairs(templet.m_dicNKMUnitState) do");
+        builder.AppendLine("      if state and state.m_StateName == \"USN_ATTACK1\" then");
+        builder.AppendLine("        state.m_listNKMEventAttack = state.m_listNKMEventAttack or {}");
+        builder.AppendLine("        if #state.m_listNKMEventAttack == 0 then");
+        builder.AppendLine("          state.m_listNKMEventAttack[1] = {");
+        builder.AppendLine("            m_bAnimTime = true,");
+        builder.AppendLine("            m_fEventTimeMin = 0.7333333333333333,");
+        builder.AppendLine("            m_fEventTimeMax = 0.7333333333333333,");
+        builder.AppendLine("            m_fRangeMin = -50.0,");
+        builder.AppendLine("            m_fRangeMax = 320.0,");
+        builder.AppendLine("            m_NKM_DAMAGE_TARGET_TYPE = \"NDTT_ENEMY\",");
+        builder.AppendLine("            m_AttackUnitCount = 1,");
+        builder.AppendLine("            m_DamageTempletName = \"DT_MOB_NORMAL_COMMON_UNION_GUARDIAN_ATTACK1_END\"");
+        builder.AppendLine("          }");
+        builder.AppendLine("        end");
+        builder.AppendLine("      end");
+        builder.AppendLine("    end");
+        builder.AppendLine("  end");
+        builder.AppendLine("end");
+    }
+
+    private static bool IsThagirionDollUnitTemplet(string fileName)
+    {
+        return string.Equals(
+            Path.GetFileNameWithoutExtension(fileName),
+            "NKM_MOB_NORMAL_EP15_THAGIRION_DOLLS",
+            StringComparison.OrdinalIgnoreCase);
     }
 
     private static void AppendLuaGlobal(StringBuilder builder, string name)

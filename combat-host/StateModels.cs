@@ -39,6 +39,11 @@ public sealed class StageData
     public bool UsesHybridEventDeck { get; set; }
     public bool EventDeckFreeShipSlot { get; set; }
     public List<int> BattleConditionIds { get; set; } = [];
+    public int FierceBasePoint { get; set; }
+    public int FierceMaxDamagePoint { get; set; }
+    public int FierceMaxTimePoint { get; set; }
+    public int FiercePenaltyRate { get; set; }
+    public List<int> FiercePenaltyIds { get; set; } = [];
     public int GameUnitUIDIndex { get; set; } = 18;
     public double InitialGameTime { get; set; } = 4;
     public double InitialRemainGameTime { get; set; } = 180;
@@ -142,6 +147,11 @@ public sealed class DynamicGameState
     public int PhaseId { get; set; }
     public int PhaseIndex { get; set; }
     public List<int> BattleConditionIds { get; set; } = [];
+    public int FierceBasePoint { get; set; }
+    public int FierceMaxDamagePoint { get; set; }
+    public int FierceMaxTimePoint { get; set; }
+    public int FiercePenaltyRate { get; set; }
+    public List<int> FiercePenaltyIds { get; set; } = [];
     public long GameUID { get; set; }
     public int GameUnitUIDIndex { get; set; } = 18;
     public List<List<int>> DeployableGameUnitUIDGroups { get; set; } = [];
@@ -202,6 +212,9 @@ public sealed class BattleState
     public double RaidBossDamage { get; set; }
     public double RaidBossDamageRatio { get; set; }
     public bool RaidBossKilled { get; set; }
+    public double BossHpPercent { get; set; } = 100;
+    public double BossDamageRatio { get; set; }
+    public bool BossKilled { get; set; }
     public int? GameSpeedType { get; set; }
     public int? AutoSkillType { get; set; }
     public bool? AutoRespawnEnabled { get; set; }
