@@ -643,13 +643,16 @@ function extractMissionSnapshots(source) {
       const groupId =
         firstPositiveInt(readAny(value, ["groupId", "group_id", "missionGroupId", "MissionGroupID", "m_GroupID", "m_MissionGroupID"])) ||
         missionID;
-      const times = Math.max(0, Number(firstPresent(readAny(value, ["times", "targetTimes", "target_times", "count", "m_Times"]), 1)) || 1);
       const complete = Boolean(
         firstPresent(
           readAny(value, ["rewardClaimed", "isComplete", "is_complete", "complete", "completed", "m_bComplete", "m_bRewardComplete"]),
           false
         )
       );
+      // Preserve explicit 0 progress so unfinished missions are not treated as claimable.
+      const rawTimes = firstPresent(readAny(value, ["times", "targetTimes", "target_times", "count", "m_Times"]), complete ? 1 : 0);
+      const parsedTimes = Number(rawTimes);
+      const times = Math.max(0, Number.isFinite(parsedTimes) ? parsedTimes : complete ? 1 : 0);
       output.set(String(missionID), {
         missionID,
         groupId,

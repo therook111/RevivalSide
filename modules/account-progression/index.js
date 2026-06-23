@@ -358,7 +358,7 @@ function buildMissionRowsByGroupForTab(tabId, user = null) {
 
 function findClaimableMissionInGroup(user, group, options = {}) {
   const rows = Array.isArray(group) ? group : Array.isArray(group && group.rows) ? group.rows : [];
-  const startIndex = Array.isArray(group) ? 0 : Math.max(0, Number(group.cursor || 0) || 0);
+  const startIndex = Array.isArray(group) ? 0 : Math.max(0, Number(group.cursor || 0) || 0, officialMissionRowIndexForGroup(user, group, rows));
   for (let index = startIndex; index < rows.length; index += 1) {
     const row = rows[index];
     const state = buildEvaluatedMissionState(user, row, { now: options.now, eventDateKey: options.eventDateKey });
@@ -372,6 +372,16 @@ function findClaimableMissionInGroup(user, group, options = {}) {
     return { row, mission: state, index };
   }
   return null;
+}
+
+function officialMissionRowIndexForGroup(user, group, rows) {
+  const groupId = Number(group && group.groupId || 0);
+  if (!groupId || !Array.isArray(rows) || rows.length <= 0) return 0;
+  const officialProgressStatus = user.officialProgress?.missionData?.dicMissions?.[groupId] ?? null;
+  const missionID = Number(officialProgressStatus?.mission_id ?? 0);
+  if (!Number.isInteger(missionID) || missionID <= 0) return 0;
+  const index = rows.findIndex((row) => Number(row && row.m_MissionID) === missionID);
+  return index >= 0 ? index : 0;
 }
 
 function updateMissionProgress(user, request = {}, options = {}) {
@@ -472,6 +482,7 @@ function refreshMissionProgress(user, options = {}) {
   for (const [missionID, state] of Object.entries(user.completedMissions)) {
     if (seen.has(String(missionID))) continue;
     if (!fullScan && Number(state && state.tabId || 0) !== filterTabId) continue;
+    if (state && state.source === "official-join-lobby") continue;
     if (!state || !(state.rewardClaimed === true || state.isComplete === true || state.claimedAt)) {
       delete user.completedMissions[String(missionID)];
     }
@@ -501,6 +512,7 @@ function shouldPersistMissionState(state, existing = {}, row = null) {
   if (!state) return false;
   if (state.rewardClaimed === true || (state.isComplete === true && state.claimedAt)) return true;
   if (existing.rewardClaimed === true || (existing.isComplete === true && existing.claimedAt)) return true;
+  if (existing.source === "official-join-lobby") return true;
   if (existing.isComplete === true && !isPeriodicMission(row)) return true;
   return false;
 }
@@ -961,9 +973,73 @@ function buildMissionDataEntries(user, options = {}) {
   return Array.from(result.values()).sort((a, b) => Number(a[0]) - Number(b[0]));
 }
 
+// Separate from buildMissionDataEntries to avoid changing other callers.
+// The only selection difference is selectOfficialProgressSerializableMissionRow using
+// officialProgress as the lower bound for imported mission groups.
+function buildOfficialProgressMissionDataEntries(user, options = {}) {
+  ensureAccountProgress(user);
+  const result = new Map();
+  const rowsByGroup = new Map();
+  const filterTabId = Number(options.tabId || 0);
+  const conditionFilter = normalizeMissionConditionFilter(options.conditions || options.condition);
+  if (options.skipRefresh !== true) {
+    refreshMissionProgress(user, {
+      now: options.now,
+      tabId: filterTabId,
+      conditions: options.conditions || options.condition,
+      eventDateKey: options.eventDateKey,
+    });
+  }
+  const sourceRows = filterTabId > 0 ? getMissionTempletsByTabId(filterTabId) : getMissionTemplets();
+  for (const row of sourceRows) {
+    if (!missionRowEnabledForUser(user, row)) continue;
+    if (filterTabId > 0 && Number(row.m_MissionTabId || 0) !== filterTabId) continue;
+    if (filterTabId <= 0 && !shouldSerializeMissionTab(row)) continue;
+    if (conditionFilter.size && !conditionFilter.has(normalizeMissionCondition(row.m_MissionCond))) continue;
+    const groupId = Number(row.m_MissionCounterGroupID || row.m_MissionID || 0);
+    if (!Number.isInteger(groupId) || groupId <= 0) continue;
+    if (!rowsByGroup.has(groupId)) rowsByGroup.set(groupId, []);
+    rowsByGroup.get(groupId).push(row);
+  }
+
+  for (const [groupId, rows] of rowsByGroup.entries()) {
+    rows.sort(compareMissionRows);
+    const row = selectOfficialProgressSerializableMissionRow(user, rows, groupId, { now: options.now, eventDateKey: options.eventDateKey });
+    if (!row) continue;
+    const state = buildEvaluatedMissionState(user, row, { now: options.now, eventDateKey: options.eventDateKey });
+    if (!shouldSerializeMissionState(state, row)) continue;
+    result.set(groupId, [groupId, state]);
+  }
+
+  return Array.from(result.values()).sort((a, b) => Number(a[0]) - Number(b[0]));
+}
+
 function selectSerializableMissionRow(user, rows, options = {}) {
   const candidates = Array.isArray(rows) ? rows : [];
   const active = candidates.find((row) => {
+    if (!missionRequirementSatisfied(user, row)) return false;
+    const state = buildEvaluatedMissionState(user, row, { now: options.now, eventDateKey: options.eventDateKey });
+    return state.rewardClaimed !== true;
+  });
+  if (active) return active;
+
+  for (let index = candidates.length - 1; index >= 0; index -= 1) {
+    const row = candidates[index];
+    const state = buildEvaluatedMissionState(user, row, { now: options.now, eventDateKey: options.eventDateKey });
+    if (state.rewardClaimed === true || (state.isComplete === true && state.claimedAt)) return row;
+  }
+  return null;
+}
+
+// Starts from the imported official mission when selecting within a group.
+function selectOfficialProgressSerializableMissionRow(user, rows, groupId, options = {}) {
+  const candidates = Array.isArray(rows) ? rows : [];
+  const officialStoredMissionID = user.officialProgress?.missionData?.dicMissions?.[groupId]?.mission_id ?? null;
+  const officialProgressIndex = officialStoredMissionID
+    ? candidates.findIndex((row) => Number(officialStoredMissionID) === Number(row && row.m_MissionID))
+    : 0;
+  const filteredCandidates = candidates.slice(officialProgressIndex >= 0 ? officialProgressIndex : 0);
+  const active = filteredCandidates.find((row) => {
     if (!missionRequirementSatisfied(user, row)) return false;
     const state = buildEvaluatedMissionState(user, row, { now: options.now, eventDateKey: options.eventDateKey });
     return state.rewardClaimed !== true;
@@ -1623,6 +1699,7 @@ module.exports = {
   recordMissionLogin,
   trackMissionEvent,
   buildMissionDataEntries,
+  buildOfficialProgressMissionDataEntries,
   getAchievePoint,
   setProfileMainUnit,
   setProfileIntro,

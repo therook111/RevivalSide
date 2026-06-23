@@ -13,6 +13,7 @@ const {
 } = require("../packet-codec");
 const {
   buildMissionDataEntries,
+  buildOfficialProgressMissionDataEntries,
   completeAllMissionsForTab,
   completeMission,
   donateMissionItem,
@@ -308,7 +309,7 @@ function buildPostClaimMissionUpdates(user, result = {}, options = {}) {
   const seen = new Set();
   const missions = [];
   for (const tabId of tabIds) {
-    for (const [, mission] of buildMissionDataEntries(user, {
+    for (const [, mission] of buildOfficialProgressMissionDataEntries(user, {
       tabId,
       now: options.now,
       eventDateKey: options.eventDateKey,
