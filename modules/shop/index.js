@@ -39,7 +39,6 @@ const RANDOM_SHOP_REFRESH_MAX_COUNT = readNonNegativeIntEnv("CS_RANDOM_SHOP_REFR
 const RANDOM_SHOP_STATE_VERSION = 1;
 const EVENT_SHOP_SEED_CURRENCIES = process.env.CS_EVENT_SHOP_SEED_CURRENCIES !== "0";
 const EVENT_SHOP_INCLUDE_ALL = process.env.CS_EVENT_SHOP_INCLUDE_ALL === "1";
-const ITEM_ID_ADMIN_COIN = 102;
 const EVENT_SHOP_CURRENCY_BALANCE = toBigInt(
   process.env.CS_EVENT_SHOP_CURRENCY_BALANCE || process.env.CS_LOCAL_SHOP_BALANCE || process.env.CS_LOCAL_SHOP_CURRENCY_BALANCE,
   DEFAULT_LOCAL_SHOP_BALANCE
@@ -120,26 +119,6 @@ const SHOP_TAB_TEMPLET_FILES = ["LUA_SHOP_TAB_TEMPLET_01.json", "LUA_SHOP_TAB_TE
 
 let cachedCatalog = null;
 const INCLUDE_BEGINNER_PACKS = process.env.CS_SHOP_INCLUDE_BEGINNER_PACKS === "1";
-const RESTORED_ADMIN_COIN_CASH_PRODUCTS = Object.freeze([
-  [2351, 70, 100, 0, 100, 1500, "TAG_COMMON_SHOP_TAB_CASH_6_0A_GLOBAL", "SI_SHOP_CASH_ITEM_NAME_TAB_MEDAL_2301"],
-  [2363, 71, 530, 96, 434, 6500, "TAG_COMMON_SHOP_TAB_CASH_7_9A_GLOBAL", "SI_SHOP_CASH_ITEM_NAME_TAB_MEDAL_2313"],
-  [2352, 80, 872, 212, 660, 9900, "TAG_COMMON_SHOP_TAB_CASH_6_0A_GLOBAL", "SI_SHOP_CASH_ITEM_NAME_TAB_MEDAL_2302"],
-  [2364, 81, 1431, 371, 1060, 15900, "TAG_COMMON_SHOP_TAB_CASH_7_9A_GLOBAL", "SI_SHOP_CASH_ITEM_NAME_TAB_MEDAL_2314"],
-  [2353, 90, 2760, 760, 2000, 30000, "TAG_COMMON_SHOP_TAB_CASH_6_0A_GLOBAL", "SI_SHOP_CASH_ITEM_NAME_TAB_MEDAL_2303"],
-  [2354, 100, 5040, 1440, 3600, 54000, "TAG_COMMON_SHOP_TAB_CASH_6_0A_GLOBAL", "SI_SHOP_CASH_ITEM_NAME_TAB_MEDAL_2304"],
-  [2355, 110, 7110, 1843, 5267, 79000, "TAG_COMMON_SHOP_TAB_CASH_6_0A_GLOBAL", "SI_SHOP_CASH_ITEM_NAME_TAB_MEDAL_2305"],
-  [2356, 120, 11900, 3966, 7934, 119000, "TAG_COMMON_SHOP_TAB_CASH_6_0A_GLOBAL", "SI_SHOP_CASH_ITEM_NAME_TAB_MEDAL_2306"],
-  [2357, 10, 200, 100, 100, 1500, "TAG_COMMON_SHOP_TAB_CASH_6_0A_GLOBAL", "SI_SHOP_CASH_ITEM_NAME_TAB_MEDAL_2307", 1, "FIXED"],
-  [2365, 11, 868, 434, 434, 6500, "TAG_COMMON_SHOP_TAB_CASH_7_9A_GLOBAL", "SI_SHOP_CASH_ITEM_NAME_TAB_MEDAL_2315", 1, "FIXED"],
-  [2358, 20, 1320, 660, 660, 9900, "TAG_COMMON_SHOP_TAB_CASH_6_0A_GLOBAL", "SI_SHOP_CASH_ITEM_NAME_TAB_MEDAL_2308", 1, "FIXED"],
-  [2366, 21, 2120, 1060, 1060, 15900, "TAG_COMMON_SHOP_TAB_CASH_7_9A_GLOBAL", "SI_SHOP_CASH_ITEM_NAME_TAB_MEDAL_2316", 1, "FIXED"],
-  [2359, 30, 4000, 2000, 2000, 30000, "TAG_COMMON_SHOP_TAB_CASH_6_0A_GLOBAL", "SI_SHOP_CASH_ITEM_NAME_TAB_MEDAL_2309", 1, "FIXED"],
-  [2360, 40, 7200, 3600, 3600, 54000, "TAG_COMMON_SHOP_TAB_CASH_6_0A_GLOBAL", "SI_SHOP_CASH_ITEM_NAME_TAB_MEDAL_2310", 1, "FIXED"],
-  [2361, 50, 10534, 5267, 5267, 79000, "TAG_COMMON_SHOP_TAB_CASH_6_0A_GLOBAL", "SI_SHOP_CASH_ITEM_NAME_TAB_MEDAL_2311", 1, "FIXED"],
-  [2362, 60, 15868, 7934, 7934, 119000, "TAG_COMMON_SHOP_TAB_CASH_6_0A_GLOBAL", "SI_SHOP_CASH_ITEM_NAME_TAB_MEDAL_2312", 1, "FIXED"],
-  [2367, 1, 787, 393, 394, 5900, "TAG_COMMON_SHOP_TAB_CASH_7_9A_GLOBAL", "SI_SHOP_CASH_ITEM_NAME_TAB_MEDAL_2317", 1, "WEEK"],
-  [2368, 2, 8667, 4333, 4334, 65000, "TAG_COMMON_SHOP_TAB_CASH_7_9A_GLOBAL", "SI_SHOP_CASH_ITEM_NAME_TAB_MEDAL_2318", 1, "MONTH"],
-]);
 function createShopHandler(packetId, name) {
   return {
     packetId,
@@ -870,6 +849,7 @@ function loadShopCatalog() {
         const productId = Number(record && record.m_ProductID);
         if (!Number.isInteger(productId) || productId <= 0) continue;
         const priceItemId = Number(record && record.m_PriceItemID);
+        if (Number.isInteger(priceItemId) && priceItemId > 0) priceItemIds.add(priceItemId);
         addProductRecord(recordsByProductIdAll, productId, record);
         if (record.m_MarketID != null && String(record.m_MarketID).length > 0) {
           marketToProductId.set(String(record.m_MarketID), productId);
@@ -878,7 +858,6 @@ function loadShopCatalog() {
           suppressedProducts += 1;
           continue;
         }
-        if (Number.isInteger(priceItemId) && priceItemId > 0) priceItemIds.add(priceItemId);
         records.push(record);
         recordsByProductId.set(productId, pickPreferredProductRecord(recordsByProductId.get(productId), record));
         if (shouldAdvertiseFixedShopProduct(record)) productIds.add(productId);
@@ -888,28 +867,10 @@ function loadShopCatalog() {
     }
   }
 
-  if (!records.some(isAdminCoinCashProduct)) {
-    for (const record of buildRestoredAdminCoinCashRecords()) {
-      const productId = Number(record.m_ProductID);
-      const priceItemId = Number(record.m_PriceItemID);
-      addProductRecord(recordsByProductIdAll, productId, record);
-      marketToProductId.set(String(record.m_MarketID), productId);
-      if (shouldSuppressShopProduct(record)) {
-        suppressedProducts += 1;
-        continue;
-      }
-      if (Number.isInteger(priceItemId) && priceItemId > 0) priceItemIds.add(priceItemId);
-      records.push(record);
-      recordsByProductId.set(productId, pickPreferredProductRecord(recordsByProductId.get(productId), record));
-      if (shouldAdvertiseFixedShopProduct(record)) productIds.add(productId);
-    }
-  }
-
   for (const fileName of SHOP_TAB_TEMPLET_FILES) {
     try {
       for (const record of readGameplayTableRecords("ab_script", fileName, { rootDir: ROOT_DIR, logLabel: "shop" })) {
         if (!record || typeof record !== "object") continue;
-        if (shouldSuppressShopTab(record)) continue;
         tabRecords.push(record);
       }
     } catch (err) {
@@ -956,9 +917,6 @@ function productRecordScore(record) {
 }
 
 function shouldSuppressShopProduct(record) {
-  if (!record) return true;
-  if (record.m_bEnabled === false || record.m_bVisible === false) return true;
-  if (isNoUseShopProduct(record)) return true;
   if (INCLUDE_BEGINNER_PACKS) return false;
   if (record && record.m_bUnlockBanner === true) return true;
 
@@ -980,52 +938,6 @@ function shouldSuppressShopProduct(record) {
 
 function shouldAdvertiseFixedShopProduct(record) {
   return Boolean(record) && !isEventLimitedShopRecord(record);
-}
-
-function shouldSuppressShopTab(record) {
-  if (!record) return true;
-  if (record.m_bEnabled === false || record.m_bVisible === false || record.m_Visible === false) return true;
-  if (isNoUseShopProduct(record)) return true;
-  return false;
-}
-
-function isNoUseShopProduct(record) {
-  const tabId = String(record && (record.m_TabID || record.ShopTabID) || "").trim().toUpperCase();
-  return !tabId || tabId === "TAB_NO_USE" || tabId.includes("NO_USE");
-}
-
-function isAdminCoinCashProduct(record) {
-  const tabId = String(record && (record.m_TabID || record.ShopTabID) || "").trim().toUpperCase();
-  return (
-    tabId.startsWith("TAB_CASH") &&
-    Number(record && record.m_PriceItemID) === 0 &&
-    Number(record && record.m_ItemID) === ITEM_ID_ADMIN_COIN
-  );
-}
-
-function buildRestoredAdminCoinCashRecords() {
-  return RESTORED_ADMIN_COIN_CASH_PRODUCTS.map(([productId, order, value, freeValue, paidValue, price, tag, name, quantityLimit, resetType]) => ({
-    IDX: 900000 + Number(productId),
-    listContentsTagAllow: [tag],
-    listContentsTagIgnore: ["TWN", "SEA", "CHN", "KOR"],
-    m_ProductID: Number(productId),
-    m_MarketID: String(productId),
-    m_TabID: "TAB_CASH_6_0A",
-    m_TabSubIndex: 0,
-    m_OrderList: Number(order),
-    m_bEnabled: true,
-    m_bVisible: true,
-    m_ItemType: "RT_MISC",
-    m_ItemID: ITEM_ID_ADMIN_COIN,
-    m_ItemName: name,
-    m_Value: Number(value),
-    m_FreeValue: Number(freeValue),
-    m_PaidValue: Number(paidValue),
-    m_PriceItemID: 0,
-    m_Price: Number(price),
-    m_PriceSteamKRW: Number(price) * 100,
-    ...(quantityLimit ? { m_QuantityLimit: Number(quantityLimit), m_QuantityLimitCond: resetType } : {}),
-  }));
 }
 
 function findProductIdByMarketId(marketId) {
@@ -1264,8 +1176,6 @@ function getShopRecordAvailabilityIntervalTags(record) {
     record && record.m_DateStrID,
     record && record.m_DateStrId,
     record && record.m_EventDateStrID,
-    record && record.m_IntervalStrID,
-    record && record.m_DiscountDateStrID,
   ]);
 }
 

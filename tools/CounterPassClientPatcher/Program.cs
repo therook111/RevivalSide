@@ -1,6 +1,5 @@
 using Mono.Cecil;
 using Mono.Cecil.Cil;
-using System.Text;
 
 LoadDotEnv(ResolveEnvFile(args));
 
@@ -55,7 +54,6 @@ var reader = new ReaderParameters
 
 using var module = ModuleDefinition.ReadModule(assemblyPath, reader);
 var patches = new List<string>();
-if (options.ApplyShopTempletSupplement) InstallShopTempletSupplement(managedDir);
 if (options.ApplyContentUnlock && PatchCounterPassUnlock(module)) patches.Add("content-unlock");
 if (options.ApplyEventPassTimeGate && PatchEventPassTimeGate(module)) patches.Add("event-pass-time-gate");
 if (options.ApplyEventPassTempletFallback && PatchEventPassTempletFallback(module)) patches.Add("event-pass-templet-fallback");
@@ -70,8 +68,6 @@ if (options.ApplyGearInventoryStateRepair && PatchGearInventoryStateRepair(modul
 if (options.ApplyEpisodeProgressDifficultyFix && PatchEpisodeProgressDifficultyFix(module)) patches.Add("episode-progress-difficulty-fix");
 if (options.ApplyOperatorContractCategoryFix && PatchOperatorContractCategoryFix(module)) patches.Add("operator-contract-category-fix");
 if (options.ApplySteamLocalLogin && PatchSteamLocalLogin(module)) patches.Add("steam-local-login");
-if (options.ApplyShopTempletSupplement && PatchShopTempletSupplement(module)) patches.Add("shop-templet-supplement");
-if (options.ApplyShopTempletSupplement && PatchShopTempletSupplementFileAppend(module)) patches.Add("shop-templet-supplement-file");
 var changed = patches.Count > 0;
 if (!changed)
 {
@@ -146,81 +142,7 @@ static int PrintStatus(string assemblyPath, string backupPath)
     Console.WriteLine($"[counter-pass-patch] episode-progress-difficulty-fix={HasEpisodeProgressDifficultyFix(module)}");
     Console.WriteLine($"[counter-pass-patch] operator-contract-category-fix={HasOperatorContractCategoryFix(module)}");
     Console.WriteLine($"[counter-pass-patch] steam-local-login={HasSteamLocalLoginPatch(module)}");
-    Console.WriteLine($"[counter-pass-patch] shop-templet-supplement={HasShopTempletSupplementPatch(module)}");
-    Console.WriteLine($"[counter-pass-patch] shop-templet-supplement-file={HasShopTempletSupplementFileAppendPatch(module)}");
     return 0;
-}
-
-static void InstallShopTempletSupplement(string managedDir)
-{
-    const string relativePath = @"ExtraAsset\AB_SCRIPT\REVIVALSIDE_SHOP_TEMPLET_01_SUPPLEMENT.lua";
-    var sourcePath = FindClientOverrideFile(relativePath);
-    if (sourcePath == null)
-    {
-        Console.WriteLine($"[counter-pass-patch] shop supplement source missing: client-overrides\\{relativePath}");
-        return;
-    }
-
-    var targetPath = Path.Combine(ResolveGameRootFromManagedDir(managedDir), relativePath);
-    Directory.CreateDirectory(Path.GetDirectoryName(targetPath)!);
-    if (File.Exists(targetPath) && File.ReadAllBytes(sourcePath).SequenceEqual(File.ReadAllBytes(targetPath)))
-    {
-        Console.WriteLine($"[counter-pass-patch] shop supplement ready={targetPath}");
-        return;
-    }
-
-    File.Copy(sourcePath, targetPath, overwrite: true);
-    Console.WriteLine($"[counter-pass-patch] shop supplement installed={targetPath}");
-}
-
-static string? FindClientOverrideFile(string relativePath)
-{
-    foreach (var root in EnumerateSearchRoots())
-    {
-        var candidate = Path.Combine(root, "client-overrides", relativePath);
-        if (File.Exists(candidate)) return candidate;
-    }
-    return null;
-}
-
-static IEnumerable<string> EnumerateSearchRoots()
-{
-    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-    foreach (var start in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory })
-    {
-        var directory = new DirectoryInfo(start);
-        while (directory != null)
-        {
-            if (seen.Add(directory.FullName)) yield return directory.FullName;
-            directory = directory.Parent;
-        }
-    }
-}
-
-static string ResolveGameRootFromManagedDir(string managedDir)
-{
-    var full = Path.GetFullPath(managedDir);
-    if (Path.GetFileName(full).Equals("Assembly-CSharp.dll", StringComparison.OrdinalIgnoreCase))
-    {
-        full = Path.GetDirectoryName(full) ?? full;
-    }
-    if (!File.Exists(Path.Combine(full, "Assembly-CSharp.dll")))
-    {
-        var nested = Path.Combine(full, "Data", "Managed");
-        if (File.Exists(Path.Combine(nested, "Assembly-CSharp.dll"))) full = nested;
-    }
-    if (!File.Exists(Path.Combine(full, "Assembly-CSharp.dll")))
-    {
-        throw new DirectoryNotFoundException($"Assembly-CSharp.dll was not found in {full}");
-    }
-
-    var managed = new DirectoryInfo(full);
-    var data = managed.Parent;
-    if (data == null || !data.Name.Equals("Data", StringComparison.OrdinalIgnoreCase) || data.Parent == null)
-    {
-        throw new DirectoryNotFoundException($"CounterSide game root could not be derived from {full}");
-    }
-    return data.Parent.FullName;
 }
 
 static string? ResolveEnvFile(string[] args)
@@ -1025,335 +947,6 @@ static bool HasWorldMapRaidRefreshPatch(ModuleDefinition module)
         && item.Parameters.Count == 1
         && item.Parameters[0].ParameterType.FullName == "ClientPacket.WorldMap.NKMPacket_WORLDMAP_INFO_ACK");
     return sceneHandler != null && ackHandler != null;
-}
-
-static bool PatchShopTempletSupplement(ModuleDefinition module)
-{
-    var luaType = FindTypeDefinition(module, "NKM.NKMLua")
-        ?? throw new InvalidOperationException("NKM.NKMLua was not found.");
-    var loadCommonPath = luaType.Methods.FirstOrDefault(method =>
-        method.Name == "LoadCommonPath"
-        && method.HasBody
-        && method.Parameters.Count == 3)
-        ?? throw new InvalidOperationException("NKMLua.LoadCommonPath was not found.");
-    var helper = EnsureShopTempletSupplementMethod(module, luaType);
-    if (loadCommonPath.Body.Instructions.Any(instruction =>
-            instruction.Operand is MethodReference methodReference
-            && methodReference.Name == helper.Name))
-    {
-        return false;
-    }
-
-    var successReturn = loadCommonPath.Body.Instructions.LastOrDefault(instruction =>
-        IsLoadInt(instruction, 1)
-        && instruction.Next != null
-        && instruction.Next.OpCode.Code == Code.Ret)
-        ?? throw new InvalidOperationException("NKMLua.LoadCommonPath success return was not found.");
-
-    var il = loadCommonPath.Body.GetILProcessor();
-    il.InsertBefore(successReturn, il.Create(OpCodes.Ldarg_0));
-    il.InsertBefore(successReturn, il.Create(OpCodes.Ldarg_1));
-    il.InsertBefore(successReturn, il.Create(OpCodes.Ldarg_2));
-    il.InsertBefore(successReturn, il.Create(OpCodes.Call, module.ImportReference(helper)));
-    if (helper.ReturnType.FullName != module.TypeSystem.Void.FullName)
-    {
-        il.InsertBefore(successReturn, il.Create(OpCodes.Pop));
-    }
-    return true;
-}
-
-static bool HasShopTempletSupplementPatch(ModuleDefinition module)
-{
-    var luaType = FindTypeDefinition(module, "NKM.NKMLua");
-    if (luaType == null) return false;
-    var helper = luaType.Methods.FirstOrDefault(method => method.Name == "RevivalSideApplyShopTempletSupplement");
-    var loadCommonPath = luaType.Methods.FirstOrDefault(method =>
-        method.Name == "LoadCommonPath"
-        && method.HasBody
-        && method.Parameters.Count == 3);
-    return helper != null
-        && loadCommonPath?.Body.Instructions.Any(instruction =>
-            instruction.Operand is MethodReference methodReference
-            && methodReference.Name == helper.Name) == true;
-}
-
-static bool PatchShopTempletSupplementFileAppend(ModuleDefinition module)
-{
-    var changed = false;
-    changed |= PatchShopTempletSupplementFileDirectLoad(module);
-    changed |= AppendShopTempletSupplementFileToStartupLoad(module);
-    return changed;
-}
-
-static bool HasShopTempletSupplementFileAppendPatch(ModuleDefinition module)
-{
-    return HasShopTempletSupplementFileDirectLoadPatch(module)
-        && FindShopTempletLoaderMethod(module)?.Body.Instructions.Any(instruction =>
-            instruction.Operand is string text
-            && text == "REVIVALSIDE_SHOP_TEMPLET_01_SUPPLEMENT") == true;
-}
-
-static bool PatchShopTempletSupplementFileDirectLoad(ModuleDefinition module)
-{
-    var luaType = FindTypeDefinition(module, "NKM.NKMLua")
-        ?? throw new InvalidOperationException("NKM.NKMLua was not found.");
-    var loadCommonPath = luaType.Methods.FirstOrDefault(method =>
-        method.Name == "LoadCommonPath"
-        && method.HasBody
-        && method.Parameters.Count == 3)
-        ?? throw new InvalidOperationException("NKMLua.LoadCommonPath was not found.");
-    var helper = EnsureShopTempletSupplementFileMethod(module, luaType);
-    if (loadCommonPath.Body.Instructions.Any(instruction =>
-            instruction.Operand is MethodReference methodReference
-            && methodReference.Name == helper.Name))
-    {
-        return false;
-    }
-
-    var first = loadCommonPath.Body.Instructions.First();
-    var il = loadCommonPath.Body.GetILProcessor();
-    var continueLoad = il.Create(OpCodes.Nop);
-    il.InsertBefore(first, il.Create(OpCodes.Ldarg_0));
-    il.InsertBefore(first, il.Create(OpCodes.Ldarg_1));
-    il.InsertBefore(first, il.Create(OpCodes.Ldarg_2));
-    il.InsertBefore(first, il.Create(OpCodes.Call, module.ImportReference(helper)));
-    il.InsertBefore(first, il.Create(OpCodes.Brfalse_S, continueLoad));
-    il.InsertBefore(first, il.Create(OpCodes.Ldc_I4_1));
-    il.InsertBefore(first, il.Create(OpCodes.Ret));
-    il.InsertBefore(first, continueLoad);
-    return true;
-}
-
-static bool HasShopTempletSupplementFileDirectLoadPatch(ModuleDefinition module)
-{
-    var luaType = FindTypeDefinition(module, "NKM.NKMLua");
-    if (luaType == null) return false;
-    var helper = luaType.Methods.FirstOrDefault(method => method.Name == "RevivalSideLoadShopTempletSupplementFile");
-    var loadCommonPath = luaType.Methods.FirstOrDefault(method =>
-        method.Name == "LoadCommonPath"
-        && method.HasBody
-        && method.Parameters.Count == 3);
-    return helper != null
-        && loadCommonPath?.Body.Instructions.Any(instruction =>
-            instruction.Operand is MethodReference methodReference
-            && methodReference.Name == helper.Name) == true;
-}
-
-static bool AppendShopTempletSupplementFileToStartupLoad(ModuleDefinition module)
-{
-    var method = FindShopTempletLoaderMethod(module)
-        ?? throw new InvalidOperationException("NKCMain shop templet loader method was not found.");
-    if (method.Body.Instructions.Any(instruction =>
-            instruction.Operand is string text
-            && text == "REVIVALSIDE_SHOP_TEMPLET_01_SUPPLEMENT"))
-    {
-        return false;
-    }
-
-    var instructions = method.Body.Instructions;
-    var firstShopFile = instructions.FirstOrDefault(instruction =>
-        instruction.Operand is string text
-        && text == "LUA_SHOP_TEMPLET_01")
-        ?? throw new InvalidOperationException("LUA_SHOP_TEMPLET_01 load was not found.");
-    var firstShopFileIndex = instructions.IndexOf(firstShopFile);
-    var arrayInstruction = instructions.Take(firstShopFileIndex).LastOrDefault(instruction =>
-        instruction.OpCode.Code == Code.Newarr
-        && instruction.Operand is TypeReference typeReference
-        && typeReference.FullName == module.TypeSystem.String.FullName)
-        ?? throw new InvalidOperationException("Shop templet filename array creation was not found.");
-    var sizeInstruction = arrayInstruction.Previous
-        ?? throw new InvalidOperationException("Shop templet filename array size was not found.");
-    if (!IsLoadInt(sizeInstruction, 2))
-    {
-        throw new InvalidOperationException("Shop templet filename array did not have the expected length of 2.");
-    }
-
-    var secondShopFile = instructions.FirstOrDefault(instruction =>
-        instruction.Operand is string text
-        && text == "LUA_SHOP_TEMPLET_02")
-        ?? throw new InvalidOperationException("LUA_SHOP_TEMPLET_02 load was not found.");
-    var secondStore = secondShopFile;
-    while (secondStore != null && secondStore.OpCode.Code != Code.Stelem_Ref)
-    {
-        secondStore = secondStore.Next;
-    }
-    if (secondStore == null)
-    {
-        throw new InvalidOperationException("LUA_SHOP_TEMPLET_02 array store was not found.");
-    }
-
-    var il = method.Body.GetILProcessor();
-    il.Replace(sizeInstruction, CreateLoadInt(il, 3));
-    var insertionPoint = secondStore.Next
-        ?? throw new InvalidOperationException("Shop templet loader call was not found after the filename array.");
-    il.InsertBefore(insertionPoint, il.Create(OpCodes.Dup));
-    il.InsertBefore(insertionPoint, CreateLoadInt(il, 2));
-    il.InsertBefore(insertionPoint, il.Create(OpCodes.Ldstr, "REVIVALSIDE_SHOP_TEMPLET_01_SUPPLEMENT"));
-    il.InsertBefore(insertionPoint, il.Create(OpCodes.Stelem_Ref));
-    return true;
-}
-
-static MethodDefinition? FindShopTempletLoaderMethod(ModuleDefinition module)
-{
-    var mainType = FindTypeDefinition(module, "NKC.NKCMain");
-    return mainType?.Methods.FirstOrDefault(method =>
-        method.HasBody
-        && method.Body.Instructions.Any(instruction =>
-            instruction.Operand is string text
-            && text == "LUA_SHOP_TEMPLET_01")
-        && method.Body.Instructions.Any(instruction =>
-            instruction.Operand is string text
-            && text == "LUA_SHOP_TEMPLET_02"));
-}
-
-static MethodDefinition EnsureShopTempletSupplementMethod(ModuleDefinition module, TypeDefinition luaType)
-{
-    const string helperName = "RevivalSideApplyShopTempletSupplement";
-    var existing = luaType.Methods.FirstOrDefault(method => method.Name == helperName);
-    if (existing != null) return existing;
-
-    var method = new MethodDefinition(
-        helperName,
-        MethodAttributes.Private | MethodAttributes.HideBySig,
-        module.TypeSystem.Boolean);
-    method.Parameters.Add(new ParameterDefinition("bundleName", ParameterAttributes.None, module.TypeSystem.String));
-    method.Parameters.Add(new ParameterDefinition("fileName", ParameterAttributes.None, module.TypeSystem.String));
-    method.Body.InitLocals = true;
-    method.Body.Variables.Add(new VariableDefinition(module.TypeSystem.String));
-    method.Body.Variables.Add(new VariableDefinition(module.TypeSystem.String));
-
-    var stringEquals = module.ImportReference(typeof(string).GetMethods().First(item =>
-        item.Name == "op_Equality"
-        && item.GetParameters().Length == 2
-        && item.GetParameters()[0].ParameterType == typeof(string)
-        && item.GetParameters()[1].ParameterType == typeof(string)));
-    var pathCombine = module.ImportReference(typeof(Path).GetMethod(nameof(Path.Combine), new[] { typeof(string), typeof(string), typeof(string) })!);
-    var fileExists = module.ImportReference(typeof(File).GetMethod(nameof(File.Exists), new[] { typeof(string) })!);
-    var readAllText = module.ImportReference(typeof(File).GetMethod(nameof(File.ReadAllText), new[] { typeof(string), typeof(Encoding) })!);
-    var getUtf8 = module.ImportReference(typeof(Encoding).GetProperty(nameof(Encoding.UTF8))!.GetMethod!);
-    var getExtraDownloadPath = FindMethodInType(module, "NKC.NKCUtil", "GetExtraDownloadPath", 0)
-        ?? throw new InvalidOperationException("NKCUtil.GetExtraDownloadPath was not found.");
-    var doString = FindMethodReference(module, "NLua.Lua", "DoString", 2)
-        ?? throw new InvalidOperationException("NLua.Lua.DoString(string,string) was not found.");
-    var luaServerField = luaType.Fields.FirstOrDefault(field => field.Name == "m_LuaSvr")
-        ?? throw new InvalidOperationException("NKMLua.m_LuaSvr was not found.");
-
-    var il = method.Body.GetILProcessor();
-    var returnFalse = il.Create(OpCodes.Ldc_I4_0);
-    var returnTrue = il.Create(OpCodes.Ldc_I4_1);
-    var ret = il.Create(OpCodes.Ret);
-
-    il.Append(il.Create(OpCodes.Ldarg_1));
-    il.Append(il.Create(OpCodes.Ldstr, "AB_SCRIPT"));
-    il.Append(il.Create(OpCodes.Call, stringEquals));
-    il.Append(il.Create(OpCodes.Brfalse_S, returnFalse));
-    il.Append(il.Create(OpCodes.Ldarg_2));
-    il.Append(il.Create(OpCodes.Ldstr, "LUA_SHOP_TEMPLET_01"));
-    il.Append(il.Create(OpCodes.Call, stringEquals));
-    il.Append(il.Create(OpCodes.Brfalse_S, returnFalse));
-    il.Append(il.Create(OpCodes.Call, module.ImportReference(getExtraDownloadPath)));
-    il.Append(il.Create(OpCodes.Ldstr, "AB_SCRIPT"));
-    il.Append(il.Create(OpCodes.Ldstr, "REVIVALSIDE_SHOP_TEMPLET_01_SUPPLEMENT.lua"));
-    il.Append(il.Create(OpCodes.Call, pathCombine));
-    il.Append(il.Create(OpCodes.Stloc_0));
-    il.Append(il.Create(OpCodes.Ldloc_0));
-    il.Append(il.Create(OpCodes.Call, fileExists));
-    il.Append(il.Create(OpCodes.Brfalse_S, returnFalse));
-    il.Append(il.Create(OpCodes.Ldloc_0));
-    il.Append(il.Create(OpCodes.Call, getUtf8));
-    il.Append(il.Create(OpCodes.Call, readAllText));
-    il.Append(il.Create(OpCodes.Stloc_1));
-    il.Append(il.Create(OpCodes.Ldarg_0));
-    il.Append(il.Create(OpCodes.Ldfld, module.ImportReference(luaServerField)));
-    il.Append(il.Create(OpCodes.Ldloc_1));
-    il.Append(il.Create(OpCodes.Ldstr, "REVIVALSIDE_SHOP_TEMPLET_01_SUPPLEMENT.lua"));
-    il.Append(il.Create(OpCodes.Callvirt, module.ImportReference(doString)));
-    if (doString.ReturnType.FullName != module.TypeSystem.Void.FullName)
-    {
-        il.Append(il.Create(OpCodes.Pop));
-    }
-    il.Append(returnTrue);
-    il.Append(ret);
-    il.Append(returnFalse);
-    il.Append(il.Create(OpCodes.Ret));
-
-    luaType.Methods.Add(method);
-    return method;
-}
-
-static MethodDefinition EnsureShopTempletSupplementFileMethod(ModuleDefinition module, TypeDefinition luaType)
-{
-    const string helperName = "RevivalSideLoadShopTempletSupplementFile";
-    var existing = luaType.Methods.FirstOrDefault(method => method.Name == helperName);
-    if (existing != null) return existing;
-
-    var method = new MethodDefinition(
-        helperName,
-        MethodAttributes.Private | MethodAttributes.HideBySig,
-        module.TypeSystem.Boolean);
-    method.Parameters.Add(new ParameterDefinition("bundleName", ParameterAttributes.None, module.TypeSystem.String));
-    method.Parameters.Add(new ParameterDefinition("fileName", ParameterAttributes.None, module.TypeSystem.String));
-    method.Body.InitLocals = true;
-    method.Body.Variables.Add(new VariableDefinition(module.TypeSystem.String));
-    method.Body.Variables.Add(new VariableDefinition(module.TypeSystem.String));
-
-    var stringEquals = module.ImportReference(typeof(string).GetMethods().First(item =>
-        item.Name == "op_Equality"
-        && item.GetParameters().Length == 2
-        && item.GetParameters()[0].ParameterType == typeof(string)
-        && item.GetParameters()[1].ParameterType == typeof(string)));
-    var pathCombine = module.ImportReference(typeof(Path).GetMethod(nameof(Path.Combine), new[] { typeof(string), typeof(string), typeof(string) })!);
-    var fileExists = module.ImportReference(typeof(File).GetMethod(nameof(File.Exists), new[] { typeof(string) })!);
-    var readAllText = module.ImportReference(typeof(File).GetMethod(nameof(File.ReadAllText), new[] { typeof(string), typeof(Encoding) })!);
-    var getUtf8 = module.ImportReference(typeof(Encoding).GetProperty(nameof(Encoding.UTF8))!.GetMethod!);
-    var getExtraDownloadPath = FindMethodInType(module, "NKC.NKCUtil", "GetExtraDownloadPath", 0)
-        ?? throw new InvalidOperationException("NKCUtil.GetExtraDownloadPath was not found.");
-    var doString = FindMethodReference(module, "NLua.Lua", "DoString", 2)
-        ?? throw new InvalidOperationException("NLua.Lua.DoString(string,string) was not found.");
-    var luaServerField = luaType.Fields.FirstOrDefault(field => field.Name == "m_LuaSvr")
-        ?? throw new InvalidOperationException("NKMLua.m_LuaSvr was not found.");
-
-    var il = method.Body.GetILProcessor();
-    var returnFalse = il.Create(OpCodes.Ldc_I4_0);
-    var returnTrue = il.Create(OpCodes.Ldc_I4_1);
-    var ret = il.Create(OpCodes.Ret);
-
-    il.Append(il.Create(OpCodes.Ldarg_1));
-    il.Append(il.Create(OpCodes.Ldstr, "AB_SCRIPT"));
-    il.Append(il.Create(OpCodes.Call, stringEquals));
-    il.Append(il.Create(OpCodes.Brfalse_S, returnFalse));
-    il.Append(il.Create(OpCodes.Ldarg_2));
-    il.Append(il.Create(OpCodes.Ldstr, "REVIVALSIDE_SHOP_TEMPLET_01_SUPPLEMENT"));
-    il.Append(il.Create(OpCodes.Call, stringEquals));
-    il.Append(il.Create(OpCodes.Brfalse_S, returnFalse));
-    il.Append(il.Create(OpCodes.Call, module.ImportReference(getExtraDownloadPath)));
-    il.Append(il.Create(OpCodes.Ldstr, "AB_SCRIPT"));
-    il.Append(il.Create(OpCodes.Ldstr, "REVIVALSIDE_SHOP_TEMPLET_01_SUPPLEMENT.lua"));
-    il.Append(il.Create(OpCodes.Call, pathCombine));
-    il.Append(il.Create(OpCodes.Stloc_0));
-    il.Append(il.Create(OpCodes.Ldloc_0));
-    il.Append(il.Create(OpCodes.Call, fileExists));
-    il.Append(il.Create(OpCodes.Brfalse_S, returnFalse));
-    il.Append(il.Create(OpCodes.Ldloc_0));
-    il.Append(il.Create(OpCodes.Call, getUtf8));
-    il.Append(il.Create(OpCodes.Call, readAllText));
-    il.Append(il.Create(OpCodes.Stloc_1));
-    il.Append(il.Create(OpCodes.Ldarg_0));
-    il.Append(il.Create(OpCodes.Ldfld, module.ImportReference(luaServerField)));
-    il.Append(il.Create(OpCodes.Ldloc_1));
-    il.Append(il.Create(OpCodes.Ldstr, "REVIVALSIDE_SHOP_TEMPLET_01_SUPPLEMENT.lua"));
-    il.Append(il.Create(OpCodes.Callvirt, module.ImportReference(doString)));
-    if (doString.ReturnType.FullName != module.TypeSystem.Void.FullName)
-    {
-        il.Append(il.Create(OpCodes.Pop));
-    }
-    il.Append(returnTrue);
-    il.Append(ret);
-    il.Append(returnFalse);
-    il.Append(il.Create(OpCodes.Ret));
-
-    luaType.Methods.Add(method);
-    return method;
 }
 
 static bool PatchGearPresetSelectionFix(ModuleDefinition module)
@@ -2674,8 +2267,7 @@ sealed record PatchOptions(
     bool ApplyGearInventoryStateRepair,
     bool ApplyEpisodeProgressDifficultyFix,
     bool ApplyOperatorContractCategoryFix,
-    bool ApplySteamLocalLogin,
-    bool ApplyShopTempletSupplement)
+    bool ApplySteamLocalLogin)
 {
     public static PatchOptions Parse(string[] args)
     {
@@ -2709,8 +2301,7 @@ sealed record PatchOptions(
             ApplyEpisodeProgressDifficultyFix: !HasArg(args, "--no-episode-progress-difficulty-fix"),
             ApplyOperatorContractCategoryFix: !HasArg(args, "--no-operator-contract-category-fix"),
             ApplySteamLocalLogin: (envSteamLocalLoginEnabled == true || HasArg(args, "--include-steam-local-login"))
-                && !HasArg(args, "--no-steam-local-login"),
-            ApplyShopTempletSupplement: !HasArg(args, "--no-shop-templet-supplement"));
+                && !HasArg(args, "--no-steam-local-login"));
     }
 
     private static bool HasArg(string[] args, string name)

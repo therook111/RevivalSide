@@ -11,13 +11,11 @@ import android.os.Build
 import android.os.IBinder
 import java.io.BufferedInputStream
 import java.io.File
-import java.net.HttpURLConnection
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.URI
-import java.net.URL
 import java.security.MessageDigest
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
@@ -35,11 +33,7 @@ class RevivalSideListenerService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> startListener()
-            ACTION_STOP -> {
-                stopListener()
-                stopSelf(startId)
-                return START_NOT_STICKY
-            }
+            ACTION_STOP -> stopListener()
         }
         return START_STICKY
     }
@@ -90,12 +84,7 @@ class RevivalSideListenerService : Service() {
     }
 
     private fun stopListener() {
-        val wasRunning = running.getAndSet(false)
-        if (!wasRunning && nodeRuntime == null && httpServer == null) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            publishStatus("Listener stopped")
-            return
-        }
+        if (!running.getAndSet(false)) return
         appendLog("Stopping Android listener")
         nodeRuntime?.stop()
         nodeRuntime = null
@@ -142,7 +131,6 @@ class RevivalSideListenerService : Service() {
     }
 
     private fun publishStatus(message: String) {
-        AndroidRuntimeState.writeListener(this, running.get(), message)
         sendBroadcast(Intent(ACTION_STATUS).apply {
             setPackage(packageName)
             putExtra(EXTRA_MESSAGE, message)
@@ -436,7 +424,6 @@ private class NodeProcessRuntime(
             env["CS_USER_MANAGER_ALLOW_REMOTE"] = "0"
             env["CS_VERBOSE_CAPTURE"] = "0"
             env["CS_REPLAY_CAPTURED_GAME_FLOW"] = "0"
-            env["CS_JOIN_LOBBY_ACK_NORMALIZE_WITHOUT_TEMPLATE"] = "0"
             env["CS_SKIP_TUTORIAL_TO_WIN"] = "0"
             env["CS_RESET_TUTORIAL_PROGRESS_ON_LOGIN"] = "0"
             env["CS_MANAGED_HOST_TICK_INTERVAL_MS"] = env["CS_MANAGED_HOST_TICK_INTERVAL_MS"] ?: ANDROID_MANAGED_HOST_TICK_INTERVAL_MS
@@ -456,42 +443,22 @@ private class NodeProcessRuntime(
 
     fun stop() {
         running.set(false)
-        requestGracefulShutdown()
         val active = process
         process = null
         runCatching { active?.destroy() }
         if (nativeThread?.isAlive == true || nativeStarted.get()) {
             state = "native-stopping"
-            log("Stopping bundled Node Mobile listener through launcher shutdown API.")
+            log("Stopping bundled Node Mobile listener by ending the launcher process, matching the desktop launcher process boundary.")
+            thread(name = "revivalside-node-stop", isDaemon = true) {
+                Thread.sleep(250)
+                android.os.Process.killProcess(android.os.Process.myPid())
+            }
         } else {
             state = "stopped"
         }
     }
 
     fun describeState(): String = state
-
-    private fun requestGracefulShutdown() {
-        val connection = runCatching {
-            (URL("http://127.0.0.1:${settings.httpPort}/launcher/api/shutdown").openConnection() as HttpURLConnection).apply {
-                connectTimeout = 500
-                readTimeout = 500
-                requestMethod = "POST"
-                doOutput = true
-                useCaches = false
-                setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            }
-        }.getOrNull() ?: return
-        try {
-            connection.outputStream.use { it.write("{}".toByteArray(Charsets.UTF_8)) }
-            val status = connection.responseCode
-            if (status in 200..299) log("Listener shutdown API accepted")
-            else log("Listener shutdown API returned HTTP $status")
-        } catch (error: Exception) {
-            log("Listener shutdown API unavailable: ${error.message}")
-        } finally {
-            connection.disconnect()
-        }
-    }
 
     private fun startLogReader(active: Process) {
         thread(name = "revivalside-node-log", isDaemon = true) {
@@ -524,13 +491,11 @@ private class NodeProcessRuntime(
             }.getOrElse { error ->
                 state = "native-start-failed"
                 running.set(false)
-                nativeStarted.set(false)
                 log("Bundled Node Mobile listener crashed: ${error.message}")
                 return@thread
             }
             state = "native-exited-$exitCode"
             running.set(false)
-            nativeStarted.set(false)
             log("Bundled Node Mobile listener exited with code $exitCode")
         }
         log("Started bundled Node Mobile listener with ${bootstrap.absolutePath}")
@@ -598,7 +563,6 @@ private class NodeProcessRuntime(
                 process.env.CS_USER_MANAGER_ALLOW_REMOTE = "0";
                 process.env.CS_VERBOSE_CAPTURE = "0";
                 process.env.CS_REPLAY_CAPTURED_GAME_FLOW = "0";
-                process.env.CS_JOIN_LOBBY_ACK_NORMALIZE_WITHOUT_TEMPLATE = "0";
                 process.env.CS_SKIP_TUTORIAL_TO_WIN = "0";
                 process.env.CS_RESET_TUTORIAL_PROGRESS_ON_LOGIN = "0";
                 process.env.CS_MANAGED_HOST_TICK_INTERVAL_MS = process.env.CS_MANAGED_HOST_TICK_INTERVAL_MS || ${jsString(ANDROID_MANAGED_HOST_TICK_INTERVAL_MS)};
@@ -847,36 +811,13 @@ private class NodeProcessRuntime(
             installPackagedPayloadArchive(root)
             installGameplayTablesArchive(root)
             if (assetTreeExists("revivalside-listener")) {
-                installPackagedListenerOverlay(root)
+                copyAssetTree("revivalside-listener", root)
+                log("Applied packaged RevivalSide listener overlay.")
             }
         } else {
-            installPackagedListenerOverlay(root)
+            copyAssetTree("revivalside-listener", root)
             installGameplayTablesArchive(root)
         }
-    }
-
-    private fun installPackagedListenerOverlay(root: File) {
-        if (!assetTreeExists("revivalside-listener")) return
-
-        val overlayId = packagedOverlayId()
-        val marker = File(root, LISTENER_OVERLAY_MARKER_NAME)
-        if (listenerOverlayMarkerMatches(marker, overlayId) && hasListenerEntry(root)) {
-            log("Packaged RevivalSide listener overlay already installed id=$overlayId.")
-            return
-        }
-
-        val startedAt = System.currentTimeMillis()
-        copyAssetTree("revivalside-listener", root)
-        marker.writeText(
-            """
-                {
-                  "overlayId": "${escapeJson(overlayId)}",
-                  "installedAt": "${Instant.now()}"
-                }
-            """.trimIndent() + "\n",
-            Charsets.UTF_8,
-        )
-        log("Applied packaged RevivalSide listener overlay id=$overlayId ms=${System.currentTimeMillis() - startedAt}.")
     }
 
     private fun installPackagedPayloadArchive(root: File) {
@@ -1040,30 +981,6 @@ private class NodeProcessRuntime(
         return true
     }
 
-    private fun listenerOverlayMarkerMatches(marker: File, overlayId: String): Boolean {
-        if (!marker.isFile || overlayId.isBlank()) return false
-        val text = runCatching { marker.readText(Charsets.UTF_8) }.getOrDefault("")
-        return text.contains(overlayId)
-    }
-
-    private fun packagedOverlayId(): String {
-        val apk = File(context.applicationInfo.sourceDir.orEmpty())
-        return listOf(
-            context.packageName,
-            packageVersionCode().toString(),
-            apk.lastModified().toString(),
-            apk.length().toString(),
-        ).joinToString(":")
-    }
-
-    @Suppress("DEPRECATION")
-    private fun packageVersionCode(): Long {
-        return runCatching {
-            val info = context.packageManager.getPackageInfo(context.packageName, 0)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) info.longVersionCode else info.versionCode.toLong()
-        }.getOrDefault(0L)
-    }
-
     private fun payloadRelativePath(entryName: String): String? {
         val normalized = entryName.replace('\\', '/').trimStart('/')
         val prefixes = listOf("payload/app/", "app/")
@@ -1110,7 +1027,6 @@ private class NodeProcessRuntime(
         private const val PAYLOAD_ARCHIVE_ASSET = "revivalside-payload.zip"
         private const val PAYLOAD_MANIFEST_ASSET = "revivalside-payload-manifest.json"
         private const val PAYLOAD_MARKER_NAME = ".revivalside-android-payload.json"
-        private const val LISTENER_OVERLAY_MARKER_NAME = ".revivalside-android-listener-overlay.json"
         private const val GAMEPLAY_TABLES_ARCHIVE_ASSET = "revivalside-gameplay-tables.zip"
         private const val GAMEPLAY_TABLES_MANIFEST_ASSET = "revivalside-gameplay-tables-manifest.json"
         private const val GAMEPLAY_TABLES_MARKER_NAME = ".revivalside-android-gameplay-tables.json"

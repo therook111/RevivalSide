@@ -48,34 +48,3 @@ npm run listen
 
 The default listener uses TCP `127.0.0.1:22000` and HTTP mirror `http://127.0.0.1:8088`.
 The local user profile manager is served from the same process at `http://127.0.0.1:8088/user-manager`.
-
-## Discord Tester Bot
-
-The Discord management bot exposes one slash command, `/join`, which grants the
-caller the `@Tester` role. Non-approved users have one day to receive the
-`@Approved` role; if they do not, the bot removes `@Tester`.
-
-Set these values in `.env` or in the shell before starting it:
-
-```ini
-DISCORD_BOT_TOKEN=your-bot-token
-DISCORD_GUILD_ID=your-server-id
-DISCORD_TESTER_ROLE_ID=your-tester-role-id
-DISCORD_TESTER_ROLE_NAME=Tester
-DISCORD_APPROVED_ROLE_ID=your-approved-role-id
-DISCORD_APPROVED_ROLE_NAME=Approved
-DISCORD_TESTER_TIMER_STATE_PATH=.\server-data\discord-tester-timers.json
-```
-
-Role IDs are preferred; if an ID is empty, the bot looks for a role named by
-the matching role-name variable. Already-approved users can use `/join` without
-starting a timer. Timer state is saved to
-`server-data\discord-tester-timers.json` by default, so restarts keep pending
-deadlines.
-
-The bot needs the `bot` and `applications.commands` OAuth scopes, the
-`Manage Roles` permission, and its highest role must be above `@Tester`.
-
-```powershell
-npm run discord-bot
-```

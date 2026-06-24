@@ -76,9 +76,8 @@ function seedShopCurrency(user, itemIds, options = {}) {
   const seedMissingOnly = options.seedMissingOnly === true;
   const includeCommonResources = options.includeCommonResources === true;
   const commonResourceIds = new Set(COMMON_RESOURCE_ITEM_IDS);
-  const allowedCommonResourceIds = new Set(uniquePositiveInts(options.allowedCommonResourceItemIds));
   const seedIds = (Array.isArray(itemIds) ? itemIds : []).filter(
-    (itemId) => includeCommonResources || !commonResourceIds.has(Number(itemId)) || allowedCommonResourceIds.has(Number(itemId))
+    (itemId) => includeCommonResources || !commonResourceIds.has(Number(itemId))
   );
   if (includeCommonResources) seedIds.push(...COMMON_RESOURCE_ITEM_IDS);
   const ids = uniquePositiveInts(seedIds);

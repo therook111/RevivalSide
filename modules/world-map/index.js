@@ -1231,9 +1231,7 @@ function expireCityBuilding(user, cityID, buildID, options = {}) {
     const row = getBuildingRow(id, building.level);
     const clearCredit = Math.max(0, Number(row && row.CLEAR_CREDIT) || 0);
     delete city.buildings[String(id)];
-    if (clearCredit > 0) {
-      item = spendMiscItem(user, ITEM_ID_CREDIT, clearCredit, { regDate: String(binaryNow(options)) });
-    }
+    if (clearCredit > 0) item = grantMiscItem(user, ITEM_ID_CREDIT, clearCredit, 0, { regDate: String(binaryNow(options)) });
   }
   return { city, item };
 }

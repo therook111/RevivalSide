@@ -5,9 +5,7 @@
   "description": "Local CounterSide revival server research tooling.",
   "scripts": {
     "listen": "node cs-listener.js",
-    "discord-bot": "node tools/discord-join-bot.js",
     "check:listener": "node --check cs-listener.js && node --check server/listener.js && node --check server/packetHandlerLoader.js",
-    "check:discord-bot": "node --check tools/discord-join-bot.js",
     "check:handlers": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"Get-ChildItem packet-handlers,modules -Recurse -Filter *.js | Where-Object { $_.DirectoryName -match '[\\\\/]handlers$' } | ForEach-Object { node --check $_.FullName }\"",
     "build:combat-host": "dotnet build combat-host/CombatHost.csproj --nologo",
     "build:launcher": "dotnet build tools/RevivalSideLauncherApp/RevivalSideLauncherApp.csproj --nologo",
@@ -20,7 +18,6 @@
     "downloadside:deploy": "cd download-service && npm run deploy:fly",
     "ensure:gameplay-assets": "node tools/ensure-gameplay-assets.js",
     "build:gameplay-jsons": "node tools/build-prepackaged-gameplay-jsons.js",
-    "restore:admin-coin-shop-assets": "node tools/restore-admin-coin-shop-assets.js",
     "patch:counter-pass-client": "dotnet run --project tools/CounterPassClientPatcher/CounterPassClientPatcher.csproj -- --env-switch",
     "patch:counter-pass-client:restore": "dotnet run --project tools/CounterPassClientPatcher/CounterPassClientPatcher.csproj -- --restore",
     "patch:counter-pass-client:legacy": "dotnet run --project tools/CounterPassClientPatcher/CounterPassClientPatcher.csproj -- --restore-first --legacy-all",
@@ -32,9 +29,5 @@
     "wiki:build": "node tools/build-revivalside-wiki.js",
     "wiki:assets": "node tools/copy-wiki-assets.js",
     "wiki:serve": "node tools/serve-revivalside-wiki.js"
-  },
-  "dependencies": {
-    "discord.js": "^14.26.4",
-    "dotenv": "^17.4.2"
   }
 }

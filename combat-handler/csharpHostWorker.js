@@ -4,25 +4,18 @@ const { spawn } = require("child_process");
 let child = null;
 let stdoutBuffer = "";
 let stderrBuffer = "";
-let lastChildError = "";
 const pending = [];
 
 startChild();
-parentPort.on("close", stopChild);
-process.on("exit", stopChild);
 
 parentPort.on("message", (message) => {
   if (!message || !message.sharedBuffer) return;
-  const unavailable = childUnavailableError();
-  if (unavailable) {
-    complete(message.sharedBuffer, JSON.stringify({ ok: false, error: unavailable }));
+  if (!child || child.killed || !child.stdin.writable) {
+    complete(message.sharedBuffer, JSON.stringify({ ok: false, error: "C# combat host process is not running" }));
     return;
   }
   pending.push(message.sharedBuffer);
-  child.stdin.write(`${message.input}\n`, (err) => {
-    if (!err) return;
-    completePending(message.sharedBuffer, `C# combat host stdin failed: ${err.message || err}`);
-  });
+  child.stdin.write(`${message.input}\n`);
 });
 
 function startChild() {
@@ -32,14 +25,6 @@ function startChild() {
   child = spawn(fileName, args, {
     stdio: ["pipe", "pipe", "pipe"],
     windowsHide: true,
-  });
-
-  child.on("error", (err) => {
-    failChild(`C# combat host failed to start: ${err.message || err}`);
-  });
-
-  child.stdin.on("error", (err) => {
-    failChild(`C# combat host stdin failed: ${err.message || err}`);
   });
 
   child.stdout.on("data", (chunk) => {
@@ -59,40 +44,9 @@ function startChild() {
   });
 
   child.on("exit", (code, signal) => {
-    failChild(`C# combat host exited code=${code} signal=${signal || ""} ${stderrBuffer.trim()}`.trim());
+    const error = `C# combat host exited code=${code} signal=${signal || ""} ${stderrBuffer.trim()}`.trim();
+    while (pending.length) complete(pending.shift(), JSON.stringify({ ok: false, error }));
   });
-}
-
-function childUnavailableError() {
-  if (!child) return lastChildError || "C# combat host process is not running";
-  if (child.exitCode !== null || child.signalCode) {
-    return lastChildError || `C# combat host exited code=${child.exitCode} signal=${child.signalCode || ""}`.trim();
-  }
-  if (child.killed || !child.stdin || child.stdin.destroyed || !child.stdin.writable) {
-    return lastChildError || "C# combat host process is not running";
-  }
-  return "";
-}
-
-function failChild(error) {
-  lastChildError = error || "C# combat host process is not running";
-  child = null;
-  while (pending.length) complete(pending.shift(), JSON.stringify({ ok: false, error: lastChildError }));
-}
-
-function stopChild() {
-  if (!child) return;
-  const current = child;
-  child = null;
-  try {
-    if (!current.killed) current.kill();
-  } catch (_) {}
-}
-
-function completePending(sharedBuffer, error) {
-  const index = pending.indexOf(sharedBuffer);
-  if (index >= 0) pending.splice(index, 1);
-  complete(sharedBuffer, JSON.stringify({ ok: false, error }));
 }
 
 function complete(sharedBuffer, text) {

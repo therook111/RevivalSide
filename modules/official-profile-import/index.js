@@ -5,7 +5,6 @@ const path = require("path");
 const JOIN_LOBBY_ACK_PACKET_ID = 205;
 const DEFAULT_NEXT_USER_UID = "1000000001";
 const DEFAULT_NEXT_FRIEND_CODE = "10000001";
-const TUTORIAL_COMPLETION_MISSION_IDS = Object.freeze([130]);
 const CRYPTO_MASKS = Object.freeze([
   14170986657190717782n,
   15546886188969944187n,
@@ -447,14 +446,6 @@ function applyOfficialSnapshotToLocalProfile(profile) {
       }
       officialProgress.importedCompletedMissionFlagCount = completedMissionIds.length;
     }
-    if (
-      completedMissionIds.some(isTutorialCompletionMissionId) ||
-      missionSnapshots.some((mission) => isTutorialCompletionMissionId(mission && mission.missionID) && isExplicitMissionComplete(mission))
-    ) {
-      markOfficialTutorialComplete(profile);
-      officialProgress.importedTutorialComplete = true;
-      importedSystems.tutorial = true;
-    }
     const achievePoint = findNumericFieldDeep(systems.missionData, ["achievePoint", "m_AchievePoint", "achievementPoint", "m_AchievementPoint"]);
     if (achievePoint != null) {
       profile.achievePoint = String(achievePoint);
@@ -470,34 +461,6 @@ function applyOfficialSnapshotToLocalProfile(profile) {
   };
   officialProgress.snapshotPacketType = nonEmpty(readAny(snapshot, ["packetType", "PacketType"])) || officialImport.packetType || "";
   officialImport.importedSystems = officialProgress.importedSystems;
-}
-
-function isTutorialCompletionMissionId(missionId) {
-  return TUTORIAL_COMPLETION_MISSION_IDS.includes(Number(missionId || 0));
-}
-
-function isExplicitMissionComplete(mission) {
-  if (!mission || typeof mission !== "object") return false;
-  return (
-    mission.rewardClaimed === true ||
-    mission.isComplete === true ||
-    mission.rewardReady === true ||
-    Boolean(mission.claimedAt || mission.completedAt)
-  );
-}
-
-function markOfficialTutorialComplete(profile) {
-  if (!profile || typeof profile !== "object") return false;
-  const tutorial = ensureObject(profile, "tutorial");
-  const completedAt = nonEmpty(tutorial.completedAt) || nonEmpty(profile.importedAt) || new Date().toISOString();
-  tutorial.enabled = tutorial.enabled !== false;
-  tutorial.completed = true;
-  tutorial.completedAt = completedAt;
-  tutorial.loginMode = "post-tutorial";
-  tutorial.nextStageId = 0;
-  tutorial.nextDungeonId = 0;
-  profile.loginFlow = "post-tutorial";
-  return true;
 }
 
 function normalizeImportedContractStates(source) {

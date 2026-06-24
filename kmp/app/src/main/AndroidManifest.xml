@@ -11,9 +11,7 @@
 
     <application
         android:allowBackup="false"
-        android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher"
-        android:label="RevivalSide"
+        android:label="RevivalSide Android"
         android:resizeableActivity="true"
         android:usesCleartextTraffic="true"
         android:theme="@style/AppTheme">

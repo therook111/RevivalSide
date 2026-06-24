@@ -241,7 +241,7 @@ function Copy-CapturedTcpBootFixtures([string]$Source, [string]$Destination, [st
 
   $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
   $filteredManifest = [ordered]@{}
-  foreach ($packetId in @("217", "230")) {
+  foreach ($packetId in @("217")) {
     $property = $manifest.PSObject.Properties[$packetId]
     if (-not $property) {
       Write-Warning "Captured TCP manifest does not contain packet $packetId"
@@ -438,20 +438,12 @@ foreach ($toolName in @(
   "ensure-cutscene-backgrounds.js",
   "cs_asset_decrypt.py",
   "cs_extract_decrypted_assets.py",
-  "discord-join-bot.js",
   "event-manager-diagnostics.js",
   "extract-cs-pcap-fixtures.js",
   "import-official-join-lobby-profile.js",
-  "import-official-event-schedules.js",
-  "restore-admin-coin-shop-assets.js"
+  "import-official-event-schedules.js"
 )) {
   Copy-FileIfPresent (Join-Path $rootPath "tools\$toolName") (Join-Path $toolsOut $toolName)
-}
-
-$clientOverrides = Join-Path $rootPath "client-overrides"
-if (Test-Path -LiteralPath $clientOverrides -PathType Container) {
-  Copy-DirectoryClean $clientOverrides (Join-Path $outputPath "client-overrides")
-  Write-Host "Copied client-overrides for live client patch supplements."
 }
 
 $sourceGameplayJsons = Join-Path $rootPath "gameplay-jsons"

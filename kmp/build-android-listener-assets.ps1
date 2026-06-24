@@ -117,26 +117,6 @@ function Copy-DirectoryIntoAssets([string]$RelativePath) {
   }
 }
 
-function Copy-CapturedJoinLobbyAckIntoAssets {
-  $sourceRoot = Join-Path $repoRoot "server-data\capture-extracts\android-join-lobby-ack-20260531-101703"
-  if (-not (Test-Path -LiteralPath $sourceRoot)) {
-    throw "Missing Android JOIN_LOBBY_ACK capture fixture: $sourceRoot"
-  }
-
-  $destinationRoot = Join-Path $assetRootFull "server-data\captured-game-flow"
-  New-Item -ItemType Directory -Path $destinationRoot -Force | Out-Null
-
-  foreach ($fileName in @("manifest.json", "server_001_205.packet.bin", "server_001_205.payload.bin")) {
-    $source = Join-Path $sourceRoot $fileName
-    if (-not (Test-Path -LiteralPath $source)) {
-      throw "Missing Android JOIN_LOBBY_ACK capture fixture file: $source"
-    }
-    Copy-Item -LiteralPath $source -Destination (Join-Path $destinationRoot $fileName) -Force
-  }
-
-  Write-Host "Android captured JOIN_LOBBY_ACK merge fixture staged at $destinationRoot"
-}
-
 function Copy-ServerDataIntoAssets {
   $serverDataFiles = @(
     ".gitkeep",
@@ -421,7 +401,6 @@ Copy-DirectoryIntoAssets "combat-host"
 Copy-DirectoryIntoAssets "stages"
 Copy-ServerDataIntoAssets
 Copy-DirectoryIntoAssets "server-data\captured-tcp"
-Copy-CapturedJoinLobbyAckIntoAssets
 Copy-SteamManagedCombatHost
 Copy-AndroidDotnetRuntime
 Write-GameplayTablesArchive

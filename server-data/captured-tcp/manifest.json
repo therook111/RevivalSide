@@ -15,30 +15,16 @@
   },
   "217": {
     "packetId": 217,
-    "stream": "172.65.251.9:22000",
+    "stream": 45,
     "sequence": 1,
     "compressed": true,
-    "payloadSize": 7603,
+    "payloadSize": 7593,
     "payloadFile": "217.payload.bin",
     "rawFile": "217.packet.bin",
-    "totalLength": 7621,
+    "totalLength": 7611,
     "tail": 287454020,
-    "frame": 0,
-    "time": 0,
-    "sha256": "ae8dd225f10a38a406ff3e33302e1c150c08256fc480c9f300e251b8eb3ac8a8"
-  },
-  "230": {
-    "packetId": 230,
-    "stream": "172.65.251.9:22000",
-    "sequence": 1,
-    "compressed": true,
-    "payloadSize": 28110,
-    "payloadFile": "230.payload.bin",
-    "rawFile": "230.packet.bin",
-    "totalLength": 28129,
-    "tail": 287454020,
-    "frame": 1,
-    "time": 0,
-    "sha256": "a953606cd67c11b3dbe9abfdd43768060b7a37c4e7b7568c223d3a022734458f"
+    "frame": 1653,
+    "time": 31.4172135,
+    "sha256": "a28cdc509a38972c2d8e7391f429d5eaaace8eced775a8f6f5e4b44bdb02780c"
   }
 }

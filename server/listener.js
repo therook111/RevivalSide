@@ -382,8 +382,6 @@ const CLEAR_OPERATORS_LEVEL1 = envFlag(
 );
 const LOCAL_JOIN_LOBBY_ACK_MODE = String(process.env.CS_USE_LOCAL_JOIN_LOBBY_ACK || "auto").trim().toLowerCase();
 const USE_LOCAL_JOIN_LOBBY_ACK = LOCAL_JOIN_LOBBY_ACK_MODE === "1" || LOCAL_JOIN_LOBBY_ACK_MODE === "true";
-const NORMALIZE_LOCAL_JOIN_LOBBY_ACK_WITHOUT_TEMPLATE =
-  String(process.env.CS_JOIN_LOBBY_ACK_NORMALIZE_WITHOUT_TEMPLATE || "1").trim() !== "0";
 const LOBBY_LOCAL_MISSION_DATA = envFlagDefault(true, "lobbyLocalMissionData", "LOBBYLOCALMISSIONDATA", "CS_LOBBY_LOCAL_MISSION_DATA");
 const GUIDE_MISSION_TABS = Object.freeze(resolveGuideMissionTabs());
 const PAYBACK_MISSION_TABS = Object.freeze(resolvePaybackMissionTabs());
@@ -423,7 +421,6 @@ const STATIC_COMBAT_STATS = Object.freeze({
   attackCooldown: Number(process.env.CS_STATIC_UNIT_ATTACK_COOLDOWN || 1.6),
 });
 const TUTORIAL_SKIP_WIN_MISSION_IDS = Object.freeze([999, 100]);
-const TUTORIAL_COMPLETION_MISSION_IDS = Object.freeze([130]);
 const POST_TUTORIAL_GUIDE_MISSION_IDS = Object.freeze([340, 341, 345, 610]);
 const POST_TUTORIAL_GUIDE_REQUIREMENT_STAGE_IDS = Object.freeze({
   340: 11665, // Daily / Simulation guide after NKM_MAIN_BATTLE_EP1_2_4_ACT_BOSS_A
@@ -436,16 +433,7 @@ const GAME_SERVER_IP = process.env.CS_GAME_SERVER_IP || "127.0.0.1";
 const GAME_SERVER_PORT = Number(process.env.CS_GAME_SERVER_PORT || PORT);
 const CONTENTS_VERSION = process.env.CS_CONTENTS_VERSION || "9.2.c";
 const REQUIRED_CONTENTS_TAGS = Object.freeze([
-  "TAG_COMMON_SHOP_TAB_CASH_6_0A",
-  "TAG_COMMON_SHOP_TAB_CASH_6_0A_GLOBAL",
-  "TAG_COMMON_SHOP_TAB_CASH_7_9A_GLOBAL",
   "TAG_COMMON_SHOP_TAB_SUPPLY",
-  "TAG_COMMON_SHOP_TAB_PACKAGE_QUERTZ_6_0A",
-  "TAG_COMMON_SHOP_TAB_PACKAGE_FIXED_CHARGE_V2_HOME",
-  "TAG_COMMON_SHOP_TAB_PACKAGE_ALWAYS",
-  "TAG_COMMON_SHOP_TAB_PACKAGE_ALWAYS_SHIP",
-  "TAG_COMMON_SHOP_TAB_PACKAGE_CUSTOM_LAUNCHING_V2",
-  "TAG_COMMON_SHOP_TAB_PACKAGE_INTERIOR",
   "TAG_COMMON_SHOP_TAB_PACKAGE_SUPER_PACK",
   "SYSTEM_TRANSCENDENCE_LV120",
 ]);
@@ -626,10 +614,6 @@ let lastEffectiveAccessToken = "";
 let lastAckContentsVersion = "";
 let lastAckContentsTags = [];
 let runtimeConfigPrinted = false;
-let tcpServer = null;
-let httpMirrorServer = null;
-let launcherRuntimeStopping = false;
-const activeGameSockets = new Set();
 
 startTcpServer();
 startHttpMirror();
@@ -645,7 +629,6 @@ function startTcpServer() {
       steamLogin: null,
       gameReplay: createGameReplayState(),
     };
-    activeGameSockets.add(socket);
     lastSteamAccessToken = "";
     lastAckContentsVersion = "";
     lastAckContentsTags = [];
@@ -660,14 +643,12 @@ function startTcpServer() {
 
     socket.on("end", () => console.log("[*] Client ended socket"));
     socket.on("close", (hadError) => {
-      activeGameSockets.delete(socket);
       stopGameSyncTimers(socket);
       console.log(`[-] Client disconnected hadError=${hadError}`);
     });
     socket.on("error", (err) => console.log(`[!] Socket error: ${err.message}`));
   });
 
-  tcpServer = server;
   server.listen(PORT, () => console.log(`[+] Listening on port ${PORT}`));
 }
 
@@ -786,23 +767,24 @@ function startHttpMirror() {
     return;
   }
 
-  httpMirrorServer = http.createServer(async (req, res) => {
-    try {
-      if (await serveLauncherApi(req, res)) return;
-      if (userManager && (await userManager.handle(req, res))) return;
-      if (serveEventManagerDiagnostics(req, res)) return;
-      if (capturedFlowMirror) {
-        serveCapturedFlow(req, res, capturedFlowMirror);
-        return;
+  http
+    .createServer(async (req, res) => {
+      try {
+        if (await serveLauncherApi(req, res)) return;
+        if (userManager && (await userManager.handle(req, res))) return;
+        if (serveEventManagerDiagnostics(req, res)) return;
+        if (capturedFlowMirror) {
+          serveCapturedFlow(req, res, capturedFlowMirror);
+          return;
+        }
+        res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+        res.end("No captured HTTP mirror is configured.\n");
+      } catch (err) {
+        res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
+        res.end(`HTTP server error: ${err.message}\n`);
       }
-      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
-      res.end("No captured HTTP mirror is configured.\n");
-    } catch (err) {
-      res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" });
-      res.end(`HTTP server error: ${err.message}\n`);
-    }
-  });
-  httpMirrorServer.listen(HTTP_MIRROR_PORT, () => {
+    })
+    .listen(HTTP_MIRROR_PORT, () => {
       if (capturedFlowMirror) {
         console.log(`[+] Captured HTTP mirror listening on ${MIRROR_PUBLIC_BASE_URL}`);
         console.log(`[+] Captured HTTP mirror fixtureDir=${CAPTURED_FLOW_DIR}`);
@@ -836,14 +818,7 @@ async function serveLauncherApi(req, res) {
   }
 
   if ((req.method === "POST" || req.method === "GET") && url.pathname === "/launcher/api/warmup") {
-    const activeOnly = ["1", "true", "yes", "on"].includes(String(url.searchParams.get("activeOnly") || "").toLowerCase());
-    sendJsonResponse(res, 200, warmLauncherRuntime({ activeOnly }));
-    return true;
-  }
-
-  if (req.method === "POST" && url.pathname === "/launcher/api/shutdown") {
-    sendJsonResponse(res, 200, { ok: true, stopping: true });
-    setImmediate(shutdownLauncherRuntime);
+    sendJsonResponse(res, 200, warmLauncherRuntime());
     return true;
   }
 
@@ -901,47 +876,9 @@ function sendJsonResponse(res, statusCode, body) {
   res.end(`${JSON.stringify(body || {})}\n`);
 }
 
-function shutdownLauncherRuntime() {
-  if (launcherRuntimeStopping) return;
-  launcherRuntimeStopping = true;
-  console.log("[launcher] shutdown requested");
-  try {
-    if (combatHandler && typeof combatHandler.shutdown === "function") combatHandler.shutdown();
-  } catch (error) {
-    console.log(`[launcher] combat host shutdown failed: ${error.message}`);
-  }
-
-  for (const socket of Array.from(activeGameSockets)) {
-    try {
-      stopGameSyncTimers(socket);
-      socket.destroy();
-    } catch (_) {
-    }
-  }
-  activeGameSockets.clear();
-
-  if (tcpServer) {
-    try {
-      tcpServer.close(() => console.log("[launcher] TCP listener stopped"));
-    } catch (error) {
-      console.log(`[launcher] TCP listener stop failed: ${error.message}`);
-    }
-    tcpServer = null;
-  }
-
-  if (httpMirrorServer) {
-    try {
-      httpMirrorServer.close(() => console.log("[launcher] HTTP listener stopped"));
-    } catch (error) {
-      console.log(`[launcher] HTTP listener stop failed: ${error.message}`);
-    }
-    httpMirrorServer = null;
-  }
-}
-
-function warmLauncherRuntime(options = {}) {
+function warmLauncherRuntime() {
   const startedAt = Date.now();
-  const users = getJoinLobbyWarmupUsers(options);
+  const users = getJoinLobbyWarmupUsers();
   const warmed = [];
   const failed = [];
 
@@ -1029,7 +966,7 @@ function importLatestOfficialProfile(options = {}) {
   return imported;
 }
 
-function getJoinLobbyWarmupUsers(options = {}) {
+function getJoinLobbyWarmupUsers() {
   const maxUsers = clampInt(process.env.CS_LAUNCHER_WARMUP_JOIN_LOBBY_USERS, 1, 16, 4);
   const selected = [];
   const seen = new Set();
@@ -1041,10 +978,7 @@ function getJoinLobbyWarmupUsers(options = {}) {
     selected.push(user);
   };
 
-  if (userDb.activeUserUid && userDb.users[userDb.activeUserUid]) {
-    addUser(userDb.users[userDb.activeUserUid]);
-    if (options.activeOnly === true) return selected;
-  }
+  if (userDb.activeUserUid && userDb.users[userDb.activeUserUid]) addUser(userDb.users[userDb.activeUserUid]);
 
   Object.values(userDb.users || {})
     .filter((user) => user && typeof user === "object")
@@ -6807,7 +6741,6 @@ function hasPersistedTutorialCompletion(user) {
   const tutorial = user.tutorial && typeof user.tutorial === "object" ? user.tutorial : null;
   if (user.loginFlow === "post-tutorial" || (tutorial && tutorial.loginMode === "post-tutorial")) return true;
   if (tutorial && tutorial.completed === true) return true;
-  if (hasCompletedMissionMarker(user, TUTORIAL_COMPLETION_MISSION_IDS)) return true;
 
   const phases = tutorial && tutorial.phases && typeof tutorial.phases === "object" ? tutorial.phases : null;
   if (
@@ -6825,23 +6758,6 @@ function hasPersistedTutorialCompletion(user) {
     const clear = dungeonClear[String(stage.dungeonID)];
     return Boolean(clear && clear.cleared !== false);
   });
-}
-
-function hasCompletedMissionMarker(user, missionIds) {
-  if (!user || typeof user !== "object") return false;
-  for (const missionId of missionIds || []) {
-    const mission = findCompletedMissionById(user, missionId);
-    if (
-      mission &&
-      (mission.rewardClaimed === true ||
-        mission.isComplete === true ||
-        mission.rewardReady === true ||
-        Boolean(mission.claimedAt || mission.completedAt))
-    ) {
-      return true;
-    }
-  }
-  return false;
 }
 
 function unlockNextTutorialStageForUser(user) {
@@ -9036,13 +8952,6 @@ function buildJoinLobbyAckPayload(user) {
       )}`
     );
     if (isManagedHostUnavailableError(merged.error)) {
-      if (hasLocalAccountState(user)) {
-        console.log(
-          `[JOIN_LOBBY_ACK merge] managed host unavailable; preserving local account ACK official=${officialPayload.length} local=${localPayload.length}`
-        );
-        rememberJoinLobbyAckPayload(cacheKey, localPayload);
-        return localPayload;
-      }
       console.log(
         `[JOIN_LOBBY_ACK merge] managed host unavailable; using captured official template fallback official=${officialPayload.length} local=${localPayload.length}`
       );
@@ -9070,7 +8979,7 @@ function buildJoinLobbyAckPayload(user) {
   if (!REPLAY_CAPTURED_GAME_FLOW) {
     const cacheKey = [
       user && user.userUid ? String(user.userUid) : "ephemeral",
-      NORMALIZE_LOCAL_JOIN_LOBBY_ACK_WITHOUT_TEMPLATE ? "normalized" : "local",
+      "normalized",
       sha1Buffer(localPayload),
     ].join(":");
     const cached = joinLobbyAckPayloadCache.get(cacheKey);
@@ -9079,15 +8988,6 @@ function buildJoinLobbyAckPayload(user) {
         `[JOIN_LOBBY_ACK cache] hit mode=normalize uid=${user && user.userUid ? user.userUid : "(ephemeral)"} bytes=${cached.length}`
       );
       return cached;
-    }
-    if (!NORMALIZE_LOCAL_JOIN_LOBBY_ACK_WITHOUT_TEMPLATE) {
-      rememberJoinLobbyAckPayload(cacheKey, localPayload);
-      console.log(
-        `[JOIN_LOBBY_ACK normalize] skipped; using generated local ACK without captured 205 template uid=${
-          user && user.userUid ? user.userUid : "(ephemeral)"
-        } bytes=${localPayload.length}`
-      );
-      return localPayload;
     }
     const normalized = combatHandler.normalizeJoinLobbyAck
       ? combatHandler.normalizeJoinLobbyAck(localPayload)
@@ -9141,11 +9041,6 @@ function isManagedHostUnavailableError(error) {
   return (
     text.includes("c# combat host disabled") ||
     text.includes("missing combat host dll") ||
-    text.includes("c# combat host process is not running") ||
-    text.includes("c# combat host exited") ||
-    text.includes("combat host request timed out") ||
-    text.includes("signal=sigsegv") ||
-    text.includes("sigsegv") ||
     text.includes("dotnet build exited") ||
     text.includes("the command could not be loaded") ||
     text.includes("no .net sdks were found") ||
@@ -9158,7 +9053,6 @@ function hasTutorialProgress(user) {
   const completedMissions =
     user && user.completedMissions && typeof user.completedMissions === "object" ? user.completedMissions : {};
   if (tutorial.completed || Object.values(tutorial.phases || {}).some((phase) => phase && phase.completed)) return true;
-  if (hasCompletedMissionMarker(user, TUTORIAL_COMPLETION_MISSION_IDS)) return true;
   if (completedMissions["999"]) return true;
   return false;
 }
@@ -10478,7 +10372,6 @@ function ensureLocalShopInventory(user) {
   try {
     const catalog = loadShopCatalog();
     const seedCoreCurrencies = process.env.CS_LOCAL_SHOP_SEED_CORE_CURRENCIES === "1";
-    const seedAdminCoins = process.env.CS_LOCAL_SHOP_SEED_ADMIN_COINS !== "0";
     const commonResourceIds = new Set(COMMON_RESOURCE_ITEM_IDS.map((id) => Number(id)));
     const seedBalance = toBigInt(
       process.env.CS_LOCAL_SHOP_BALANCE || process.env.CS_LOCAL_SHOP_CURRENCY_BALANCE,
@@ -10487,13 +10380,11 @@ function ensureLocalShopInventory(user) {
     const seedItemIds = seedCoreCurrencies
       ? catalog.priceItemIds || []
       : (catalog.priceItemIds || []).filter((itemId) => !commonResourceIds.has(Number(itemId)));
-    if (seedAdminCoins) seedItemIds.push(RESOURCE_ITEM_IDS.ADMIN_COIN);
     seedShopCurrency(user, seedItemIds, {
       balance: seedBalance,
       regDate: dateTimeBinaryNow(),
       seedMissingOnly: true,
       includeCommonResources: seedCoreCurrencies,
-      allowedCommonResourceItemIds: seedAdminCoins ? [RESOURCE_ITEM_IDS.ADMIN_COIN] : [],
     });
     const eventShopSeed = ensureActiveEventShopCurrencies(user, runtimeEventManager, {
       balance: seedBalance,
@@ -10511,12 +10402,7 @@ function ensureLocalShopInventory(user) {
       process.env.CS_REPAIR_LOCAL_SHOP_CORE_CURRENCY_SEED !== "0" &&
       !(user.inventory && user.inventory.coreCurrencySeedRepairedV1)
     ) {
-      const repaired = removeDebugSeededCommonResources(user, {
-        balance: seedBalance,
-        itemIds: seedAdminCoins
-          ? COMMON_RESOURCE_ITEM_IDS.filter((itemId) => Number(itemId) !== RESOURCE_ITEM_IDS.ADMIN_COIN)
-          : COMMON_RESOURCE_ITEM_IDS,
-      });
+      const repaired = removeDebugSeededCommonResources(user, { balance: seedBalance });
       if (repaired.length > 0) {
         user.inventory.coreCurrencySeedRepairedV1 = new Date().toISOString();
         console.log(
