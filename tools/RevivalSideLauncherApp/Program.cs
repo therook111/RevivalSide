@@ -57,7 +57,6 @@ internal sealed class LauncherApp : Application
 
 internal sealed class LauncherWindow : Window
 {
-    private static readonly JsonSerializerOptions AuthJsonOptions = new() { PropertyNameCaseInsensitive = true };
     private static readonly HashSet<string> CrossSaveGamePorts = new(StringComparer.OrdinalIgnoreCase)
     {
         "20001",
@@ -83,7 +82,6 @@ internal sealed class LauncherWindow : Window
 
     private readonly string appRoot;
     private readonly string settingsPath;
-    private readonly LauncherEntitlementConfig? entitlementConfig;
     private string nodePath = "node.exe";
     private string npmPath = "npm.cmd";
     private string dumpcapPath = "dumpcap.exe";
@@ -98,11 +96,6 @@ internal sealed class LauncherWindow : Window
     private Process? listenerProcess;
     private ProcessJob? listenerJob;
     private Process? wikiProcess;
-    private string launcherEntitlementToken = "";
-    private DateTimeOffset launcherEntitlementTokenExpiresAt = DateTimeOffset.MinValue;
-    private Task? launcherStartupEntitlementTask;
-    private bool launcherEntitlementVerifiedThisSession;
-    private bool launcherEntitlementDisabledLogged;
     private Image? launcherBackgroundView;
     private Border? launcherBackgroundFallback;
     private TextBlock? launcherBackgroundText;
@@ -189,7 +182,6 @@ internal sealed class LauncherWindow : Window
     {
         appRoot = ResolveAppRoot();
         settingsPath = Path.Combine(appRoot, "launcher-settings.json");
-        entitlementConfig = LoadLauncherEntitlementConfig();
         settings = LoadSettings();
         settings.CounterSideManagedDir = ResolveInitialManagedDir(settings.CounterSideManagedDir);
         RefreshToolPaths();
@@ -213,12 +205,9 @@ internal sealed class LauncherWindow : Window
         AppendLog($"npm: {npmPath}");
         AppendLog($"dumpcap: {DescribeExecutable(dumpcapPath)}");
         AppendLog($"tshark: {DescribeExecutable(tsharkPath)}");
-        if (entitlementConfig != null) AppendLog($"Discord entitlement gateway: {entitlementConfig.GatewayBaseUrl}");
-        else AppendLauncherEntitlementDisabledLogOnce();
         AppendLog(IsManagedDir(settings.CounterSideManagedDir) ? $"CounterSide DLL: {Path.Combine(settings.CounterSideManagedDir, "Assembly-CSharp.dll")}" : "CounterSide DLL: not selected");
         RefreshGameplayAssetStatus(log: true);
         _ = RunStartupDependencyChecksAsync();
-        BeginLauncherStartupEntitlement();
     }
 
     private Control BuildUi()
@@ -1531,7 +1520,6 @@ internal sealed class LauncherWindow : Window
     {
         if (listenerProcess is { HasExited: false }) return;
         SaveSettingsFromUi();
-        await EnsureLauncherStartupEntitlementCompletedAsync();
         SetStartButtonPhase("PATCHING");
         try
         {
@@ -1675,76 +1663,6 @@ internal sealed class LauncherWindow : Window
         throw new InvalidOperationException("Hosts patch finished but RevivalSide entries were not detected in hosts.");
     }
 
-    private void BeginLauncherStartupEntitlement()
-    {
-        var config = entitlementConfig;
-        if (config == null || string.IsNullOrWhiteSpace(config.GatewayBaseUrl))
-        {
-            AppendLauncherEntitlementDisabledLogOnce();
-            return;
-        }
-        if (launcherEntitlementVerifiedThisSession) return;
-        if (launcherStartupEntitlementTask is { IsCompleted: false }) return;
-
-        launcherStartupEntitlementTask = RunLauncherStartupEntitlementAsync();
-        _ = ObserveLauncherStartupEntitlementAsync(launcherStartupEntitlementTask);
-        UpdateButtons();
-    }
-
-    private void AppendLauncherEntitlementDisabledLogOnce()
-    {
-        if (launcherEntitlementDisabledLogged) return;
-        launcherEntitlementDisabledLogged = true;
-        AppendLog("Discord entitlement gateway: not configured. Set REVIVALSIDE_DOWNLOAD_GATEWAY_URL or install through a gateway-built Setup.");
-    }
-
-    private async Task ObserveLauncherStartupEntitlementAsync(Task entitlementTask)
-    {
-        try
-        {
-            await entitlementTask;
-        }
-        catch (Exception ex)
-        {
-            AppendLog($"ERROR: {ex.Message}");
-            await ShowMessageAsync("RevivalSide", ex.Message);
-        }
-        finally
-        {
-            UpdateButtons();
-        }
-    }
-
-    private async Task RunLauncherStartupEntitlementAsync()
-    {
-        AppendLog("Discord entitlement is required on launcher startup.");
-        await EnsureLauncherEntitlementAsync();
-        launcherEntitlementVerifiedThisSession = true;
-    }
-
-    private async Task EnsureLauncherStartupEntitlementCompletedAsync()
-    {
-        var config = entitlementConfig;
-        if (config == null || string.IsNullOrWhiteSpace(config.GatewayBaseUrl))
-        {
-            AppendLauncherEntitlementDisabledLogOnce();
-            return;
-        }
-        if (launcherEntitlementVerifiedThisSession) return;
-
-        BeginLauncherStartupEntitlement();
-        var task = launcherStartupEntitlementTask;
-        if (task == null) throw new InvalidOperationException("Discord entitlement did not start.");
-
-        if (!task.IsCompleted) AppendLog("Waiting for startup Discord entitlement before START.");
-        await task;
-
-        if (!launcherEntitlementVerifiedThisSession)
-        {
-            throw new InvalidOperationException("Discord entitlement is required before START.");
-        }
-    }
-
     private void StopListener()
     {
         if (listenerProcess == null && listenerJob == null) return;
@@ -1773,157 +1691,6 @@ internal sealed class LauncherWindow : Window
             process?.Dispose();
             listenerStatusText.Text = "Stopped";
             UpdateButtons();
-        }
-    }
-
-    private async Task EnsureLauncherEntitlementAsync()
-    {
-        var config = entitlementConfig;
-        if (config == null || string.IsNullOrWhiteSpace(config.GatewayBaseUrl)) return;
-
-        if (!string.IsNullOrWhiteSpace(launcherEntitlementToken) && launcherEntitlementTokenExpiresAt > DateTimeOffset.UtcNow.AddSeconds(30))
-        {
-            AppendLog("Discord entitlement token is still valid for this launcher session.");
-            return;
-        }
-
-        listenerStatusText.Text = "Authorize";
-        AppendLog($"Requesting Discord entitlement from {config.GatewayBaseUrl}");
-
-        try
-        {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-            var start = await StartLauncherDeviceAuthorizationAsync(client, config);
-            AppendLog("Opening Discord sign-in in your browser.");
-            TryOpenUrl(start.VerificationUri);
-            AppendLog($"Waiting for Discord entitlement. If the browser did not open, visit: {start.VerificationUri}");
-
-            var authorized = await PollLauncherDeviceAuthorizationAsync(client, start);
-            launcherEntitlementToken = authorized.InstallToken;
-            launcherEntitlementTokenExpiresAt = authorized.ExpiresAt;
-            listenerStatusText.Text = "Authorized";
-            AppendLog($"Discord entitlement verified; token expires at {launcherEntitlementTokenExpiresAt:O}.");
-        }
-        catch
-        {
-            listenerStatusText.Text = "Stopped";
-            throw;
-        }
-    }
-
-    private static async Task<LauncherDeviceStartResponse> StartLauncherDeviceAuthorizationAsync(HttpClient client, LauncherEntitlementConfig config)
-    {
-        var gatewayBaseUri = new Uri(config.GatewayBaseUrl.TrimEnd('/') + "/");
-        var startUri = new Uri(gatewayBaseUri, "auth/device/start");
-        using var startContent = new StringContent("{}", Encoding.UTF8, "application/json");
-        using var startResponse = await client.PostAsync(startUri, startContent);
-        var startJson = await startResponse.Content.ReadAsStringAsync();
-        if (!startResponse.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException($"Discord entitlement failed: {ExtractGatewayErrorMessage(startJson, startResponse.ReasonPhrase)}");
-        }
-
-        var start = JsonSerializer.Deserialize<LauncherDeviceStartResponse>(startJson, AuthJsonOptions)
-            ?? throw new InvalidOperationException("Discord entitlement response was empty or invalid.");
-        start.Validate();
-        return start;
-    }
-
-    private static async Task<LauncherEntitlementToken> PollLauncherDeviceAuthorizationAsync(HttpClient client, LauncherDeviceStartResponse start)
-    {
-        var statusUri = new Uri(start.StatusUri);
-        var expiresAt = DateTimeOffset.UtcNow.AddMinutes(10);
-        if (!string.IsNullOrWhiteSpace(start.ExpiresAt) && DateTimeOffset.TryParse(start.ExpiresAt, out var parsedExpiresAt))
-        {
-            expiresAt = parsedExpiresAt.ToUniversalTime();
-        }
-
-        while (DateTimeOffset.UtcNow < expiresAt)
-        {
-            await Task.Delay(TimeSpan.FromSeconds(2));
-
-            using var statusResponse = await client.GetAsync(statusUri);
-            var statusJson = await statusResponse.Content.ReadAsStringAsync();
-            var status = string.IsNullOrWhiteSpace(statusJson)
-                ? new LauncherDeviceStatusResponse()
-                : JsonSerializer.Deserialize<LauncherDeviceStatusResponse>(statusJson, AuthJsonOptions) ?? new LauncherDeviceStatusResponse();
-
-            var currentStatus = status.Status ?? "";
-            if (currentStatus.Equals("authorized", StringComparison.OrdinalIgnoreCase))
-            {
-                if (string.IsNullOrWhiteSpace(status.InstallToken))
-                {
-                    throw new InvalidOperationException("Discord entitlement succeeded without an install token.");
-                }
-                var tokenExpiresAt = DateTimeOffset.UtcNow.AddMinutes(15);
-                if (!string.IsNullOrWhiteSpace(status.ExpiresAt) && DateTimeOffset.TryParse(status.ExpiresAt, out var parsedTokenExpiresAt))
-                {
-                    tokenExpiresAt = parsedTokenExpiresAt.ToUniversalTime();
-                }
-                return new LauncherEntitlementToken(status.InstallToken, tokenExpiresAt);
-            }
-
-            if (currentStatus.Equals("denied", StringComparison.OrdinalIgnoreCase) || statusResponse.StatusCode == System.Net.HttpStatusCode.Forbidden)
-            {
-                throw new InvalidOperationException(GetGatewayAuthorizationDeniedMessage(status.Reason ?? ""));
-            }
-
-            if (currentStatus.Equals("expired", StringComparison.OrdinalIgnoreCase) || statusResponse.StatusCode == System.Net.HttpStatusCode.NotFound)
-            {
-                throw new InvalidOperationException("Discord entitlement expired. Restart the launcher and sign in within the time limit.");
-            }
-
-            if (!statusResponse.IsSuccessStatusCode)
-            {
-                throw new InvalidOperationException($"Discord entitlement failed: {ExtractGatewayErrorMessage(statusJson, statusResponse.ReasonPhrase)}");
-            }
-        }
-
-        throw new InvalidOperationException("Discord entitlement expired. Restart the launcher and sign in within the time limit.");
-    }
-
-    private static string GetGatewayAuthorizationDeniedMessage(string reason)
-    {
-        if (reason.Equals("missing_required_discord_role", StringComparison.OrdinalIgnoreCase))
-        {
-            return "Access denied. Your Discord account does not have the required RevivalSide role.";
-        }
-
-        return string.IsNullOrWhiteSpace(reason)
-            ? "Access denied by the RevivalSide download gateway."
-            : $"Access denied by the RevivalSide download gateway: {reason}";
-    }
-
-    private static string ExtractGatewayErrorMessage(string json, string? fallback)
-    {
-        if (!string.IsNullOrWhiteSpace(json))
-        {
-            try
-            {
-                using var document = JsonDocument.Parse(json);
-                if (document.RootElement.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.String)
-                {
-                    return error.GetString() ?? fallback ?? "unknown error";
-                }
-            }
-            catch
-            {
-                return json.Length > 240 ? json[..240] : json;
-            }
-        }
-
-        return string.IsNullOrWhiteSpace(fallback) ? "unknown error" : fallback;
-    }
-
-    private void TryOpenUrl(string url)
-    {
-        try
-        {
-            OpenUrl(url);
-        }
-        catch (Exception ex)
-        {
-            AppendLog($"Browser open failed: {ex.Message}");
         }
     }
 
@@ -3506,91 +3273,6 @@ internal sealed class LauncherWindow : Window
         }
     }
 
-    private LauncherEntitlementConfig? LoadLauncherEntitlementConfig()
-    {
-        foreach (var value in new[]
-        {
-            Environment.GetEnvironmentVariable("REVIVALSIDE_DOWNLOAD_GATEWAY_URL"),
-            Environment.GetEnvironmentVariable("REVIVALSIDE_LAUNCHER_AUTH_URL"),
-            Environment.GetEnvironmentVariable("DOWNLOAD_PUBLIC_BASE_URL"),
-        })
-        {
-            var config = NormalizeLauncherEntitlementConfig(new LauncherEntitlementConfig { GatewayBaseUrl = value ?? "" });
-            if (config != null) return config;
-        }
-
-        foreach (var fileName in new[] { "RevivalSideLauncher.auth.json", "launcher-auth.json" })
-        {
-            var path = Path.Combine(appRoot, fileName);
-            if (!File.Exists(path)) continue;
-            try
-            {
-                var config = JsonSerializer.Deserialize<LauncherEntitlementConfig>(File.ReadAllText(path), AuthJsonOptions);
-                config = NormalizeLauncherEntitlementConfig(config);
-                if (config != null) return config;
-            }
-            catch
-            {
-                // Ignore malformed local entitlement config; source/dev launchers should stay usable.
-            }
-        }
-
-        foreach (var envPath in new[] { Path.Combine(appRoot, ".env"), Path.Combine(appRoot, "download-service", ".env") })
-        {
-            var values = ReadDotEnvFile(envPath);
-            foreach (var key in new[] { "REVIVALSIDE_DOWNLOAD_GATEWAY_URL", "REVIVALSIDE_LAUNCHER_AUTH_URL", "DOWNLOAD_PUBLIC_BASE_URL" })
-            {
-                if (!values.TryGetValue(key, out var value)) continue;
-                var config = NormalizeLauncherEntitlementConfig(new LauncherEntitlementConfig { GatewayBaseUrl = value });
-                if (config != null) return config;
-            }
-        }
-
-        return null;
-    }
-
-    private static LauncherEntitlementConfig? NormalizeLauncherEntitlementConfig(LauncherEntitlementConfig? config)
-    {
-        if (config == null) return null;
-
-        var gatewayBaseUrl = NormalizeGatewayBaseUrl(config.GatewayBaseUrl);
-        if (string.IsNullOrWhiteSpace(gatewayBaseUrl))
-        {
-            gatewayBaseUrl = NormalizeGatewayBaseUrl(config.ReleaseManifestUrl);
-        }
-        if (string.IsNullOrWhiteSpace(gatewayBaseUrl)) return null;
-
-        return new LauncherEntitlementConfig
-        {
-            GatewayBaseUrl = gatewayBaseUrl,
-            ReleaseManifestUrl = config.ReleaseManifestUrl ?? "",
-        };
-    }
-
-    private static string NormalizeGatewayBaseUrl(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value) || !Uri.TryCreate(value.Trim(), UriKind.Absolute, out var uri))
-        {
-            return "";
-        }
-        if (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
-        {
-            return "";
-        }
-        if (uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase) || uri.Host.EndsWith(".github.com", StringComparison.OrdinalIgnoreCase))
-        {
-            return "";
-        }
-
-        var path = uri.AbsolutePath;
-        var releasePathIndex = path.IndexOf("/releases/", StringComparison.OrdinalIgnoreCase);
-        var basePath = releasePathIndex >= 0
-            ? (releasePathIndex == 0 ? "/" : path[..releasePathIndex].TrimEnd('/') + "/")
-            : (path.EndsWith('/') ? path : path + "/");
-        var builder = new UriBuilder(uri.Scheme, uri.Host, uri.IsDefaultPort ? -1 : uri.Port, basePath);
-        return builder.Uri.ToString().TrimEnd('/');
-    }
-
     private void ApplyDotEnvDefaults(LauncherSettings target)
     {
         var values = ReadDotEnvFile(Path.Combine(appRoot, ".env"));
@@ -3851,13 +3533,10 @@ internal sealed class LauncherWindow : Window
     {
         var listenerRunning = listenerProcess is { HasExited: false };
         var crossSaveCaptureRunning = crossSaveCaptureProcesses.Count > 0;
-        var launcherEntitlementPending = entitlementConfig != null
-            && !launcherEntitlementVerifiedThisSession
-            && launcherStartupEntitlementTask is { IsCompleted: false };
         if (!startFlowBusy)
         {
             startListenerButton.Content = StartButtonDefaultText;
-            startListenerButton.IsEnabled = !listenerRunning && !launcherEntitlementPending;
+            startListenerButton.IsEnabled = !listenerRunning;
         }
         browseCrossSaveCaptureButton.IsEnabled = !crossSaveCaptureRunning;
         refreshCrossSaveButton.IsEnabled = crossSaveCaptureRunning;
@@ -4502,40 +4181,6 @@ internal sealed class LauncherSettings
     public bool NotifyTrayWhenServiceStops { get; set; } = true;
     public string AdvancedEnvText { get; set; } = "";
 }
-
-internal sealed class LauncherEntitlementConfig
-{
-    public string GatewayBaseUrl { get; set; } = "";
-    public string ReleaseManifestUrl { get; set; } = "";
-}
-
-internal sealed class LauncherDeviceStartResponse
-{
-    public string DeviceCode { get; set; } = "";
-    public string VerificationUri { get; set; } = "";
-    public string StatusUri { get; set; } = "";
-    public string ExpiresAt { get; set; } = "";
-
-    public void Validate()
-    {
-        if (string.IsNullOrWhiteSpace(DeviceCode)) throw new InvalidOperationException("Discord entitlement response is missing deviceCode.");
-        if (string.IsNullOrWhiteSpace(VerificationUri)) throw new InvalidOperationException("Discord entitlement response is missing verificationUri.");
-        if (!Uri.TryCreate(VerificationUri, UriKind.Absolute, out _)) throw new InvalidOperationException("Discord entitlement response contains an invalid verificationUri.");
-        if (string.IsNullOrWhiteSpace(StatusUri)) throw new InvalidOperationException("Discord entitlement response is missing statusUri.");
-        if (!Uri.TryCreate(StatusUri, UriKind.Absolute, out _)) throw new InvalidOperationException("Discord entitlement response contains an invalid statusUri.");
-    }
-}
-
-internal sealed class LauncherDeviceStatusResponse
-{
-    public string Status { get; set; } = "";
-    public string InstallToken { get; set; } = "";
-    public string TokenType { get; set; } = "";
-    public string ExpiresAt { get; set; } = "";
-    public string Reason { get; set; } = "";
-}
-
-internal sealed record LauncherEntitlementToken(string InstallToken, DateTimeOffset ExpiresAt);
 
 internal sealed class ProcessJob : IDisposable
 {

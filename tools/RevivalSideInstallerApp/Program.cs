@@ -464,7 +464,6 @@ internal sealed class InstallerWindow : Window
         RequireMatchingFile(Path.Combine(target, "runtime", "installers", "npcap"), "npcap-*.exe", "installed Npcap installer");
         SetGameplayStatus("Built on launch");
         AppendLog($"Installed app ready: {installedApp.FileCount:N0} files; no gameplay JSON dump was installed.");
-        WriteLauncherAuthConfig(target);
         CreateDesktopShortcut(target);
     }
 
@@ -677,32 +676,6 @@ internal sealed class InstallerWindow : Window
         var basePath = releasePathIndex == 0 ? "/" : manifestUri.AbsolutePath[..releasePathIndex].TrimEnd('/') + "/";
         var builder = new UriBuilder(manifestUri.Scheme, manifestUri.Host, manifestUri.IsDefaultPort ? -1 : manifestUri.Port, basePath);
         return builder.Uri;
-    }
-
-    private void WriteLauncherAuthConfig(string target)
-    {
-        var path = Path.Combine(target, "RevivalSideLauncher.auth.json");
-        var manifestUrl = ResolveReleaseManifestUrl();
-        if (string.IsNullOrWhiteSpace(manifestUrl) || !Uri.TryCreate(manifestUrl, UriKind.Absolute, out var manifestUri))
-        {
-            if (File.Exists(path)) File.Delete(path);
-            return;
-        }
-
-        var gatewayBaseUri = TryResolveDownloadGatewayBaseUri(manifestUri);
-        if (gatewayBaseUri == null)
-        {
-            if (File.Exists(path)) File.Delete(path);
-            return;
-        }
-
-        var config = new LauncherAuthConfig
-        {
-            GatewayBaseUrl = gatewayBaseUri.ToString().TrimEnd('/'),
-            ReleaseManifestUrl = manifestUri.ToString(),
-        };
-        File.WriteAllText(path, JsonSerializer.Serialize(config, JsonOptions) + Environment.NewLine, Encoding.UTF8);
-        AppendLog($"Launcher auth gateway: {config.GatewayBaseUrl}");
     }
 
     private void TryOpenBrowser(string url)
@@ -1437,12 +1410,6 @@ internal sealed class InstallerWindow : Window
 internal sealed class ReleaseInstallerConfig
 {
     public string ManifestUrl { get; set; } = "";
-}
-
-internal sealed class LauncherAuthConfig
-{
-    public string GatewayBaseUrl { get; set; } = "";
-    public string ReleaseManifestUrl { get; set; } = "";
 }
 
 internal sealed class ReleasePayloadManifest

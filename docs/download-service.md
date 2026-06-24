@@ -2,7 +2,7 @@
 
 RevivalSide release payloads should live in private GitHub releases on `MadlyMoe/RevivalSide`. The public entry point is DownloadSide, the Discord-gated download service in `download-service`.
 
-The service verifies Discord role membership with OAuth and keeps all secrets server-side. Setup receives a short-lived bearer token for release downloads, and Launcher receives a short-lived bearer token as proof of entitlement before Start. Redistributable apps must never contain a GitHub token, Discord client secret, or GitHub App private key.
+The service verifies Discord role membership with OAuth and keeps all secrets server-side. Setup receives a short-lived bearer token for release downloads. Redistributable apps must never contain a GitHub token, Discord client secret, or GitHub App private key.
 
 ## Required Environment
 
@@ -69,17 +69,4 @@ The installer now performs this flow automatically whenever the baked manifest U
 
 ## Launcher Flow
 
-After a gateway install, Setup writes `RevivalSideLauncher.auth.json` into the installed app folder. The file contains only the gateway URL and release manifest URL, not secrets.
-
-When Launcher opens for the first time in a process, it:
-
-1. Calls `/auth/device/start` on the configured gateway.
-2. Opens the returned Discord verification URL.
-3. Polls `/auth/device/:deviceCode/status`.
-4. Marks the current launcher session as entitled after the gateway returns a short-lived token.
-
-After that one startup check succeeds, `START` continues to the existing `npm run listen` path without prompting again during the same launcher process.
-
-For source/dev testing, Launcher also accepts `REVIVALSIDE_DOWNLOAD_GATEWAY_URL`, `REVIVALSIDE_LAUNCHER_AUTH_URL`, `DOWNLOAD_PUBLIC_BASE_URL`, or `download-service\.env` with `DOWNLOAD_PUBLIC_BASE_URL`.
-
-If no gateway config is found, Launcher logs that Discord entitlement is not configured and behaves like the source/dev launcher.
+Launcher no longer performs Discord entitlement checks. After Setup finishes downloading and installing the payload, Launcher starts the local listener directly through the existing `npm run listen` path.

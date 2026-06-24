@@ -1,6 +1,6 @@
 # DownloadSide
 
-DownloadSide is the Discord front door for RevivalSide release downloads and launcher entitlement. It keeps Discord and GitHub secrets on the server, verifies a user's Discord guild role, proxies private GitHub release assets to Setup, and lets Launcher prove entitlement before Start.
+DownloadSide is the Discord front door for RevivalSide release downloads. It keeps Discord and GitHub secrets on the server, verifies a user's Discord guild role, and proxies private GitHub release assets to Setup.
 
 ## Local Setup
 
@@ -46,7 +46,7 @@ Authorization: Bearer <installToken>
 6. Setup polls `/auth/device/:deviceCode/status`.
 7. On success, the status response returns a short-lived install token.
 8. Setup downloads release assets through this service with `Authorization: Bearer <token>`.
-9. Setup writes `RevivalSideLauncher.auth.json` into the installed app folder so Launcher can use the same gateway for Start entitlement.
+9. Launcher starts the installed local listener directly after Setup completes.
 
 ## GitHub Assets
 
@@ -121,8 +121,6 @@ https://downloadside.fly.dev/releases/v0.3.0/manifest
 
 When Setup runs, it opens Discord sign-in, waits for the gateway to issue an install token, and uses that bearer token for the manifest and payload downloads.
 
-After a gateway install, Launcher reads `RevivalSideLauncher.auth.json` and runs Discord device authorization once when the launcher opens. After that startup check succeeds, `START` uses the existing `npm run listen` path without prompting again in the same launcher process.
-
-For source/dev testing, Launcher can also read `REVIVALSIDE_DOWNLOAD_GATEWAY_URL`, `REVIVALSIDE_LAUNCHER_AUTH_URL`, `DOWNLOAD_PUBLIC_BASE_URL`, or `download-service\.env` with `DOWNLOAD_PUBLIC_BASE_URL`. If none of those are present, source/dev runs are not gated and the launcher logs that Discord entitlement is not configured.
+After a gateway install, Launcher does not perform Discord entitlement checks. `START` uses the existing `npm run listen` path without prompting for Discord in the launcher process.
 
 Or set `DOWNLOAD_PUBLIC_BASE_URL=https://downloadside.fly.dev` before running `tools\package-revivalside-github-release.ps1`; the packaging script will resolve `https://downloadside.fly.dev/releases/<tag>`.
