@@ -20,7 +20,7 @@ const { grantSkin } = require("../inventory");
 
 const DEFAULT_NEXT_UNIT_UID = 9000000000000001n;
 const DEFAULT_NEW_UNIT_LOYALTY = 0;
-const MAX_UNIT_LOYALTY = 10000;
+const MAX_UNIT_LOYALTY = 100;
 const UNIT_LIMIT_BREAK_MAX_LEVEL = 120;
 const DECK_TYPE_NORMAL = 1;
 const DECK_TYPE_DAILY = 3;
@@ -937,8 +937,8 @@ function isStaleAwakenedMaxLevelOverride(unit, override, resolvedMaxLevel) {
 }
 
 function resolveInitialUnitLoyalty(options = {}) {
-  if (options.loyalty != null) return clampInt(options.loyalty, 0, MAX_UNIT_LOYALTY);
-  return isEnvEnabled("CS_NEW_UNIT_MAX_LOYALTY") ? MAX_UNIT_LOYALTY : DEFAULT_NEW_UNIT_LOYALTY;
+  if (options.loyalty != null) return clampInt(options.loyalty, 0, );
+  return isEnvEnabled("CS_NEW_UNIT_MAX_LOYALTY") ?  : DEFAULT_NEW_UNIT_LOYALTY;
 }
 
 function isEnvEnabled(name) {
