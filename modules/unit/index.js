@@ -465,7 +465,7 @@ function createUnitData(user, unitId, unitUid, options = {}) {
     exp: Number(options.exp || 0),
     skinId: Number(options.skinId || 0),
     injury: 0,
-    limitBreakLevel: Number(options.limitBreakLevel != null ? options.limitBreakLevel : Math.min(3, Math.max(0, maxStar - 3))),
+    limitBreakLevel: Number(options.limitBreakLevel != null ? options.limitBreakLevel : 0),
     locked: false,
     summonUnit: false,
     statExp: [0, 0, 0, 0, 0, 0],
