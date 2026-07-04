@@ -64,6 +64,7 @@ const {
   getArmyOperatorByUid,
   addUnitExp,
   addOperatorExp,
+  grantUnit,
 } = require("../modules/unit");
 const { INVENTORY_TYPES, getInventoryCapacity } = require("../modules/inventory-capacity");
 const {
@@ -388,6 +389,7 @@ const PAYBACK_MISSION_TABS = Object.freeze(resolvePaybackMissionTabs());
 const SIMULATION_MISSION_TABS = [6, 7, 8];
 const FAST_LOBBY_MISSION_TABS = uniqueMissionTabs([1, 2, 3, ...SIMULATION_MISSION_TABS, ...GUIDE_MISSION_TABS]);
 const POST_TUTORIAL_MIN_USER_LEVEL = Math.max(2, Number(process.env.CS_POST_TUTORIAL_MIN_USER_LEVEL || 2) || 2);
+const DEFAULT_STARTER_SHIP_ID = 21001; // NKM_SHIP_A_COFFIN_1
 const NEW_ACCOUNT_ROSTER_MODE = resolveNewAccountRosterMode();
 const SEED_NEW_ACCOUNT_TROPHIES = process.env.CS_SEED_NEW_ACCOUNT_TROPHIES === "1";
 const USE_STEAM_TOKEN_AS_ACCESS_TOKEN = process.env.CS_USE_STEAM_TOKEN_AS_ACCESS_TOKEN === "1";
@@ -10361,6 +10363,7 @@ function ensureUserDefaults(user) {
   ensureInventory(user);
   ensureLocalShopInventory(user);
   ensureArmy(user);
+  ensureDefaultShip(user);
   ensureDefaultLineup(user);
   ensureDefaultLineup(user, { deckType: 3, index: 0 });
   user.tutorial = user.tutorial && typeof user.tutorial === "object"
@@ -10377,6 +10380,20 @@ function ensureUserDefaults(user) {
   }
   if (!CLEAR_ALL_MISSIONS_STATUS) repairPostTutorialGuideMissionCompletions(user);
   return user;
+}
+
+function ensureDefaultShip(user) {
+  if (!user || getArmyShips(user).length > 0) return null;
+  const ship = grantUnit(user, DEFAULT_STARTER_SHIP_ID, {
+    level: 1,
+    exp: 0,
+    regDate: dateTimeBinaryNow(),
+    fromContract: false,
+  });
+  if (ship && process.env.CS_DEFAULT_SHIP_REPAIR_LOG !== "0") {
+    console.log(`[user-db] repaired missing default ship uid=${user.userUid || "(ephemeral)"} shipId=${DEFAULT_STARTER_SHIP_ID}`);
+  }
+  return ship;
 }
 
 function ensureLocalShopInventory(user) {
