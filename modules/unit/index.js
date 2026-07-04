@@ -668,7 +668,7 @@ function addUnitExp(user, unitUid, amount, options = {}) {
   const next = splitUnitTotalExp(currentTotalExp + Math.max(0, Number(amount || 0)), maxLevel);
   unit.level = next.level;
   unit.exp = next.exp;
-  if (options.loyalty != null) unit.loyalty = clampInt(options.loyalty, 0, 10000);
+  if (options.loyalty != null) unit.loyalty = clampInt(options.loyalty, 0, MAX_UNIT_LOYALTY);
   unit.lastGrowthAt = new Date().toISOString();
   persistNormalizedUnit(user, unit);
   return unit;
@@ -748,7 +748,7 @@ function permanentlyContractUnit(user, unitUid) {
   const unit = getArmyUnitByUid(user, unitUid);
   if (!unit) return null;
   unit.isPermanentContract = true;
-  unit.loyalty = Math.max(Number(unit.loyalty || 0), 10000);
+  unit.loyalty = Math.max(Number(unit.loyalty || 0), MAX_UNIT_LOYALTY);
   unit.lastGrowthAt = new Date().toISOString();
   persistNormalizedUnit(user, unit);
   return unit;
