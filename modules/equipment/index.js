@@ -1660,10 +1660,11 @@ function buildDefaultPotentialOption(equip) {
       // Try to find a record with a valid Socket1_StatType
       const recordsWithStatType = records.filter(r => r.Socket1_StatType);
       const recordsToUse = recordsWithStatType.length > 0 ? recordsWithStatType : records;
-      const randomRecord = recordsToUse[Math.floor(Math.random() * recordsToUse.length)];
+      const index = hashPrecisionSeed(equip.itemEquipId, equip.equipUid || 0, "potential-default") % recordsToUse.length;
+      const record = recordsToUse[index];
       // Transform the stat type based on whether it uses Rate fields (check socket 1)
-      statType = normalizeRecordStatType(randomRecord, 1);
-      chosenOptionKey = Number(randomRecord.OptionKey || 0);
+      statType = normalizeRecordStatType(record, 1);
+      chosenOptionKey = Number(record.OptionKey || 0);
       
     }
   }
