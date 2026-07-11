@@ -726,6 +726,7 @@ function rollPotentialOption(user, equipUid, socketIndex, options = {}) {
     precision,
     socketIndex: index,
     accumulateCount: 0,
+    optionKey: optionRecord ? optionRecord.optionKey : null,
     statType: optionRecord && optionRecord.statType,
     statValue: optionRecord && optionRecord.statValue,
   };
@@ -756,26 +757,27 @@ function confirmPotentialOption(user, equipUid, socketIndex) {
     
     
     equip.potentialOptions = Array.isArray(equip.potentialOptions) ? equip.potentialOptions : [];
-    if (!equip.potentialOptions.length) {
-      
+    const createdOption = !equip.potentialOptions.length;
+    if (createdOption) {
+
       equip.potentialOptions.push(buildDefaultPotentialOption(equip));
     }
-    
+
     const option = equip.potentialOptions[0];
 
     option.sockets = normalizeFixedArray(option.sockets, 3, null);
-    
-    // DO NOT UPDATE statType - it should remain consistent across all sockets
-    // REMOVED: if (candidate.statType) option.statType = candidate.statType;
-    
-    
-    const newSocket = {
+
+    // statType stays consistent across sockets, except on a freshly created
+    // option row: there it must describe the stat the confirmed roll came from.
+    if (createdOption && candidate.statType) {
+      option.statType = candidate.statType;
+      if (candidate.optionKey != null) option.optionKey = Number(candidate.optionKey || 0);
+    }
+
+    option.sockets[index] = {
       statValue: Number(candidate.statValue != null ? candidate.statValue : Number(candidate.precision || 0) / 10000),
       precision: Number(candidate.precision || 0),
     };
-    
-    
-    option.sockets[index] = newSocket;
     option.precisionChangeCount = Number(option.precisionChangeCount || 0) + 1;
     
   } else {
@@ -1149,6 +1151,7 @@ function pickPotentialOptionRecord(templet, equip, socketIndex, cursor = 0, prec
   
   return {
     precisionWeightId: Number(record.PrecisionWeightId || record.FirstPrecisionWeightId || 0),
+    optionKey: Number(record.OptionKey || 0),
     statType,
     statValue: calcSubstatValue(statType, min, max, precision),
   };
