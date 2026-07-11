@@ -636,77 +636,60 @@ function upgradeEquipItem(user, equipUid, consumeEquipUids = [], options = {}) {
 }
 
 function openPotentialSocket(user, equipUid, socketIndex, options = {}) {
-  
-  
   const equip = getEquipItem(user, equipUid);
   if (!equip) {
-    
     return null;
   }
-  
+
   const index = Math.max(0, Math.min(2, Number(socketIndex || 0)));
   const templet = getEquipTemplet(equip.itemEquipId) || {};
-  
-  
+
   const costItems = spendMiscCosts(user, getSocketOpenCosts(templet, index), options);
-  
+
   equip.potentialOptions = Array.isArray(equip.potentialOptions) ? equip.potentialOptions : [];
   if (!equip.potentialOptions.length) {
-    
     equip.potentialOptions.push(buildDefaultPotentialOption(equip));
   }
-  
+
   const option = equip.potentialOptions[0];
-  
+
   option.sockets = normalizeFixedArray(option.sockets, 3, null);
   if (!option.sockets[index]) {
     const initialOption = pickPotentialOptionRecord(templet, equip, index, 0, 50);
-    
-    
-    option.sockets[index] = { 
-      statValue: initialOption ? initialOption.statValue : 0.01 * (index + 1), 
-      precision: 50 
+
+    option.sockets[index] = {
+      statValue: initialOption ? initialOption.statValue : 0.01 * (index + 1),
+      precision: 50
     };
-    
-  } else {
-    
   }
-  
+
   ensureEquipInventory(user).equips[equip.equipUid] = equip;
   markInventoryTouched(user.inventory);
-  
-  
+
   return { equip, costItems };
 }
 
 function rollPotentialOption(user, equipUid, socketIndex, options = {}) {
-  
-  
   const equip = getEquipItem(user, equipUid);
   if (!equip) {
-    
     return null;
   }
-  
+
   const index = Math.max(0, Math.min(2, Number(socketIndex || 0)));
   const templet = getEquipTemplet(equip.itemEquipId) || {};
-  
-  
+
   const rerollCosts = getPotentialRerollCosts(templet, equip, index);
-  
+
   const costItems = spendMiscCosts(user, rerollCosts, options);
-  
+
   const cursor = Number(user.localEquipPotentialCursor || 0);
   user.localEquipPotentialCursor = cursor + 1;
-  
-  
+
   const optionSeed = pickPotentialOptionRecord(templet, equip, index, cursor, 100);
-  
-  
+
   const precisionWeightId = Number(optionSeed && optionSeed.precisionWeightId) || DEFAULT_PRECISION_WEIGHT_ID;
   const currentPrecision = getPotentialSocketPrecision(equip, index);
-  
-  
+
   const precision = rollIncreasingPrecisionFromTable(
     precisionWeightId,
     currentPrecision,
@@ -716,11 +699,9 @@ function rollPotentialOption(user, equipUid, socketIndex, options = {}) {
     cursor,
     "potential"
   );
-  
-  
+
   const optionRecord = pickPotentialOptionRecord(templet, equip, index, cursor, precision) || optionSeed;
-  
-  
+
   equip.potentialCandidate = {
     equipUid: equip.equipUid,
     precision,
@@ -730,36 +711,27 @@ function rollPotentialOption(user, equipUid, socketIndex, options = {}) {
     statType: optionRecord && optionRecord.statType,
     statValue: optionRecord && optionRecord.statValue,
   };
-  
-  
+
   ensureEquipInventory(user).equips[equip.equipUid] = equip;
   markInventoryTouched(user.inventory);
-  
-  
+
   return { equip, candidate: equip.potentialCandidate, costItems };
 }
 
 function confirmPotentialOption(user, equipUid, socketIndex) {
-  
-  
   const equip = getEquipItem(user, equipUid);
   if (!equip) {
-    
     return null;
   }
-  
+
   const candidate = equip.potentialCandidate;
-  
-  
-  
+
   if (candidate) {
     const index = Math.max(0, Math.min(2, Number(socketIndex != null ? socketIndex : candidate.socketIndex || 0)));
-    
-    
+
     equip.potentialOptions = Array.isArray(equip.potentialOptions) ? equip.potentialOptions : [];
     const createdOption = !equip.potentialOptions.length;
     if (createdOption) {
-
       equip.potentialOptions.push(buildDefaultPotentialOption(equip));
     }
 
@@ -779,18 +751,13 @@ function confirmPotentialOption(user, equipUid, socketIndex) {
       precision: Number(candidate.precision || 0),
     };
     option.precisionChangeCount = Number(option.precisionChangeCount || 0) + 1;
-    
-  } else {
-    
   }
-  
+
   equip.potentialCandidate = null;
-  
-  
+
   ensureEquipInventory(user).equips[equip.equipUid] = equip;
   markInventoryTouched(user.inventory);
-  
-  
+
   return equip;
 }
 
@@ -1124,31 +1091,26 @@ function pickPotentialOptionRecord(templet, equip, socketIndex, cursor = 0, prec
   const groupId = Number((templet && (templet.potentialOptionGroupId || templet.m_PotentialOptionGroupID)) || 0);
   const allRecords = getEquipPotentialOptionRecords(groupId);
   if (!allRecords.length) return null;
-  
+
   // Get the existing stat type from the equipment's potential options
   const existingStatType = (equip.potentialOptions && equip.potentialOptions[0] && equip.potentialOptions[0].statType) || null;
-  
+
   // Filter records to only those matching the existing stat type (if one exists)
-  const records = existingStatType 
+  const records = existingStatType
     ? allRecords.filter(record => normalizeRecordStatType(record, 1) === existingStatType)
     : allRecords;
-  
+
   // If filtering resulted in no matches, fall back to all records
   const finalRecords = records.length > 0 ? records : allRecords;
-  
+
   const record = finalRecords[Math.abs(Number(cursor) || 0) % finalRecords.length];
   const socket = Math.max(1, Math.min(3, Number(socketIndex || 0) + 1));
   const min = Number(record[`Socket${socket}_MinStat`] != null ? record[`Socket${socket}_MinStat`] : record[`Socket${socket}_MinStatRate`] || 0);
   const max = Number(record[`Socket${socket}_MaxStat`] != null ? record[`Socket${socket}_MaxStat`] : record[`Socket${socket}_MaxStatRate`] != null ? record[`Socket${socket}_MaxStatRate`] : min || 0);
-  
+
   // Use the existing stat type if available, otherwise normalize the record's stat type
   const statType = existingStatType || normalizeRecordStatType(record, socket);
-  
-  
-  
-  
-  
-  
+
   return {
     precisionWeightId: Number(record.PrecisionWeightId || record.FirstPrecisionWeightId || 0),
     optionKey: Number(record.OptionKey || 0),
@@ -1580,24 +1542,22 @@ function calcSubstatValue(statType, min, max, precision) {
   const raw = maxValue < 0 && minValue < 0
     ? (minValue - maxValue) * ratio + maxValue
     : (maxValue - minValue) * ratio + minValue;
-  
+
   // Detect fractional stats by BOTH stat type name AND value range
   const isPercentByName = isPercentStatType(statType);
   const isPercentByValue = Math.abs(minValue) < 1 && Math.abs(maxValue) < 1;
   const isPercent = isPercentByName || isPercentByValue;
-  
+
   const result = isPercent ? Math.trunc(raw * 10000) / 10000 : Math.trunc(raw);
-  
-  
-  
+
   return result;
 }
 
 function isPercentStatType(statType) {
   const normalized = normalizeStatType(statType);
   // Check for common percentage/fractional stat indicators
-  return normalized.includes("RATE") || 
-         normalized.includes("FACTOR") || 
+  return normalized.includes("RATE") ||
+         normalized.includes("FACTOR") ||
          normalized.includes("MODIFY");
 }
 
@@ -1615,14 +1575,12 @@ function factorStatType(statType) {
 function normalizeRecordStatType(record, socketNumber) {
   const statType = record.Socket1_StatType || "NST_HP";
   // Check if this socket uses Rate fields instead of Stat fields
-  const usesRateFields = 
+  const usesRateFields =
     record[`Socket${socketNumber}_MinStatRate`] != null ||
     record[`Socket${socketNumber}_MaxStatRate`] != null;
-  
+
   const transformed = usesRateFields ? (factorStatType(statType) || statType) : statType;
-  
-  
-  
+
   return transformed;
 }
 
@@ -1665,7 +1623,6 @@ function buildDefaultPotentialOption(equip) {
       // Transform the stat type based on whether it uses Rate fields (check socket 1)
       statType = normalizeRecordStatType(record, 1);
       chosenOptionKey = Number(record.OptionKey || 0);
-      
     }
   }
   return {
@@ -1681,7 +1638,7 @@ function getPotentialSocketPrecision(equip, socketIndex) {
   const sockets = Array.isArray(option.sockets) ? option.sockets : [];
   const index = Math.max(0, Math.min(2, Number(socketIndex || 0)));
   const precision = normalizePrecision(sockets[index] && sockets[index].precision);
-  
+
   return precision;
 }
 
